@@ -1,0 +1,168 @@
+// std.io — console I/O
+// UTF-8 contract: all str/&str parameters are valid UTF-8.
+
+import std.core.write;
+import std.core.read as sys_read;
+import std.core.strlen;
+import std.core.malloc;
+import std.core.free;
+import std.core.str_from_byte;
+import std.core.str_concat;
+
+// @intrinsic("void.write")
+// fn write(fd: i32, buf: str, count: usize) isize;
+
+// @intrinsic("void.read")
+// fn read(fd: i32, buf: *u8, count: usize) isize;
+
+// @intrinsic("void.strlen")
+// fn strlen(s: str) usize;
+
+// @intrinsic("void.malloc")
+// unsafe fn malloc(size: usize) *u8;
+
+// ── Writer types ──────────────────────────────────────────────────────────────
+
+pub struct Stdout { fd: i32, }
+pub struct Stderr { fd: i32, }
+
+pub fn stdout() Stdout { ret Stdout { fd: 1 }; }
+pub fn stderr() Stderr { ret Stderr { fd: 2 }; }
+
+impl Write for Stdout {
+    pub fn write(self: Stdout, s: str) void {
+        write(1, s, strlen(s));
+    }
+
+    pub fn writeln(self: Stdout, s: str) void {
+        write(1, s, strlen(s));
+        write(1, "\n", 1);
+    }
+
+    pub fn writef(self: Stdout, s: str, ...args: any) void {
+        write(1, s, strlen(s));
+    }
+
+    pub fn writelnf(self: Stdout, s: str, ...args: any) void {
+        write(1, s, strlen(s));
+        write(1, "\n", 1);
+    }
+}
+
+impl Write for Stderr {
+    pub fn write(self: Stderr, s: str) void {
+        write(2, s, strlen(s));
+    }
+
+    pub fn writeln(self: Stderr, s: str) void {
+        write(2, s, strlen(s));
+        write(2, "\n", 1);
+    }
+
+    pub fn writef(self: Stderr, s: str, ...args: any) void {
+        write(2, s, strlen(s));
+    }
+
+    pub fn writelnf(self: Stderr, s: str, ...args: any) void {
+        write(2, s, strlen(s));
+        write(2, "\n", 1);
+    }
+}
+
+// ── stdout convenience ────────────────────────────────────────────────────────
+
+pub fn print(s: str, ...args: any) void {
+    write(1, s, strlen(s));
+}
+
+pub fn println(s: str, ...args: any) void {
+    write(1, s, strlen(s));
+    write(1, "\n", 1);
+}
+
+// ── stderr convenience ────────────────────────────────────────────────────────
+
+pub fn err(s: str, ...args: any) void {
+    write(2, s, strlen(s));
+}
+
+pub fn errln(s: str, ...args: any) void {
+    write(2, s, strlen(s));
+    write(2, "\n", 1);
+}
+
+// ── arbitrary fd ─────────────────────────────────────────────────────────────
+
+pub fn writeln(fd: i32, s: str) void {
+    write(fd, s, strlen(s));
+    write(fd, "\n", 1);
+}
+
+// ── stdin ─────────────────────────────────────────────────────────────────────
+
+unsafe fn read_bytes(buf: *u8, n: usize) isize {
+    ret sys_read(0, buf, n);
+}
+
+unsafe fn read_buf() *u8 {
+    var buf: *u8 = malloc(4096);
+    sys_read(0, buf, 4095);
+    ret buf;
+}
+
+// Internal: read one byte from stdin.
+// Returns the byte value (0..255) on success, or -1 on EOF/error.
+unsafe fn __io_read_one(buf: *u8) i32 {
+    var n: isize = sys_read(0, buf, 1);
+    if (n <= 0) {
+        ret 0 - 1;
+    }
+    var b: u8 = *buf;
+    var u_b: u32 = b as u32;
+    var byte_val: u32 = u_b % 256;
+    ret byte_val as i32;
+}
+
+// Read from stdin until `delimiter` byte is encountered or EOF.
+// The delimiter itself is NOT included in the returned string.
+// Returns the accumulated characters as a str (heap-allocated, caller should free).
+pub fn read(delimiter: u8) str {
+    var result: str = "";
+    var buf: *u8;
+    unsafe { buf = malloc(2); }
+    var delim_i32: i32 = delimiter as i32;
+    for (true) {
+        var b: i32 = 0;
+        unsafe { b = __io_read_one(buf); }
+        if (b < 0) {
+            break;
+        }
+        if (b == delim_i32) {
+            break;
+        }
+        var ch: str = str_from_byte(b as u8);
+        result = str_concat(result, ch);
+    }
+    unsafe { free(buf); }
+    ret result;
+}
+
+// Read a full line from stdin (until newline). The trailing '\n' is NOT included.
+pub fn readln() str {
+    ret read(10); // 10 is '\n'
+}
+
+// Read a single character (byte) from stdin. Returns a 1-character str.
+// Returns "" on EOF.
+pub fn readkey() str {
+    var buf: *u8;
+    unsafe { buf = malloc(2); }
+    var b: i32 = 0;
+    unsafe { b = __io_read_one(buf); }
+    unsafe { free(buf); }
+    if (b < 0) {
+        ret "";
+    }
+    ret str_from_byte(b as u8);
+}
+
