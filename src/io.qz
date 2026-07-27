@@ -8,17 +8,16 @@ import std.core.malloc;
 import std.core.free;
 import std.core.str_from_byte;
 import std.core.str_concat;
-
-// @intrinsic("void.write")
+// @intrinsic("quazi.write")
 // fn write(fd: i32, buf: str, count: usize) isize;
 
-// @intrinsic("void.read")
+// @intrinsic("quazi.read")
 // fn read(fd: i32, buf: *u8, count: usize) isize;
 
-// @intrinsic("void.strlen")
+// @intrinsic("quazi.strlen")
 // fn strlen(s: str) usize;
 
-// @intrinsic("void.malloc")
+// @intrinsic("quazi.malloc")
 // unsafe fn malloc(size: usize) *u8;
 
 // ── Writer types ──────────────────────────────────────────────────────────────
@@ -39,10 +38,12 @@ impl Write for Stdout {
         write(1, "\n", 1);
     }
 
+    @format
     pub fn writef(self: Stdout, s: str, ...args: any) void {
         write(1, s, strlen(s));
     }
 
+    @format
     pub fn writelnf(self: Stdout, s: str, ...args: any) void {
         write(1, s, strlen(s));
         write(1, "\n", 1);
@@ -59,10 +60,12 @@ impl Write for Stderr {
         write(2, "\n", 1);
     }
 
+    @format
     pub fn writef(self: Stderr, s: str, ...args: any) void {
         write(2, s, strlen(s));
     }
 
+    @format
     pub fn writelnf(self: Stderr, s: str, ...args: any) void {
         write(2, s, strlen(s));
         write(2, "\n", 1);
@@ -71,10 +74,12 @@ impl Write for Stderr {
 
 // ── stdout convenience ────────────────────────────────────────────────────────
 
+@format
 pub fn print(s: str, ...args: any) void {
     write(1, s, strlen(s));
 }
 
+@format
 pub fn println(s: str, ...args: any) void {
     write(1, s, strlen(s));
     write(1, "\n", 1);
@@ -82,10 +87,12 @@ pub fn println(s: str, ...args: any) void {
 
 // ── stderr convenience ────────────────────────────────────────────────────────
 
+@format
 pub fn err(s: str, ...args: any) void {
     write(2, s, strlen(s));
 }
 
+@format
 pub fn errln(s: str, ...args: any) void {
     write(2, s, strlen(s));
     write(2, "\n", 1);

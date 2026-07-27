@@ -3,10 +3,10 @@
 // Resize at 75% load; initial capacity 16.
 import std.core;
 
-@intrinsic("void.array.store")
+@intrinsic("quazi.array.store")
 fn __map_store(base: *u8, idx: usize, val: usize) void;
 
-@intrinsic("void.array.load")
+@intrinsic("quazi.array.load")
 fn __map_load(base: *u8, idx: usize) usize;
 
 // flags slot values: 0 = empty, 1 = used, 2 = tombstone

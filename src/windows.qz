@@ -2,7 +2,7 @@
 // All functions use Win64 calling convention (rcx, rdx, r8, r9).
 // All functions are implicitly unsafe — callers must wrap in unsafe {}.
 //
-// Required libs (add to void.toml [build].flags or linker invocation):
+// Required libs (add to quazi.toml [build].flags or linker invocation):
 //   kernel32.lib  — handles, process, memory, console, sync, registry
 //   user32.lib    — window/message API
 //   advapi32.lib  — registry, security, services

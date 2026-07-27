@@ -12,13 +12,13 @@ import std.unix;
 // Linux: f is called as pthread_start_routine (fn(*u8) *u8).
 // Windows: f is called as LPTHREAD_START_ROUTINE (fn(*u8) u32).
 // Returns a thread handle (opaque usize) or 0 on failure.
-@intrinsic("void.thread.spawn")
+@intrinsic("quazi.thread.spawn")
 pub unsafe fn thread_spawn(f: any) usize;
 
 // Wait for the thread identified by handle to finish.
 // On Linux also frees the pthread_t storage allocated by thread_spawn.
 // On Windows closes the thread handle after waiting.
-@intrinsic("void.thread.join")
+@intrinsic("quazi.thread.join")
 pub unsafe fn thread_join(handle: usize) void;
 
 // ── Thread struct ─────────────────────────────────────────────────────────────
