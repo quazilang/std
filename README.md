@@ -33,3 +33,27 @@ fn main() i32 {
 ## Contributing
 
 The standard library is written entirely in Quazi and is closely tied to the compiler's internal intrinsics and type system. When adding new intrinsics or platform-specific syscalls, ensure that both `core.qz` and the corresponding compiler backend (e.g., `x86_64`) are updated simultaneously.
+
+## C interoperability
+
+`std.ffi` provides Linux x86-64 C ABI aliases (`c_int`, `c_long`, `c_size`,
+`c_void`, and related types), typed `nullptr[T]()`, borrowed `CStr`, and owned
+`CString`. Foreign calls remain explicit and unsafe:
+
+```quazi
+import std.ffi.*;
+
+@api("puts")
+unsafe fn puts(text: *c_char) c_int;
+
+fn main() void {
+    var text = CString.from("hello from Quazi");
+    unsafe { puts(text.as_ptr()); }
+}
+```
+
+`CString.from` allocates and appends the C terminator; local `CString` values use
+the compiler's existing `free(self)` scope cleanup. `CStr.from_ptr` borrows a
+foreign pointer and is unsafe; it does not take ownership. Byte-string literals
+and checked embedded-NUL/UTF-8 conversions are planned follow-up work rather
+than implicit conversions at the ABI boundary.
