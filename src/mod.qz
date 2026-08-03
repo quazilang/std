@@ -9,3 +9,4 @@ pub reexport fs;
 pub reexport net;
 pub reexport os;
 pub reexport thread;
+pub reexport ffi;

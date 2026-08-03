@@ -1,0 +1,90 @@
+// std.ffi — Linux x86-64 C ABI types and explicit C string helpers.
+//
+// Fixed-width Quazi integers keep their normal meaning. These aliases document
+// that a value crosses the C ABI and may be changed per target as support grows.
+
+import std.core;
+
+pub type c_char = i8;
+pub type c_schar = i8;
+pub type c_uchar = u8;
+pub type c_short = i16;
+pub type c_ushort = u16;
+pub type c_int = i32;
+pub type c_uint = u32;
+pub type c_long = i64;
+pub type c_ulong = u64;
+pub type c_long_long = i64;
+pub type c_ulong_long = u64;
+pub type c_float = f32;
+pub type c_double = f64;
+pub type c_size = usize;
+pub type c_ssize = isize;
+pub type c_ptrdiff = isize;
+pub type c_intptr = isize;
+pub type c_uintptr = usize;
+pub type c_bool = bool;
+pub type c_void = void;
+
+// Typed raw null pointer. It is deliberately a function rather than a magical
+// polymorphic constant. Calling it is unsafe because raw-pointer values are
+// confined to Quazi's unsafe system.
+pub unsafe fn nullptr[T]() *T {
+    ret 0;
+}
+
+// Borrowed view over a NUL-terminated C string. It never frees `ptr`; the
+// foreign API that supplied the pointer controls its lifetime.
+pub struct CStr {
+    ptr: *c_char,
+}
+
+impl CStr {
+    pub unsafe fn from_ptr(ptr: *c_char) CStr {
+        ret CStr { ptr: ptr };
+    }
+
+    pub unsafe fn as_ptr(self: CStr) *c_char {
+        ret self.ptr;
+    }
+}
+
+// Owned NUL-terminated byte buffer. `from` makes an explicit allocation so an
+// FFI call never hides allocation or pointer lifetime rules.
+pub struct CString {
+    ptr: *c_char,
+    len: usize,
+}
+
+impl CString {
+    pub fn from(text: str) CString {
+        var length: usize = core.strlen(text);
+        var raw: *u8 = 0;
+        unsafe {
+            raw = core.malloc(length + 1);
+            for i : 0..length {
+                *(raw + i) = core.str_byte_at(text, i);
+            }
+            *(raw + length) = 0;
+        }
+        ret CString { ptr: raw, len: length };
+    }
+
+    pub unsafe fn as_ptr(self: CString) *c_char {
+        ret self.ptr;
+    }
+
+    pub fn len(self: CString) usize {
+        ret self.len;
+    }
+
+    pub fn as_c_str(self: CString) CStr {
+        ret CStr { ptr: self.ptr };
+    }
+
+    pub fn free(self: CString) void {
+        unsafe {
+            core.free(self.ptr);
+        }
+    }
+}
