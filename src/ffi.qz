@@ -26,6 +26,11 @@ pub type c_uintptr = usize;
 pub type c_bool = bool;
 pub type c_void = void;
 
+// Opaque struct representing a C variadic argument list.
+// Quazi will not marshal va_list internally; this is for ABI documentation.
+@opaque
+pub struct va_list {}
+
 // Typed raw null pointer. It is deliberately a function rather than a magical
 // polymorphic constant. Calling it is unsafe because raw-pointer values are
 // confined to Quazi's unsafe system.
