@@ -47,13 +47,15 @@ import std.ffi.*;
 unsafe fn puts(text: *c_char) c_int;
 
 fn main() void {
-    var text = CString.from("hello from Quazi");
+    var text = CString.try_from(b"hello from Quazi").unwrap();
     unsafe { puts(text.as_ptr()); }
 }
 ```
 
-`CString.from` allocates and appends the C terminator; local `CString` values use
-the compiler's existing `free(self)` scope cleanup. `CStr.from_ptr` borrows a
-foreign pointer and is unsafe; it does not take ownership. Byte-string literals
-and checked embedded-NUL/UTF-8 conversions are planned follow-up work rather
-than implicit conversions at the ABI boundary.
+`CString.try_from(bytes)` rejects an embedded NUL and reports allocation failure,
+then appends the C terminator. Local `CString` values use the compiler's existing
+`free(self)` scope cleanup. `unsafe CString.from_unchecked(str)` is available for
+legacy strings when the caller accepts their NUL-terminated representation.
+`CStr.from_ptr` borrows a foreign pointer and is unsafe; it does not take
+ownership. Borrowed UTF-8 validation remains explicit follow-up work rather than
+an implicit conversion at the ABI boundary.
