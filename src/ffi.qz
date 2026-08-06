@@ -72,17 +72,44 @@ pub struct CString {
     len: usize,
 }
 
+pub enum CStringError {
+    InteriorNul(usize),
+    AllocationFailed,
+}
+
 impl CString {
-    pub fn from(text: str) CString {
-        var length: usize = core.strlen(text);
+    // Checked construction from exact bytes. Embedded NUL bytes are rejected
+    // because C APIs would otherwise observe a silently truncated string.
+    pub fn try_from(value: bytes) Result[CString, CStringError] {
+        var length: usize = value.len();
+        for i : 0..length {
+            if (value[i] == 0) {
+                ret Err(CStringError.InteriorNul(i));
+            }
+        }
+
         var raw: *u8 = 0;
         unsafe {
             raw = core.malloc(length + 1);
-            for i : 0..length {
-                *(raw + i) = core.str_byte_at(text, i);
+            if (raw == 0) {
+                ret Err(CStringError.AllocationFailed);
             }
+            core.memcpy(raw, value.as_ptr(), length);
             *(raw + length) = 0;
         }
+        ret Ok(CString { ptr: raw, len: length });
+    }
+
+    // Legacy str has no stored byte length, so embedded NUL cannot be detected.
+    // Keep this constructor explicit and unsafe rather than claiming it is checked.
+    pub unsafe fn from_unchecked(text: str) CString {
+        var length: usize = core.strlen(text);
+        var raw: *u8 = 0;
+        raw = core.malloc(length + 1);
+        for i : 0..length {
+            *(raw + i) = core.str_byte_at(text, i);
+        }
+        *(raw + length) = 0;
         ret CString { ptr: raw, len: length };
     }
 
