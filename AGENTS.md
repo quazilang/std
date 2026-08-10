@@ -31,6 +31,11 @@
 - `std.io.read`, `readln`, and `readkey` return `Result[String, ReadError]`.
   They own and free temporary allocations on every error, validate UTF-8, and
   return an owned `String`. EOF is represented by a successful empty string.
+- Interactive `std.io.read(delimiter)` uses immediate terminal mode for custom
+  delimiters and returns as soon as the delimiter key is pressed. `readkey`
+  likewise returns after one complete UTF-8 scalar without requiring Enter.
+  Both restore the exact console/termios mode on every exit; redirected input
+  remains buffered, and `readln` retains normal line editing.
 - `std.io` writes valid UTF-8 bytes on Linux and to redirected Windows handles.
   A real Windows console is detected with `GetConsoleMode`, converted with
   `MultiByteToWideChar(CP_UTF8)`, and written through `WriteConsoleW`; do not

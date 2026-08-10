@@ -2,6 +2,7 @@
 // UTF-8 contract: all str/&str parameters are valid UTF-8.
 
 import std.core.write as raw_write;
+import std.core.write_bytes as raw_write_bytes;
 import std.core.read as sys_read;
 import std.core.strlen;
 import std.core.malloc;
@@ -9,6 +10,7 @@ import std.core.free;
 import std.core.realloc;
 import std.core.str_as_ptr;
 import std.win32_core;
+import std.unix;
 
 @cfg(target_os = "linux")
 fn write_text(fd: i32, s: str) isize {
@@ -185,6 +187,71 @@ pub enum ReadError {
     InvalidUtf8,
 }
 
+// Put an interactive terminal into byte-at-a-time mode. A null state means
+// stdin is redirected (or the mode could not be changed), so ordinary buffered
+// reads remain correct. The caller must restore every non-null state.
+@cfg(target_os = "linux")
+unsafe fn __io_begin_immediate_input() *u8 {
+    // Linux x86-64 kernel termios occupies 36 bytes. Keep a full 64-byte
+    // original plus a mutable copy so restoration is exact.
+    var state: *u8 = malloc(128);
+    if (state == 0) { ret 0; }
+    if (unix.ioctl_ptr(0, 21505, state) != 0) { // TCGETS
+        free(state);
+        ret 0;
+    }
+    var index: usize = 0;
+    for (index < 64) {
+        *(state + 64 + index) = *(state + index);
+        index++;
+    }
+    var current: *u8 = state + 64;
+    // c_lflag low byte: clear ICANON (0x02) and ECHO (0x08).
+    *(current + 12) = *(current + 12) & 245;
+    // c_cc[VTIME] = 0, c_cc[VMIN] = 1.
+    *(current + 22) = 0;
+    *(current + 23) = 1;
+    if (unix.ioctl_ptr(0, 21506, current) != 0) { // TCSETS
+        free(state);
+        ret 0;
+    }
+    ret state;
+}
+
+@cfg(target_os = "linux")
+unsafe fn __io_end_immediate_input(state: *u8) void {
+    if (state == 0) { ret; }
+    unix.ioctl_ptr(0, 21506, state); // TCSETS
+    free(state);
+}
+
+@cfg(target_os = "windows")
+unsafe fn __io_begin_immediate_input() *u8 {
+    const handle: usize = win32_core.get_std_handle(4294967286);
+    var state: *u32 = malloc(4) as *u32;
+    if (state == 0) { ret 0; }
+    if (win32_core.get_console_mode(handle, state) == 0) {
+        free(state as *u8);
+        ret 0;
+    }
+    // Clear ENABLE_LINE_INPUT and ENABLE_ECHO_INPUT. read() echoes consumed
+    // bytes itself; readkey() intentionally behaves like a conventional key read.
+    const immediate_mode: u32 = *state & 4294967289;
+    if (win32_core.set_console_mode(handle, immediate_mode) == 0) {
+        free(state as *u8);
+        ret 0;
+    }
+    ret state as *u8;
+}
+
+@cfg(target_os = "windows")
+unsafe fn __io_end_immediate_input(state: *u8) void {
+    if (state == 0) { ret; }
+    const handle: usize = win32_core.get_std_handle(4294967286);
+    win32_core.set_console_mode(handle, *(state as *u32));
+    free(state);
+}
+
 unsafe fn __io_is_continuation(buf: *u8, idx: usize, len: usize) bool {
     if (idx >= len) { ret false; }
     var b: u8 = *(buf + idx);
@@ -242,17 +309,28 @@ pub fn read(delimiter: u8) Result[String, ReadError] {
     unsafe { buf = malloc(cap); }
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 
+    var input_state: *u8 = 0;
+    if (delimiter != 10) {
+        unsafe { input_state = __io_begin_immediate_input(); }
+    }
+
     for (true) {
         if (len + 1 >= cap) {
             if (cap > 9223372036854775807) {
-                unsafe { free(buf); }
+                unsafe {
+                    __io_end_immediate_input(input_state);
+                    free(buf);
+                }
                 ret Err(ReadError.CapacityOverflow);
             }
             var new_cap: usize = cap * 2;
             var new_buf: *u8 = 0;
             unsafe { new_buf = realloc(buf, new_cap); }
             if (new_buf == 0) {
-                unsafe { free(buf); }
+                unsafe {
+                    __io_end_immediate_input(input_state);
+                    free(buf);
+                }
                 ret Err(ReadError.AllocationFailed);
             }
             buf = new_buf;
@@ -263,14 +341,24 @@ pub fn read(delimiter: u8) Result[String, ReadError] {
         unsafe { n = sys_read(0, buf + len, 1); }
         if (n == 0) { break; }
         if (n < 0) {
-            unsafe { free(buf); }
+            unsafe {
+                __io_end_immediate_input(input_state);
+                free(buf);
+            }
             ret Err(ReadError.InputFailed);
         }
         var b: u8 = 0;
         unsafe { b = *(buf + len); }
+        // Immediate terminal mode disables kernel/console echo so behavior is
+        // identical on Linux and Windows. Redirected input is never echoed.
+        if (input_state != 0) {
+            unsafe { raw_write_bytes(1, buf + len, 1); }
+        }
         if (b == delimiter) { break; }
         len = len + 1;
     }
+
+    unsafe { __io_end_immediate_input(input_state); }
 
     var valid: bool = false;
     unsafe { valid = __io_valid_utf8(buf, len); }
@@ -297,18 +385,25 @@ pub fn readkey() Result[String, ReadError] {
     unsafe { buf = malloc(5); }
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 
+    var input_state: *u8 = 0;
+    unsafe { input_state = __io_begin_immediate_input(); }
+
     var n: isize = 0;
     unsafe { n = sys_read(0, buf, 1); }
     if (n == 0) {
         var empty: String;
         unsafe {
+            __io_end_immediate_input(input_state);
             *buf = 0;
             empty = String.from_raw(buf, 0, 5);
         }
         ret Ok(empty);
     }
     if (n < 0) {
-        unsafe { free(buf); }
+        unsafe {
+            __io_end_immediate_input(input_state);
+            free(buf);
+        }
         ret Err(ReadError.InputFailed);
     }
 
@@ -322,7 +417,10 @@ pub fn readkey() Result[String, ReadError] {
     } else if (first >= 240 && first <= 244) {
         width = 4;
     } else if (first > 127) {
-        unsafe { free(buf); }
+        unsafe {
+            __io_end_immediate_input(input_state);
+            free(buf);
+        }
         ret Err(ReadError.InvalidUtf8);
     }
 
@@ -330,12 +428,17 @@ pub fn readkey() Result[String, ReadError] {
     for (pos < width) {
         unsafe { n = sys_read(0, buf + pos, width - pos); }
         if (n <= 0) {
-            unsafe { free(buf); }
+            unsafe {
+                __io_end_immediate_input(input_state);
+                free(buf);
+            }
             if (n < 0) { ret Err(ReadError.InputFailed); }
             ret Err(ReadError.InvalidUtf8);
         }
         pos = pos + (n as usize);
     }
+
+    unsafe { __io_end_immediate_input(input_state); }
 
     var valid: bool = false;
     unsafe { valid = __io_valid_utf8(buf, width); }
