@@ -1,5 +1,6 @@
 // std.collections.map — open-addressing hash map (linear probing, tombstone delete)
-// Keys are hashed as raw 64-bit values. Use integer or pointer-stable keys.
+// Keys and values are usize. Generic owned storage requires trait bounds and
+// drop-aware slots, which the language does not expose yet.
 // Resize at 75% load; initial capacity 16.
 import std.core;
 
@@ -10,7 +11,12 @@ fn __map_store(base: *u8, idx: usize, val: usize) void;
 fn __map_load(base: *u8, idx: usize) usize;
 
 // flags slot values: 0 = empty, 1 = used, 2 = tombstone
-struct Map[K, V] {
+pub enum MapError {
+    AllocationFailed,
+    CapacityOverflow,
+}
+
+pub struct Map {
     keys:  *u8,
     vals:  *u8,
     flags: *u8,
@@ -18,49 +24,59 @@ struct Map[K, V] {
     cap:   usize,
 }
 
-impl Map[K, V] {
-    pub fn new() Map[K, V] {
-        var keys:  *u8;
-        var vals:  *u8;
-        var flags: *u8;
+impl Map {
+    pub fn new() Result[Map, MapError] {
+        var keys:  *u8 = 0;
+        var vals:  *u8 = 0;
+        var flags: *u8 = 0;
         unsafe {
             keys  = core.malloc(128);
+            if (keys == 0) { ret Err(MapError.AllocationFailed); }
             vals  = core.malloc(128);
+            if (vals == 0) {
+                core.free(keys);
+                ret Err(MapError.AllocationFailed);
+            }
             flags = core.malloc(128);
+            if (flags == 0) {
+                core.free(keys);
+                core.free(vals);
+                ret Err(MapError.AllocationFailed);
+            }
             core.memset(flags, 0, 128);
         }
-        ret Map { keys: keys, vals: vals, flags: flags, len: 0, cap: 16 };
+        ret Ok(Map { keys: keys, vals: vals, flags: flags, len: 0, cap: 16 });
     }
 
     @ignore
-    fn __hash(self: Map[K, V], key: K) usize {
+    fn __hash(self: Map, key: usize) usize {
         ret (key * 2654435761) % self.cap;
     }
 
-    pub fn insert(self: Map[K, V], key: K, val: V) Map[K, V] {
+    pub fn insert(self: Map, key: usize, val: usize) Result[Map, MapError] {
         if (self.len * 4 >= self.cap * 3) {
-            ret self.__grow().insert(key, val);
+            ret self.__grow()?.insert(key, val);
         }
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         var first_tomb: usize = self.cap;
+        var target: usize = self.cap;
+        var replacing: bool = false;
         for (probe < self.cap) {
             var f: usize = __map_load(self.flags, idx);
             if (f == 0) {
-                var target: usize = idx;
+                target = idx;
                 if (first_tomb < self.cap) {
                     target = first_tomb;
                 }
-                __map_store(self.flags, target, 1);
-                __map_store(self.keys, target, key);
-                __map_store(self.vals, target, val);
-                ret Map { keys: self.keys, vals: self.vals, flags: self.flags, len: self.len + 1, cap: self.cap };
+                break;
             }
             if (f == 1) {
                 var k: usize = __map_load(self.keys, idx);
                 if (k == key) {
-                    __map_store(self.vals, idx, val);
-                    ret self;
+                    target = idx;
+                    replacing = true;
+                    break;
                 }
             }
             if (f == 2) {
@@ -71,37 +87,40 @@ impl Map[K, V] {
             idx = (idx + 1) % self.cap;
             probe = probe + 1;
         }
-        if (first_tomb < self.cap) {
-            __map_store(self.flags, first_tomb, 1);
-            __map_store(self.keys, first_tomb, key);
-            __map_store(self.vals, first_tomb, val);
-            ret Map { keys: self.keys, vals: self.vals, flags: self.flags, len: self.len + 1, cap: self.cap };
+        if (target >= self.cap && first_tomb < self.cap) {
+            target = first_tomb;
         }
-        ret self;
+        if (target < self.cap) {
+            __map_store(self.vals, target, val);
+            if (replacing) { ret Ok(self); }
+            __map_store(self.flags, target, 1);
+            __map_store(self.keys, target, key);
+            ret Ok(Map { keys: self.keys, vals: self.vals, flags: self.flags, len: self.len + 1, cap: self.cap });
+        }
+        ret Ok(self);
     }
 
-    pub fn get(self: Map[K, V], key: K) V {
+    pub fn get(self: Map, key: usize) Option[usize] {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
             var f: usize = __map_load(self.flags, idx);
             if (f == 0) {
-                core.exit(1);
+                ret None;
             }
             if (f == 1) {
                 var k: usize = __map_load(self.keys, idx);
                 if (k == key) {
-                    ret __map_load(self.vals, idx);
+                    ret Some(__map_load(self.vals, idx));
                 }
             }
             idx = (idx + 1) % self.cap;
             probe = probe + 1;
         }
-        core.exit(1);
-        ret __map_load(self.vals, 0);
+        ret None;
     }
 
-    pub fn contains(self: Map[K, V], key: K) bool {
+    pub fn contains(self: Map, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -117,7 +136,7 @@ impl Map[K, V] {
         ret false;
     }
 
-    pub fn remove(self: Map[K, V], key: K) Map[K, V] {
+    pub fn remove(self: Map, key: usize) Map {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -136,11 +155,11 @@ impl Map[K, V] {
         ret self;
     }
 
-    pub fn len(self: Map[K, V]) usize {
+    pub fn len(self: Map) usize {
         ret self.len;
     }
 
-    pub fn free(self: Map[K, V]) void {
+    pub fn free(self: Map) void {
         unsafe {
             core.free(self.keys);
             core.free(self.vals);
@@ -149,25 +168,39 @@ impl Map[K, V] {
     }
 
     @ignore
-    fn __grow(self: Map[K, V]) Map[K, V] {
+    fn __grow(self: Map) Result[Map, MapError] {
+        // Doubling and converting slots to bytes must both fit in usize.
+        if (self.cap > 1152921504606846975) {
+            ret Err(MapError.CapacityOverflow);
+        }
         var new_cap: usize = self.cap * 2;
-        var new_keys:  *u8;
-        var new_vals:  *u8;
-        var new_flags: *u8;
+        var new_keys:  *u8 = 0;
+        var new_vals:  *u8 = 0;
+        var new_flags: *u8 = 0;
         unsafe {
             new_keys  = core.malloc(new_cap * 8);
+            if (new_keys == 0) { ret Err(MapError.AllocationFailed); }
             new_vals  = core.malloc(new_cap * 8);
+            if (new_vals == 0) {
+                core.free(new_keys);
+                ret Err(MapError.AllocationFailed);
+            }
             new_flags = core.malloc(new_cap * 8);
+            if (new_flags == 0) {
+                core.free(new_keys);
+                core.free(new_vals);
+                ret Err(MapError.AllocationFailed);
+            }
             core.memset(new_flags, 0, new_cap * 8);
         }
-        var new_map: Map[K, V] = Map { keys: new_keys, vals: new_vals, flags: new_flags, len: 0, cap: new_cap };
+        var new_map: Map = Map { keys: new_keys, vals: new_vals, flags: new_flags, len: 0, cap: new_cap };
         var i: usize = 0;
         for (i < self.cap) {
             var f: usize = __map_load(self.flags, i);
             if (f == 1) {
-                var k: K = __map_load(self.keys, i);
-                var v: V = __map_load(self.vals, i);
-                new_map = new_map.insert(k, v);
+                var k: usize = __map_load(self.keys, i);
+                var v: usize = __map_load(self.vals, i);
+                new_map = new_map.insert(k, v)?;
             }
             i = i + 1;
         }
@@ -176,6 +209,6 @@ impl Map[K, V] {
             core.free(self.vals);
             core.free(self.flags);
         }
-        ret new_map;
+        ret Ok(new_map);
     }
 }

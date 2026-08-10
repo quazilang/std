@@ -1,5 +1,5 @@
 // std.collections.set — open-addressing hash set (linear probing, tombstone delete)
-// Elements are hashed as raw 64-bit values. Use integer or pointer-stable values.
+// Elements are usize values.
 // Resize at 75% load; initial capacity 16.
 import std.core;
 
@@ -10,33 +10,43 @@ fn __set_store(base: *u8, idx: usize, val: usize) void;
 fn __set_load(base: *u8, idx: usize) usize;
 
 // flags slot values: 0 = empty, 1 = used, 2 = tombstone
-struct Set[T] {
+pub enum SetError {
+    AllocationFailed,
+    CapacityOverflow,
+}
+
+pub struct Set {
     keys:  *u8,
     flags: *u8,
     len:   usize,
     cap:   usize,
 }
 
-impl Set[T] {
-    pub fn new() Set[T] {
-        var keys:  *u8;
-        var flags: *u8;
+impl Set {
+    pub fn new() Result[Set, SetError] {
+        var keys:  *u8 = 0;
+        var flags: *u8 = 0;
         unsafe {
             keys  = core.malloc(128);
+            if (keys == 0) { ret Err(SetError.AllocationFailed); }
             flags = core.malloc(128);
+            if (flags == 0) {
+                core.free(keys);
+                ret Err(SetError.AllocationFailed);
+            }
             core.memset(flags, 0, 128);
         }
-        ret Set { keys: keys, flags: flags, len: 0, cap: 16 };
+        ret Ok(Set { keys: keys, flags: flags, len: 0, cap: 16 });
     }
 
     @ignore
-    fn __hash(self: Set[T], key: T) usize {
+    fn __hash(self: Set, key: usize) usize {
         ret (key * 2654435761) % self.cap;
     }
 
-    pub fn insert(self: Set[T], key: T) Set[T] {
+    pub fn insert(self: Set, key: usize) Result[Set, SetError] {
         if (self.len * 4 >= self.cap * 3) {
-            ret self.__grow().insert(key);
+            ret self.__grow()?.insert(key);
         }
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
@@ -50,12 +60,12 @@ impl Set[T] {
                 }
                 __set_store(self.flags, target, 1);
                 __set_store(self.keys, target, key);
-                ret Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap };
+                ret Ok(Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap });
             }
             if (f == 1) {
                 var k: usize = __set_load(self.keys, idx);
                 if (k == key) {
-                    ret self;
+                    ret Ok(self);
                 }
             }
             if (f == 2) {
@@ -69,12 +79,12 @@ impl Set[T] {
         if (first_tomb < self.cap) {
             __set_store(self.flags, first_tomb, 1);
             __set_store(self.keys, first_tomb, key);
-            ret Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap };
+            ret Ok(Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap });
         }
-        ret self;
+        ret Ok(self);
     }
 
-    pub fn contains(self: Set[T], key: T) bool {
+    pub fn contains(self: Set, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -90,7 +100,7 @@ impl Set[T] {
         ret false;
     }
 
-    pub fn remove(self: Set[T], key: T) Set[T] {
+    pub fn remove(self: Set, key: usize) Set {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -109,11 +119,11 @@ impl Set[T] {
         ret self;
     }
 
-    pub fn len(self: Set[T]) usize {
+    pub fn len(self: Set) usize {
         ret self.len;
     }
 
-    pub fn free(self: Set[T]) void {
+    pub fn free(self: Set) void {
         unsafe {
             core.free(self.keys);
             core.free(self.flags);
@@ -121,22 +131,31 @@ impl Set[T] {
     }
 
     @ignore
-    fn __grow(self: Set[T]) Set[T] {
+    fn __grow(self: Set) Result[Set, SetError] {
+        // Doubling and converting slots to bytes must both fit in usize.
+        if (self.cap > 1152921504606846975) {
+            ret Err(SetError.CapacityOverflow);
+        }
         var new_cap: usize = self.cap * 2;
-        var new_keys:  *u8;
-        var new_flags: *u8;
+        var new_keys:  *u8 = 0;
+        var new_flags: *u8 = 0;
         unsafe {
             new_keys  = core.malloc(new_cap * 8);
+            if (new_keys == 0) { ret Err(SetError.AllocationFailed); }
             new_flags = core.malloc(new_cap * 8);
+            if (new_flags == 0) {
+                core.free(new_keys);
+                ret Err(SetError.AllocationFailed);
+            }
             core.memset(new_flags, 0, new_cap * 8);
         }
-        var new_set: Set[T] = Set { keys: new_keys, flags: new_flags, len: 0, cap: new_cap };
+        var new_set: Set = Set { keys: new_keys, flags: new_flags, len: 0, cap: new_cap };
         var i: usize = 0;
         for (i < self.cap) {
             var f: usize = __set_load(self.flags, i);
             if (f == 1) {
-                var k: T = __set_load(self.keys, i);
-                new_set = new_set.insert(k);
+                var k: usize = __set_load(self.keys, i);
+                new_set = new_set.insert(k)?;
             }
             i = i + 1;
         }
@@ -144,6 +163,6 @@ impl Set[T] {
             core.free(self.keys);
             core.free(self.flags);
         }
-        ret new_set;
+        ret Ok(new_set);
     }
 }

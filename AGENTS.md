@@ -20,3 +20,22 @@
   an embedded NUL.
 - Planned work: borrowed UTF-8 validation, C-string literal ergonomics,
   ownership adapters, and safe wrappers around specific foreign APIs.
+
+# Safety and API contracts
+
+- Public APIs must not accept a safe raw pointer plus a caller-controlled byte
+  count. Raw buffer operations are `unsafe`; safe byte operations derive their
+  length from `bytes`, and safe text operations derive it from `strlen`.
+- Low-level `std.unix` calls with caller-provided buffer lengths are explicitly
+  `unsafe`; the declaration must match the module's documented syscall contract.
+- `std.io.read`, `readln`, and `readkey` return `Result[String, ReadError]`.
+  They own and free temporary allocations on every error, validate UTF-8, and
+  return an owned `String`. EOF is represented by a successful empty string.
+- `String.from_raw(data, len, cap)` is the unsafe ownership-transfer boundary:
+  the allocation must be writable, NUL-terminated at `len`, and exclusively
+  owned by the resulting `String`.
+- Collections report allocation and capacity failures with `Result`; absence is
+  represented with `Option`, never by terminating the process.
+- Until the language has hash/equality/drop trait bounds for raw table slots,
+  `Map` and `Set` intentionally store `usize` values rather than pretending to
+  be sound generic containers.

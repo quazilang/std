@@ -3,6 +3,7 @@
 
 pub reexport core;
 pub reexport io;
+pub reexport collections;
 pub reexport unix;
 pub reexport windows;
 pub reexport fs;

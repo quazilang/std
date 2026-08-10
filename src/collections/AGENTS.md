@@ -1,23 +1,36 @@
-# std.collections (`std/src/collections/`)
+# `std.collections`
 
-Hash-map and hash-set backed by open-addressing tables with linear probing.
+The current collections are open-addressed tables with linear probing and
+tombstones. They are re-exported from `std.collections`, so users can write:
 
-## Map (`map.void`)
+```quazi
+import std.collections.Map;
+import std.collections.Set;
+```
 
-- `Map[K, V]` — generic hash map
-- `new()`, `insert(k, v)`, `get(k)`, `remove(k)`, `contains(k)`, `len()`, `keys()`, `vals()`
-- `__grow()` resizes at 75 % load factor
-- `__hash()` is integer multiplicative (`key * 2654435761 % cap`); caller must use integer or pointer-stable keys
-- Tombstone deletion (flag = 2) so probes remain valid
+## Map
 
-## Set (`set.void`)
+`Map` stores `usize -> usize`. `Map.new()` and `insert()` return
+`Result[Map, MapError]`; `get()` returns `Option[usize]`. `contains`, `remove`,
+`len`, and `free` are non-panicking. Reassign the returned value after an insert:
 
-- `Set[T]` — generic hash set, wraps `Map[T, bool]`
-- `new()`, `insert(v)`, `remove(v)`, `contains(v)`, `len()`
-- Same probing / resize / tombstone strategy as Map
+```quazi
+var counts: Map = Map.new()?;
+counts = counts.insert(7, 42)?;
+var answer: usize = counts.get(7).unwrap();
+```
 
-## Internals
+## Set
 
-- `__map_store` / `__map_load` — `@intrinsic` raw slot access
-- Keys, vals, and flags are raw `*u8` blocks allocated with `core.malloc`
-- Initial capacity 16, doubles on resize
+`Set` stores `usize`. `Set.new()` and `insert()` return
+`Result[Set, SetError]`; `contains`, `remove`, `len`, and `free` are
+non-panicking.
+
+## Invariants
+
+- Flags are `0 = empty`, `1 = occupied`, and `2 = tombstone`.
+- Capacity starts at 16 and doubles at 75% occupancy.
+- Every allocation path frees earlier allocations before returning an error.
+- Growth checks both capacity doubling and the conversion from slots to bytes.
+- Generic owned storage is deferred until the language can express Hash/Eq and
+  drop behavior for raw slots. Do not reintroduce fake unconstrained generics.

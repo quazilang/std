@@ -1,5 +1,6 @@
 // std.fs — file system operations
-// Safe wrappers around unix.void syscalls (Linux primary).
+// Checked convenience wrappers plus explicit unsafe raw-buffer operations
+// around std.unix syscalls (Linux primary).
 // Windows: @cfg dispatch pending — use std.windows directly for now.
 import std.core;
 import std.unix;
@@ -46,23 +47,32 @@ impl File {
         ret Ok(File { fd: fd });
     }
 
-    // Read up to n bytes into buf. Returns bytes read or negative errno.
-    pub fn read(self: File, buf: str, n: usize) isize {
+    // Raw buffer read. The caller owns the allocation and must guarantee that
+    // `buf` is writable for at least `n` bytes.
+    pub unsafe fn read(self: File, buf: *u8, n: usize) isize {
         var r: isize = 0;
-        unsafe { r = unix.read(self.fd, buf, n); }
+        r = unix.read(self.fd, buf, n);
         ret r;
     }
 
-    // Write n bytes from buf. Returns bytes written or negative errno.
-    pub fn write(self: File, buf: str, n: usize) isize {
+    // Write an exact immutable byte string; its stored length is authoritative.
+    pub fn write(self: File, buf: bytes) isize {
         var r: isize = 0;
-        unsafe { r = unix.write(self.fd, buf, n); }
+        unsafe { r = core.write_bytes(self.fd, buf.as_ptr(), buf.len()); }
         ret r;
+    }
+
+    // Raw buffer write for FFI-style callers. The caller must guarantee that
+    // `buf` is readable for at least `n` bytes.
+    pub unsafe fn write_raw(self: File, buf: *u8, n: usize) isize {
+        ret core.write_bytes(self.fd, buf, n);
     }
 
     // Write an entire string. Returns bytes written or negative errno.
     pub fn write_str(self: File, s: str) isize {
-        ret self.write(s, core.strlen(s));
+        var r: isize = 0;
+        unsafe { r = unix.write(self.fd, s, core.strlen(s)); }
+        ret r;
     }
 
     // Close the file descriptor. Returns 0 on success or negative errno.

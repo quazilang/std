@@ -7,7 +7,7 @@ This repository contains the core modules, abstractions, and platform-specific b
 ## Modules Overview
 
 - `core`: Platform-neutral intrinsics (I/O, memory management, process primitives).
-- `collections`: Core data structures (`map`, `set`, etc.).
+- `collections`: Fallible, non-panicking `usize` map and set types.
 - `fs`: File system operations.
 - `io`: Standard input, output, and error streams handling.
 - `net`: Networking and sockets.
@@ -22,7 +22,7 @@ This library is automatically linked by the Quazi compiler (`qz`) when building 
 To import a module, simply use:
 ```quazi
 import std.io;
-import std.collections.map;
+import std.collections.Map;
 
 fn main() i32 {
     io.println("Hello from Quazi!");
@@ -59,3 +59,41 @@ legacy strings when the caller accepts their NUL-terminated representation.
 `CStr.from_ptr` borrows a foreign pointer and is unsafe; it does not take
 ownership. Borrowed UTF-8 validation remains explicit follow-up work rather than
 an implicit conversion at the ABI boundary.
+
+## I/O
+
+Input returns owned, UTF-8-validated strings and makes failure explicit:
+
+```quazi
+import std.io;
+
+fn main() i32 {
+    var line: String = io.readln().unwrap();
+    io.println("you entered: {}", line.as_str());
+    ret 0;
+}
+```
+
+`io.read`, `io.readln`, and `io.readkey` return
+`Result[String, io.ReadError]`. File and socket byte writes take `bytes` and use
+its exact stored length. Raw pointer reads/writes remain available as explicitly
+`unsafe` operations.
+
+## Collections
+
+`Map` currently stores `usize -> usize`, and `Set` stores `usize`. Constructors
+and insertion are fallible; lookup uses `Option` instead of exiting the process:
+
+```quazi
+import std.collections.Map;
+import std.collections.MapError;
+
+fn example() Result[usize, MapError] {
+    var map: Map = Map.new()?;
+    map = map.insert(7, 42)?;
+    ret Ok(map.get(7).unwrap());
+}
+```
+
+The deliberately concrete element types avoid unsound generic raw storage until
+Quazi can express hash/equality bounds and drop-aware slots.

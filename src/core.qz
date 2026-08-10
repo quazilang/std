@@ -9,9 +9,9 @@
 
 // ── I/O ──────────────────────────────────────────────────────────────────────
 
-// Write UTF-8 text to fd. Safe — buf is guaranteed valid UTF-8.
+// Raw text write. Unsafe because `count` may exceed the readable string bytes.
 @intrinsic("quazi.write")
-pub fn write(fd: i32, buf: str, count: usize) isize;
+pub unsafe fn write(fd: i32, buf: str, count: usize) isize;
 
 // Write raw bytes to fd. Unsafe — buf may contain non-UTF-8 bytes.
 @intrinsic("quazi.write")
@@ -22,7 +22,7 @@ pub unsafe fn write_bytes(fd: i32, buf: *u8, count: usize) isize;
 pub unsafe fn read(fd: i32, buf: *u8, count: usize) isize;
 
 @intrinsic("quazi.stderr_write")
-pub fn stderr_write(buf: str, len: usize) isize;
+pub unsafe fn stderr_write(buf: str, len: usize) isize;
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
