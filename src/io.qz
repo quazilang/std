@@ -7,11 +7,89 @@ import std.core.strlen;
 import std.core.malloc;
 import std.core.free;
 import std.core.realloc;
+import std.core.str_as_ptr;
+import std.win32_core;
 
+@cfg(target_os = "linux")
 fn write_text(fd: i32, s: str) isize {
     var result: isize = 0;
     unsafe { result = raw_write(fd, s, strlen(s)); }
     ret result;
+}
+
+@cfg(target_os = "windows")
+fn write_text(fd: i32, s: str) isize {
+    const byte_len: usize = strlen(s);
+    if (byte_len == 0) { ret 0; }
+    if ((fd != 1 && fd != 2) || byte_len > 2147483647) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
+
+    var handle: usize = 0;
+    var mode: *u32 = 0;
+    unsafe {
+        if (fd == 1) { handle = win32_core.get_std_handle(4294967285); }
+        else { handle = win32_core.get_std_handle(4294967284); }
+        mode = malloc(4) as *u32;
+    }
+    if (mode == 0) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
+
+    var is_console: i32 = 0;
+    unsafe {
+        is_console = win32_core.get_console_mode(handle, mode);
+        free(mode as *u8);
+    }
+    // Pipes and files have no console mode and must keep portable UTF-8 bytes.
+    if (is_console == 0) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
+
+    var wide_len: i32 = 0;
+    unsafe {
+        wide_len = win32_core.utf8_to_utf16(
+            65001, 8, str_as_ptr(s), byte_len as i32, 0, 0
+        );
+    }
+    if (wide_len <= 0) { ret -1; }
+
+    var wide: *u16 = 0;
+    var written: *u32 = 0;
+    unsafe {
+        wide = malloc((wide_len as usize) * 2) as *u16;
+        written = malloc(4) as *u32;
+    }
+    if (wide == 0 || written == 0) {
+        unsafe {
+            if (wide != 0) { free(wide as *u8); }
+            if (written != 0) { free(written as *u8); }
+        }
+        ret -1;
+    }
+
+    var converted: i32 = 0;
+    var succeeded: i32 = 0;
+    unsafe {
+        converted = win32_core.utf8_to_utf16(
+            65001, 8, str_as_ptr(s), byte_len as i32, wide, wide_len
+        );
+        if (converted > 0) {
+            succeeded = win32_core.write_console_utf16(
+                handle, wide, converted as u32, written, 0
+            );
+        }
+        free(wide as *u8);
+        free(written as *u8);
+    }
+    if (succeeded == 0) { ret -1; }
+    ret byte_len as isize;
 }
 // ── Writer types ──────────────────────────────────────────────────────────────
 

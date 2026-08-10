@@ -12,3 +12,4 @@ pub reexport net;
 pub reexport os;
 pub reexport thread;
 pub reexport ffi;
+pub reexport math;

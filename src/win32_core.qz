@@ -13,6 +13,20 @@ pub unsafe fn read_file(file: usize, buf: *u8, count: u32,
 pub unsafe fn write_file(file: usize, buf: *u8, count: u32,
     written: *u32, overlapped: *u8) i32;
 
+@api("GetStdHandle")
+pub unsafe fn get_std_handle(kind: u32) usize;
+
+@api("GetConsoleMode")
+pub unsafe fn get_console_mode(console: usize, mode: *u32) i32;
+
+@api("MultiByteToWideChar")
+pub unsafe fn utf8_to_utf16(code_page: u32, flags: u32, input: *u8,
+    input_len: i32, output: *u16, output_len: i32) i32;
+
+@api("WriteConsoleW")
+pub unsafe fn write_console_utf16(console: usize, text: *u16, count: u32,
+    written: *u32, reserved: *u8) i32;
+
 @api("CloseHandle")
 pub unsafe fn close_handle(handle: usize) i32;
 

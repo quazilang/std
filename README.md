@@ -10,6 +10,7 @@ This repository contains the core modules, abstractions, and platform-specific b
 - `collections`: Fallible, non-panicking `usize` map and set types.
 - `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
+- `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `net`: Networking and sockets.
 - `os`: Cross-platform host, memory, process, and environment information.
 - `thread`: Threading and concurrency primitives.
@@ -83,6 +84,20 @@ fn main() i32 {
 `Result[String, io.ReadError]`. File and socket byte writes take `bytes` and use
 its exact stored length. Raw pointer reads/writes remain available as explicitly
 `unsafe` operations.
+
+On Windows, stdout/stderr connected to a console are converted from UTF-8 to
+UTF-16 and written with `WriteConsoleW`; redirected files and pipes retain UTF-8
+bytes. This makes Unicode output independent of the active Windows code page.
+
+## Mathematics
+
+`std.math` provides integer `gcd`, `lcm`, factorial, permutation, and
+combination helpers. Its floating-point surface includes rounding,
+interpolation, degree/radian conversion, square/cube roots, `hypot`,
+trigonometric and hyperbolic functions, exponentials, logarithms, and powers.
+Angles use radians unless explicitly converted. The routines are written in
+pure Quazi and do not link libc or libm; they are lightweight approximations
+rather than correctly rounded scientific-library replacements.
 
 ## Filesystem and system information
 

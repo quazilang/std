@@ -31,6 +31,10 @@
 - `std.io.read`, `readln`, and `readkey` return `Result[String, ReadError]`.
   They own and free temporary allocations on every error, validate UTF-8, and
   return an owned `String`. EOF is represented by a successful empty string.
+- `std.io` writes valid UTF-8 bytes on Linux and to redirected Windows handles.
+  A real Windows console is detected with `GetConsoleMode`, converted with
+  `MultiByteToWideChar(CP_UTF8)`, and written through `WriteConsoleW`; do not
+  depend on or mutate the process console code page.
 - `String.from_raw(data, len, cap)` is the unsafe ownership-transfer boundary:
   the allocation must be writable, NUL-terminated at `len`, and exclusively
   owned by the resulting `String`.
@@ -60,3 +64,8 @@
   system metadata. CPU branding comes from CPUID, Windows releases use the
   unmanifested shared build number plus `GetProductInfo`, and shell/terminal
   detection uses environment hints and Toolhelp process ancestry.
+- `std.math` is pure Quazi and dependency-free. It includes integer GCD/LCM and
+  combinatorics plus lightweight floating-point roots, trig, hyperbolic,
+  interpolation, exponent, logarithm, and power helpers. Angles use radians;
+  approximations must document their accuracy goal and must not add an implicit
+  libc/libm dependency.

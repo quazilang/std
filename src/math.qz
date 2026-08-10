@@ -1,0 +1,389 @@
+// Portable dependency-free f64 mathematics.
+//
+// These routines are implemented in Quazi, so importing std.math never pulls
+// in libc or libm. Trigonometric inputs and outputs use radians.
+
+fn __magnitude(value: i64) u64 {
+    if (value < 0) { ret ((-(value + 1)) as u64) + 1; }
+    ret value as u64;
+}
+
+fn __u64_greater(left: u64, right: u64) bool {
+    const left_high: u64 = left >> 63;
+    const right_high: u64 = right >> 63;
+    if (left_high != right_high) { ret left_high != 0; }
+    ret left > right;
+}
+
+fn __gcd_u64(a: u64, b: u64) u64 {
+    var left: u64 = a;
+    var right: u64 = b;
+    if (left == 0) { ret right; }
+    if (right == 0) { ret left; }
+    var shift: u32 = 0;
+    for (((left | right) & 1) == 0) {
+        left = left >> 1;
+        right = right >> 1;
+        shift++;
+    }
+    for ((left & 1) == 0) { left = left >> 1; }
+    for (right != 0) {
+        for ((right & 1) == 0) { right = right >> 1; }
+        if (math.__u64_greater(left, right)) {
+            const swap: u64 = left;
+            left = right;
+            right = swap;
+        }
+        right = right - left;
+    }
+    ret left << shift;
+}
+
+pub fn gcd(a: i64, b: i64) i64 {
+    const value: u64 = math.__gcd_u64(math.__magnitude(a), math.__magnitude(b));
+    if (value > 9223372036854775807) { panic("gcd result does not fit i64"); }
+    ret value as i64;
+}
+
+pub fn lcm(a: i64, b: i64) i64 {
+    if (a == 0 || b == 0) { ret 0; }
+    ret (a / math.gcd(a, b) * b).abs();
+}
+
+pub fn factorial(value: u32) u64 {
+    var result: u64 = 1;
+    var factor: u32 = 2;
+    for (factor <= value) { result = result * (factor as u64); factor++; }
+    ret result;
+}
+
+pub fn permutations(n: u32, r: u32) u64 {
+    if (r > n) { ret 0; }
+    var result: u64 = 1;
+    var offset: u32 = 0;
+    for (offset < r) { result = result * ((n - offset) as u64); offset++; }
+    ret result;
+}
+
+pub fn combinations(n: u32, r: u32) u64 {
+    if (r > n) { ret 0; }
+    var count: u32 = r;
+    if (count > n - count) { count = n - count; }
+    var result: u64 = 1;
+    var index: u32 = 1;
+    for (index <= count) {
+        result = result * ((n - count + index) as u64) / (index as u64);
+        index++;
+    }
+    ret result;
+}
+
+pub fn abs(value: f64) f64 { ret value.abs(); }
+pub fn min(a: f64, b: f64) f64 { ret a.min(b); }
+pub fn max(a: f64, b: f64) f64 { ret a.max(b); }
+pub fn clamp(value: f64, low: f64, high: f64) f64 { ret value.clamp(low, high); }
+
+pub fn trunc(value: f64) f64 {
+    if (value != value) { ret value; }
+    var magnitude: f64 = value.abs();
+    if (magnitude >= 9007199254740992.0) { ret value; }
+    var step: f64 = 1.0;
+    for (step * 2.0 <= magnitude) { step = step * 2.0; }
+    var whole: f64 = 0.0;
+    for (step >= 1.0) {
+        if (magnitude >= step) {
+            whole = whole + step;
+            magnitude = magnitude - step;
+        }
+        step = step / 2.0;
+    }
+    if (value < 0.0) { ret -whole; }
+    ret whole;
+}
+
+pub fn floor(value: f64) f64 {
+    const whole: f64 = math.trunc(value);
+    if (whole > value) { ret whole - 1.0; }
+    ret whole;
+}
+
+pub fn ceil(value: f64) f64 {
+    const whole: f64 = math.trunc(value);
+    if (whole < value) { ret whole + 1.0; }
+    ret whole;
+}
+
+pub fn round(value: f64) f64 {
+    if (value < 0.0) { ret math.ceil(value - 0.5); }
+    ret math.floor(value + 0.5);
+}
+
+pub fn fract(value: f64) f64 { ret value - math.trunc(value); }
+pub fn sign(value: f64) f64 {
+    if (value < 0.0) { ret -1.0; }
+    if (value > 0.0) { ret 1.0; }
+    ret value;
+}
+pub fn lerp(start: f64, end: f64, amount: f64) f64 {
+    ret start + (end - start) * amount;
+}
+pub fn map_range(value: f64, from_low: f64, from_high: f64,
+    to_low: f64, to_high: f64) f64 {
+    ret to_low + (value - from_low) * (to_high - to_low) / (from_high - from_low);
+}
+pub fn radians(degrees: f64) f64 { ret degrees * 0.0174532925199432958; }
+pub fn degrees(radians: f64) f64 { ret radians * 57.2957795130823208768; }
+
+pub fn sqrt(value: f64) f64 {
+    if (value < 0.0) { ret 0.0 / 0.0; }
+    if (value == 0.0) { ret 0.0; }
+    if (value == 1.0 / 0.0) { ret value; }
+    var estimate: f64 = value;
+    if (estimate < 1.0) { estimate = 1.0; }
+    var iteration: usize = 0;
+    for (iteration < 24) {
+        estimate = 0.5 * (estimate + value / estimate);
+        iteration++;
+    }
+    ret estimate;
+}
+
+pub fn cbrt(value: f64) f64 {
+    if (value == 0.0 || value != value) { ret value; }
+    if (value < 0.0) { ret -math.cbrt(-value); }
+    if (value == 1.0 / 0.0) { ret value; }
+    var estimate: f64 = value;
+    if (estimate < 1.0) { estimate = 1.0; }
+    var iteration: usize = 0;
+    for (iteration < 28) {
+        estimate = (2.0 * estimate + value / (estimate * estimate)) / 3.0;
+        iteration++;
+    }
+    ret estimate;
+}
+
+pub fn hypot(x: f64, y: f64) f64 {
+    const ax: f64 = x.abs();
+    const ay: f64 = y.abs();
+    const largest: f64 = math.max(ax, ay);
+    if (largest == 0.0 || largest == 1.0 / 0.0) { ret largest; }
+    const sx: f64 = ax / largest;
+    const sy: f64 = ay / largest;
+    ret largest * math.sqrt(sx * sx + sy * sy);
+}
+
+fn __reduce_angle(value: f64) f64 {
+    const tau: f64 = 6.2831853071795864769;
+    var reduced: f64 = value - math.trunc(value / tau) * tau;
+    if (reduced > 3.1415926535897932385) { reduced = reduced - tau; }
+    if (reduced < -3.1415926535897932385) { reduced = reduced + tau; }
+    ret reduced;
+}
+
+pub fn sin(value: f64) f64 {
+    var x: f64 = math.__reduce_angle(value);
+    if (x > 1.5707963267948966192) { x = 3.1415926535897932385 - x; }
+    if (x < -1.5707963267948966192) { x = -3.1415926535897932385 - x; }
+    const x2: f64 = x * x;
+    ret x * (1.0 + x2 * (-0.16666666666666666
+        + x2 * (0.008333333333333333
+        + x2 * (-0.0001984126984126984
+        + x2 * (0.0000027557319223985893
+        + x2 * -0.00000002505210838544172)))));
+}
+
+pub fn cos(value: f64) f64 {
+    var x: f64 = math.__reduce_angle(value);
+    var sign: f64 = 1.0;
+    if (x > 1.5707963267948966192) {
+        x = 3.1415926535897932385 - x;
+        sign = -1.0;
+    }
+    if (x < -1.5707963267948966192) {
+        x = -3.1415926535897932385 - x;
+        sign = -1.0;
+    }
+    const x2: f64 = x * x;
+    ret sign * (1.0 + x2 * (-0.5
+        + x2 * (0.041666666666666664
+        + x2 * (-0.001388888888888889
+        + x2 * (0.0000248015873015873
+        + x2 * -0.0000002755731922398589)))));
+}
+
+pub fn tan(value: f64) f64 { ret math.sin(value) / math.cos(value); }
+
+pub fn atan(value: f64) f64 {
+    if (value < 0.0) { ret -math.atan(-value); }
+    if (value > 1.0) { ret 1.5707963267948966192 - math.atan(1.0 / value); }
+    if (value > 0.4142135623730950488) {
+        ret 0.7853981633974483096 + math.atan((value - 1.0) / (value + 1.0));
+    }
+    const squared: f64 = value * value;
+    var term: f64 = value;
+    var sum: f64 = value;
+    var denominator: f64 = 3.0;
+    var subtract: bool = true;
+    var iteration: usize = 0;
+    for (iteration < 16) {
+        term = term * squared;
+        if (subtract) { sum = sum - term / denominator; }
+        else { sum = sum + term / denominator; }
+        subtract = !subtract;
+        denominator = denominator + 2.0;
+        iteration++;
+    }
+    ret sum;
+}
+
+pub fn arctan(value: f64) f64 { ret math.atan(value); }
+
+pub fn atan2(y: f64, x: f64) f64 {
+    if (x > 0.0) { ret math.atan(y / x); }
+    if (x < 0.0 && y >= 0.0) { ret math.atan(y / x) + 3.1415926535897932385; }
+    if (x < 0.0) { ret math.atan(y / x) - 3.1415926535897932385; }
+    if (y > 0.0) { ret 1.5707963267948966192; }
+    if (y < 0.0) { ret -1.5707963267948966192; }
+    ret 0.0;
+}
+
+pub fn arctan2(y: f64, x: f64) f64 { ret math.atan2(y, x); }
+
+pub fn asin(value: f64) f64 {
+    if (value < -1.0 || value > 1.0) { ret 0.0 / 0.0; }
+    ret math.atan2(value, math.sqrt(1.0 - value * value));
+}
+
+pub fn acos(value: f64) f64 { ret 1.5707963267948966192 - math.asin(value); }
+
+pub fn exp(value: f64) f64 {
+    if (value != value) { ret value; }
+    // Avoid non-terminating range reduction and match IEEE overflow behavior.
+    if (value > 709.782712893384) { ret 1.0 / 0.0; }
+    if (value < -745.1332191019411) { ret 0.0; }
+    var reduced: f64 = value;
+    var scale: f64 = 1.0;
+    for (reduced > 0.6931471805599453094) {
+        reduced = reduced - 0.6931471805599453094;
+        scale = scale * 2.0;
+    }
+    for (reduced < -0.6931471805599453094) {
+        reduced = reduced + 0.6931471805599453094;
+        scale = scale * 0.5;
+    }
+    var sum: f64 = 1.0;
+    var term: f64 = 1.0;
+    var divisor: f64 = 1.0;
+    var iteration: usize = 0;
+    for (iteration < 24) {
+        term = term * reduced / divisor;
+        sum = sum + term;
+        divisor = divisor + 1.0;
+        iteration++;
+    }
+    ret sum * scale;
+}
+
+pub fn ln(value: f64) f64 {
+    if (value != value) { ret value; }
+    if (value < 0.0) { ret 0.0 / 0.0; }
+    if (value == 0.0) { ret -1.0 / 0.0; }
+    if (value == 1.0 / 0.0) { ret value; }
+    var normalized: f64 = value;
+    var scale: f64 = 0.0;
+    for (normalized > 1.5) { normalized = normalized * 0.5; scale = scale + 1.0; }
+    for (normalized < 0.75) { normalized = normalized * 2.0; scale = scale - 1.0; }
+    const ratio: f64 = (normalized - 1.0) / (normalized + 1.0);
+    const squared: f64 = ratio * ratio;
+    var term: f64 = ratio;
+    var sum: f64 = ratio;
+    var denominator: f64 = 3.0;
+    var iteration: usize = 0;
+    for (iteration < 18) {
+        term = term * squared;
+        sum = sum + term / denominator;
+        denominator = denominator + 2.0;
+        iteration++;
+    }
+    ret 2.0 * sum + scale * 0.6931471805599453094;
+}
+
+pub fn log2(value: f64) f64 { ret math.ln(value) / 0.6931471805599453094; }
+pub fn log10(value: f64) f64 { ret math.ln(value) / 2.3025850929940456840; }
+
+pub fn sinh(value: f64) f64 {
+    const positive: f64 = math.exp(value);
+    ret (positive - 1.0 / positive) * 0.5;
+}
+pub fn cosh(value: f64) f64 {
+    const positive: f64 = math.exp(value);
+    ret (positive + 1.0 / positive) * 0.5;
+}
+pub fn tanh(value: f64) f64 {
+    if (value > 20.0) { ret 1.0; }
+    if (value < -20.0) { ret -1.0; }
+    const doubled: f64 = math.exp(2.0 * value);
+    ret (doubled - 1.0) / (doubled + 1.0);
+}
+
+pub fn pow(base: f64, exponent: f64) f64 {
+    if (exponent == 0.0) { ret 1.0; }
+    if (base == 0.0) { if (exponent < 0.0) { ret 1.0 / 0.0; } ret 0.0; }
+    if (base < 0.0) {
+        if (exponent == 1.0 / 0.0) {
+            if (base == -1.0) { ret 1.0; }
+            if (base < -1.0) { ret 1.0 / 0.0; }
+            ret 0.0;
+        }
+        if (exponent == -1.0 / 0.0) {
+            if (base == -1.0) { ret 1.0; }
+            if (base < -1.0) { ret 0.0; }
+            ret 1.0 / 0.0;
+        }
+        const integral: f64 = math.trunc(exponent);
+        if (integral != exponent) { ret 0.0 / 0.0; }
+        var magnitude: f64 = integral.abs();
+        var result: f64 = 1.0;
+        var factor: f64 = base;
+        // Integral f64 values need at most 53 squaring steps, even near 2^53.
+        for (magnitude > 0.0) {
+            const half: f64 = math.trunc(magnitude / 2.0);
+            if (magnitude - half * 2.0 != 0.0) { result = result * factor; }
+            factor = factor * factor;
+            magnitude = half;
+        }
+        if (exponent < 0.0) { ret 1.0 / result; }
+        ret result;
+    }
+    ret math.exp(exponent * math.ln(base));
+}
+
+impl f64 {
+    pub fn trunc(self: f64) f64 { ret math.trunc(self); }
+    pub fn floor(self: f64) f64 { ret math.floor(self); }
+    pub fn ceil(self: f64) f64 { ret math.ceil(self); }
+    pub fn round(self: f64) f64 { ret math.round(self); }
+    pub fn fract(self: f64) f64 { ret math.fract(self); }
+    pub fn sign(self: f64) f64 { ret math.sign(self); }
+    pub fn sqrt(self: f64) f64 { ret math.sqrt(self); }
+    pub fn cbrt(self: f64) f64 { ret math.cbrt(self); }
+    pub fn sin(self: f64) f64 { ret math.sin(self); }
+    pub fn cos(self: f64) f64 { ret math.cos(self); }
+    pub fn tan(self: f64) f64 { ret math.tan(self); }
+    pub fn atan(self: f64) f64 { ret math.atan(self); }
+    pub fn arctan(self: f64) f64 { ret math.atan(self); }
+    pub fn atan2(self: f64, x: f64) f64 { ret math.atan2(self, x); }
+    pub fn arctan2(self: f64, x: f64) f64 { ret math.atan2(self, x); }
+    pub fn asin(self: f64) f64 { ret math.asin(self); }
+    pub fn acos(self: f64) f64 { ret math.acos(self); }
+    pub fn exp(self: f64) f64 { ret math.exp(self); }
+    pub fn ln(self: f64) f64 { ret math.ln(self); }
+    pub fn log2(self: f64) f64 { ret math.log2(self); }
+    pub fn log10(self: f64) f64 { ret math.log10(self); }
+    pub fn sinh(self: f64) f64 { ret math.sinh(self); }
+    pub fn cosh(self: f64) f64 { ret math.cosh(self); }
+    pub fn tanh(self: f64) f64 { ret math.tanh(self); }
+    pub fn degrees(self: f64) f64 { ret math.degrees(self); }
+    pub fn radians(self: f64) f64 { ret math.radians(self); }
+    pub fn pow(self: f64, exponent: f64) f64 { ret math.pow(self, exponent); }
+}
