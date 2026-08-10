@@ -5,6 +5,132 @@ import std.core;
 import std.unix;
 import std.win32_core;
 
+struct OsRawBuffer {
+    data: *u8,
+}
+
+impl OsRawBuffer {
+    unsafe fn take(self: OsRawBuffer) *u8 {
+        const data: *u8 = self.data;
+        self.data = 0;
+        ret data;
+    }
+
+    fn free(self: OsRawBuffer) void {
+        if (self.data != 0) { unsafe { core.free(self.data); } }
+        self.data = 0;
+    }
+}
+
+struct ProcessSnapshot {
+    handle: usize,
+}
+
+impl ProcessSnapshot {
+    fn free(self: ProcessSnapshot) void {
+        @cfg(target_os = "windows") {
+            if (self.handle as isize != -1) {
+                unsafe { win32_core.close_handle(self.handle); }
+            }
+        }
+        self.handle = 0;
+    }
+}
+
+fn ascii_equal(left: str, right: str) bool {
+    const left_len: usize = core.strlen(left);
+    if (left_len != core.strlen(right)) { ret false; }
+    var index: usize = 0;
+    for (index < left_len) {
+        var a: u8 = core.str_byte_at(left, index);
+        var b: u8 = core.str_byte_at(right, index);
+        if (a >= 65 && a <= 90) { a = a + 32; }
+        if (b >= 65 && b <= 90) { b = b + 32; }
+        if (a != b) { ret false; }
+        index++;
+    }
+    ret true;
+}
+
+fn owned_u32(value: u32) String {
+    const raw: str = (value as u64).to_string();
+    const length: usize = core.strlen(raw);
+    unsafe { ret String.from_raw(core.str_as_ptr(raw), length, 80); }
+    ret String.new();
+}
+
+@cfg(target_os = "windows")
+unsafe fn read_u32(address: *u8) u32 {
+    ret (*address) as u32
+        + (((*(address + 1)) as u32) << 8)
+        + (((*(address + 2)) as u32) << 16)
+        + (((*(address + 3)) as u32) << 24);
+}
+
+@cfg(target_os = "windows")
+fn process_role(role: i32) String {
+    const capacity: usize = 304;
+    var buffer: OsRawBuffer = OsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(capacity); }
+    if (buffer.data == 0) { ret String.new(); }
+    var raw_snapshot: usize = 0;
+    unsafe { raw_snapshot = win32_core.process_snapshot(2, 0); }
+    if (raw_snapshot as isize == -1) { ret String.new(); }
+    const snapshot: ProcessSnapshot = ProcessSnapshot { handle: raw_snapshot };
+    var wanted: u32 = 0;
+    unsafe { wanted = win32_core.current_process_id(); }
+    var depth: usize = 0;
+    for (depth < 16 && wanted != 0) {
+        unsafe {
+            *buffer.data = 48;
+            *(buffer.data + 1) = 1;
+            *(buffer.data + 2) = 0;
+            *(buffer.data + 3) = 0;
+        }
+        var found: bool = false;
+        unsafe {
+            var more: i32 = win32_core.first_process(raw_snapshot, buffer.data);
+            for (more != 0) {
+                if (read_u32(buffer.data + 8) == wanted) {
+                    found = true;
+                    break;
+                }
+                more = win32_core.next_process(raw_snapshot, buffer.data);
+            }
+        }
+        if (!found) { break; }
+        var parent: u32 = 0;
+        unsafe { parent = read_u32(buffer.data + 32); }
+        if (depth > 0) {
+            var executable: String = String.new();
+            unsafe { executable = String.from(core.str_from_ptr(buffer.data + 44)); }
+            const executable_name: str = executable.as_str();
+            if (role == 1) {
+                if (ascii_equal(executable_name, "pwsh.exe")) { ret String.from("PowerShell"); }
+                if (ascii_equal(executable_name, "powershell.exe")) { ret String.from("PowerShell"); }
+                if (ascii_equal(executable_name, "cmd.exe")) { ret String.from("cmd.exe"); }
+                if (ascii_equal(executable_name, "nu.exe")) { ret String.from("Nushell"); }
+                if (ascii_equal(executable_name, "bash.exe")) { ret String.from("bash"); }
+            }
+            if (role == 2) {
+                if (ascii_equal(executable_name, "windowsterminal.exe")) {
+                    ret String.from("Windows Terminal");
+                }
+                if (ascii_equal(executable_name, "wezterm-gui.exe")) { ret String.from("WezTerm"); }
+                if (ascii_equal(executable_name, "alacritty.exe")) { ret String.from("Alacritty"); }
+                if (ascii_equal(executable_name, "hyper.exe")) { ret String.from("Hyper"); }
+                if (ascii_equal(executable_name, "conemu64.exe")) { ret String.from("ConEmu"); }
+                if (ascii_equal(executable_name, "openconsole.exe")) {
+                    ret String.from("Windows Console");
+                }
+            }
+        }
+        wanted = parent;
+        depth++;
+    }
+    ret String.new();
+}
+
 // ── Process ──────────────────────────────────────────────────────────────────
 
 // Terminate the process with the given exit code. Never returns.
@@ -50,17 +176,17 @@ pub unsafe fn getenv(name: str) *u8 {
 pub fn env(name: str, fallback: str) String {
     @cfg(target_os = "windows") {
         const capacity: usize = 32768;
+        var buffer: OsRawBuffer = OsRawBuffer { data: 0 };
         unsafe {
-            const buf: *u8 = core.malloc(capacity);
-            if (buf == 0) { ret String.from(fallback); }
+            buffer.data = core.malloc(capacity);
+            if (buffer.data == 0) { ret String.from(fallback); }
             const len: u32 = win32_core.environment(
-                core.str_as_ptr(name), buf, capacity as u32
+                core.str_as_ptr(name), buffer.data, capacity as u32
             );
             if (len == 0 || len as usize >= capacity) {
-                core.free(buf);
                 ret String.from(fallback);
             }
-            ret String.from_raw(buf, len as usize, capacity);
+            ret String.from_raw(buffer.take(), len as usize, capacity);
         }
     }
 
@@ -82,19 +208,107 @@ pub fn name() str {
     ret "Unknown";
 }
 
+// Human-readable OS release. Windows uses authoritative registry build,
+// edition, and display-version values instead of compatibility-shimmed APIs.
+pub fn version() String {
+    @cfg(target_os = "windows") {
+        const build: u32 = core.windows_build();
+        const product_type: u32 = core.windows_product();
+        var product: str = "Windows 10";
+        if (build >= 22000) { product = "Windows 11"; }
+        var edition: str = "";
+        if (product_type == 101 || product_type == 2 || product_type == 3) {
+            edition = "Home";
+        }
+        if (product_type == 48 || product_type == 49 || product_type == 103) {
+            edition = "Pro";
+        }
+        if (product_type == 4 || product_type == 27 || product_type == 70) {
+            edition = "Enterprise";
+        }
+        if (product_type == 121 || product_type == 122) { edition = "Education"; }
+        if (product_type == 7 || product_type == 8 || product_type == 10) {
+            edition = "Server";
+        }
+        var result: String = String.from(product);
+        if (core.strlen(edition) > 0) {
+            result = result.push_str(" ");
+            result = result.push_str(edition);
+        }
+        if (build > 0) {
+            const build_text: String = owned_u32(build);
+            result = result.push_str(" (build ");
+            result = result.push_str(build_text.as_str());
+            result = result.push_str(")");
+        }
+        ret result;
+    }
+    @cfg(target_os = "linux") { ret String.from("Linux"); }
+    ret String.from("Unknown");
+}
+
+// CPU branding suitable for display. PROCESSOR_IDENTIFIER is only an
+// architecture identifier, so Windows reads ProcessorNameString instead.
+pub fn cpu_name() String {
+    const capacity: usize = 64;
+    var buffer: OsRawBuffer = OsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(capacity); }
+    if (buffer.data == 0) { ret String.from("unknown"); }
+    var length: isize = -1;
+    unsafe { length = core.cpu_name(buffer.data, capacity); }
+    if (length < 0) { ret String.from("unknown"); }
+    var start: usize = 0;
+    var end: usize = length as usize;
+    unsafe {
+        for (start < end && *(buffer.data + start) == 32) { start++; }
+        for (end > start && *(buffer.data + end - 1) == 32) { end--; }
+        const trimmed_length: usize = end - start;
+        var index: usize = 0;
+        for (index < trimmed_length) {
+            *(buffer.data + index) = *(buffer.data + start + index);
+            index++;
+        }
+        *(buffer.data + trimmed_length) = 0;
+        ret String.from_raw(buffer.take(), trimmed_length, capacity);
+    }
+    ret String.from("unknown");
+}
+
+// Best-effort interactive shell and terminal names. Windows environment hints
+// are checked first, then the parent-process chain is inspected directly.
+pub fn shell() String {
+    @cfg(target_os = "windows") {
+        const detected: String = process_role(1);
+        if (!detected.is_empty()) { ret detected; }
+        ret String.from("Console");
+    }
+    @cfg(target_os = "linux") { ret env("SHELL", "unknown"); }
+    ret String.from("unknown");
+}
+
+pub fn terminal() String {
+    @cfg(target_os = "windows") {
+        const session: String = env("WT_SESSION", "");
+        if (!session.is_empty()) { ret String.from("Windows Terminal"); }
+        const detected: String = process_role(2);
+        if (!detected.is_empty()) { ret detected; }
+        ret String.from("Windows Console");
+    }
+    @cfg(target_os = "linux") { ret env("TERM", "unknown"); }
+    ret String.from("unknown");
+}
+
 // Return the hostname as an owned UTF-8 string. The compiler-provided
 // intrinsic uses GetComputerNameA on Windows and uname(2) on Linux.
 pub fn hostname() String {
     const capacity: usize = 256;
+    var buffer: OsRawBuffer = OsRawBuffer { data: 0 };
     unsafe {
-        const buf: *u8 = core.malloc(capacity);
-        if (buf == 0) { ret String.from("unknown"); }
-        const len: isize = core.hostname(buf, capacity);
-        if (len < 0) {
-            core.free(buf);
-            ret String.from("unknown");
-        }
-        ret String.from_raw(buf, len as usize, capacity);
+        buffer.data = core.malloc(capacity);
+        if (buffer.data == 0) { ret String.from("unknown"); }
+        const len: isize = core.hostname(buffer.data, capacity);
+        if (len < 0) { ret String.from("unknown"); }
+        ret String.from_raw(buffer.take(), len as usize, capacity);
     }
     ret String.from("unknown");
 }

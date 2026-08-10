@@ -103,9 +103,12 @@ fn describe() Result[String, i32] {
 ```
 
 Portable system queries include `os.env`, `os.name`, `os.hostname`,
-`os.memory_total`, and `os.memory_available`. On Linux they are backed by kernel
-state and syscalls; on Windows they use Win32. These APIs do not execute shell
-commands and do not require callers to manually free returned `String` values.
+`os.version`, `os.cpu_name`, `os.shell`, `os.terminal`, `os.memory_total`, and
+`os.memory_available`. `fs.count_entries` counts immediate non-dot directory
+entries with `getdents64` or Win32 enumeration handles. On Linux these APIs are
+backed by kernel state and syscalls; on Windows they use CPUID, shared kernel
+release data, process snapshots, and Win32. They do not execute shell commands
+and do not require callers to manually free returned `String` values.
 
 ## Collections
 

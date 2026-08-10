@@ -39,3 +39,27 @@ pub unsafe fn move_file(from: *u8, to: *u8) i32;
 
 @api("GetEnvironmentVariableA")
 pub unsafe fn environment(name: *u8, buf: *u8, capacity: u32) u32;
+
+@api("FindFirstFileA")
+pub unsafe fn find_first(pattern: *u8, data: *u8) usize;
+
+@api("FindNextFileA")
+pub unsafe fn find_next(handle: usize, data: *u8) i32;
+
+@api("FindClose")
+pub unsafe fn find_close(handle: usize) i32;
+
+@api("GetLastError")
+pub unsafe fn last_error() u32;
+
+@api("CreateToolhelp32Snapshot")
+pub unsafe fn process_snapshot(flags: u32, process: u32) usize;
+
+@api("Process32First")
+pub unsafe fn first_process(snapshot: usize, entry: *u8) i32;
+
+@api("Process32Next")
+pub unsafe fn next_process(snapshot: usize, entry: *u8) i32;
+
+@api("GetCurrentProcessId")
+pub unsafe fn current_process_id() u32;

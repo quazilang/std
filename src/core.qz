@@ -49,6 +49,18 @@ pub fn memory_total() u64;
 @intrinsic("quazi.os.memory_available")
 pub fn memory_available() u64;
 
+// Fill `buf` with the processor's CPUID brand string and return its byte
+// length, or -1 when the CPU does not expose a brand or the buffer is too small.
+@intrinsic("quazi.os.cpu_name")
+pub unsafe fn cpu_name(buf: *u8, capacity: usize) isize;
+
+// Windows release metadata. Non-Windows targets return zero.
+@intrinsic("quazi.os.windows_build")
+pub fn windows_build() u32;
+
+@intrinsic("quazi.os.windows_product")
+pub fn windows_product() u32;
+
 // ── Memory ───────────────────────────────────────────────────────────────────
 
 // Returns pointer to allocated heap block, or null on failure.

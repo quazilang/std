@@ -52,3 +52,11 @@
   provide owned or value-based cross-platform system information. Their Linux
   implementations use kernel state/syscalls; their Windows implementations use
   Win32 APIs. Neither contract requires libc or a shell.
+- `std.fs.count_entries` owns and automatically destroys its scan buffer and
+  enumeration handle. It excludes `.` and `..`, uses `getdents64` on Linux and
+  `FindFirstFileA`/`FindNextFile` on Windows, and returns errors instead of
+  conflating an unreadable directory with an empty one.
+- `std.os.cpu_name`, `version`, `shell`, and `terminal` expose display-ready
+  system metadata. CPU branding comes from CPUID, Windows releases use the
+  unmanifested shared build number plus `GetProductInfo`, and shell/terminal
+  detection uses environment hints and Toolhelp process ancestry.
