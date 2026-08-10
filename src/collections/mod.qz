@@ -2,7 +2,7 @@
 // Copyright titago (C) 2026
 // SPDX-License-Identifier: 0BSD
 
-pub import map.Map;
-pub import map.MapError;
-pub import set.Set;
-pub import set.SetError;
+pub import ./map.Map;
+pub import ./map.MapError;
+pub import ./set.Set;
+pub import ./set.SetError;
