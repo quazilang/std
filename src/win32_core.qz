@@ -1,0 +1,41 @@
+// Minimal pointer-correct Win32 substrate used by cross-platform std modules.
+// Keep C ABI pointers raw here; safe String/str wrappers belong in std.fs/os.
+
+@api("CreateFileA")
+pub unsafe fn create_file(path: *u8, access: u32, share: u32, security: *u8,
+    disposition: u32, flags: u32, template: usize) usize;
+
+@api("ReadFile")
+pub unsafe fn read_file(file: usize, buf: *u8, count: u32,
+    read: *u32, overlapped: *u8) i32;
+
+@api("WriteFile")
+pub unsafe fn write_file(file: usize, buf: *u8, count: u32,
+    written: *u32, overlapped: *u8) i32;
+
+@api("CloseHandle")
+pub unsafe fn close_handle(handle: usize) i32;
+
+@api("SetFilePointerEx")
+pub unsafe fn seek(file: usize, distance: i64, position: *i64, method: u32) i32;
+
+@api("FlushFileBuffers")
+pub unsafe fn sync(file: usize) i32;
+
+@api("GetFileAttributesA")
+pub unsafe fn file_attributes(path: *u8) u32;
+
+@api("DeleteFileA")
+pub unsafe fn delete_file(path: *u8) i32;
+
+@api("CreateDirectoryA")
+pub unsafe fn create_directory(path: *u8, security: *u8) i32;
+
+@api("RemoveDirectoryA")
+pub unsafe fn remove_directory(path: *u8) i32;
+
+@api("MoveFileA")
+pub unsafe fn move_file(from: *u8, to: *u8) i32;
+
+@api("GetEnvironmentVariableA")
+pub unsafe fn environment(name: *u8, buf: *u8, capacity: u32) u32;

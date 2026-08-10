@@ -6,14 +6,19 @@ This repository contains the core modules, abstractions, and platform-specific b
 
 ## Modules Overview
 
-- `core`: Platform-neutral intrinsics (I/O, memory management, process primitives).
+- `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
 - `collections`: Fallible, non-panicking `usize` map and set types.
-- `fs`: File system operations.
+- `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
 - `net`: Networking and sockets.
-- `os`: Operating system utilities and environment variables.
+- `os`: Cross-platform host, memory, process, and environment information.
 - `thread`: Threading and concurrency primitives.
 - `unix` / `windows`: OS-specific platform bindings.
+
+Application code should normally use `std.fs` and `std.os`. Their Linux paths
+use direct syscalls and their Windows paths use Win32 handles/APIs, without
+shelling out or requiring libc. The low-level platform modules are intended for
+implementing facilities that the portable surface does not yet expose.
 
 ## Usage
 
@@ -78,6 +83,29 @@ fn main() i32 {
 `Result[String, io.ReadError]`. File and socket byte writes take `bytes` and use
 its exact stored length. Raw pointer reads/writes remain available as explicitly
 `unsafe` operations.
+
+## Filesystem and system information
+
+`std.fs.File` is an owning value. A successfully opened handle closes
+automatically when its lexical scope ends or returns early; `close()` is only
+needed when the handle must be released before then. Whole-file reads return an
+owned string:
+
+```quazi
+import std.fs;
+import std.os;
+
+fn describe() Result[String, i32] {
+    const hostname: String = os.hostname();
+    const text: String = fs.read_to_string("system.txt")?;
+    ret Ok(text);
+}
+```
+
+Portable system queries include `os.env`, `os.name`, `os.hostname`,
+`os.memory_total`, and `os.memory_available`. On Linux they are backed by kernel
+state and syscalls; on Windows they use Win32. These APIs do not execute shell
+commands and do not require callers to manually free returned `String` values.
 
 ## Collections
 

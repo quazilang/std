@@ -3,6 +3,7 @@
 // falls back to unix.* for Linux-specific calls.
 import std.core;
 import std.unix;
+import std.win32_core;
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,66 @@ pub fn getppid() i32 {
 pub unsafe fn getenv(name: str) *u8 {
     ret core.getenv(name);
 }
+
+// Return an owned copy of an environment variable. Callers do not need to
+// manage the platform buffer or call free; String is destroyed automatically
+// at the end of its lexical lifetime.
+pub fn env(name: str, fallback: str) String {
+    @cfg(target_os = "windows") {
+        const capacity: usize = 32768;
+        unsafe {
+            const buf: *u8 = core.malloc(capacity);
+            if (buf == 0) { ret String.from(fallback); }
+            const len: u32 = win32_core.environment(
+                core.str_as_ptr(name), buf, capacity as u32
+            );
+            if (len == 0 || len as usize >= capacity) {
+                core.free(buf);
+                ret String.from(fallback);
+            }
+            ret String.from_raw(buf, len as usize, capacity);
+        }
+    }
+
+    @cfg(target_os = "linux") {
+        unsafe {
+            const value: *u8 = core.getenv(name);
+            if (value == 0) { ret String.from(fallback); }
+            ret String.from(core.str_from_ptr(value));
+        }
+    }
+
+    ret String.from(fallback);
+}
+
+// Host operating-system name suitable for display and feature diagnostics.
+pub fn name() str {
+    @cfg(target_os = "windows") { ret "Windows"; }
+    @cfg(target_os = "linux") { ret "Linux"; }
+    ret "Unknown";
+}
+
+// Return the hostname as an owned UTF-8 string. The compiler-provided
+// intrinsic uses GetComputerNameA on Windows and uname(2) on Linux.
+pub fn hostname() String {
+    const capacity: usize = 256;
+    unsafe {
+        const buf: *u8 = core.malloc(capacity);
+        if (buf == 0) { ret String.from("unknown"); }
+        const len: isize = core.hostname(buf, capacity);
+        if (len < 0) {
+            core.free(buf);
+            ret String.from("unknown");
+        }
+        ret String.from_raw(buf, len as usize, capacity);
+    }
+    ret String.from("unknown");
+}
+
+// Physical-memory counters in bytes. Linux reports sysinfo.free_ram for the
+// available value; Windows reports MEMORYSTATUSEX.available_physical.
+pub fn memory_total() u64 { ret core.memory_total(); }
+pub fn memory_available() u64 { ret core.memory_available(); }
 
 // ── Current directory ─────────────────────────────────────────────────────────
 

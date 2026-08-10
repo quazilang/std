@@ -1,193 +1,332 @@
-// std.fs — file system operations
-// Checked convenience wrappers plus explicit unsafe raw-buffer operations
-// around std.unix syscalls (Linux primary).
-// Windows: @cfg dispatch pending — use std.windows directly for now.
+// std.fs — cross-platform file-system operations for Linux and Windows.
+//
+// File owns its operating-system handle. Whole-program destruction analysis
+// finds File.free and inserts it on every lexical exit, including early return.
+// Application code normally never calls close/free explicitly.
 import std.core;
 import std.unix;
-
-// ── File struct ───────────────────────────────────────────────────────────────
+import std.win32_core;
 
 pub struct File {
-    fd: i32,
+    handle: isize,
 }
 
 impl File {
-    // Open existing file for reading. Returns Ok(File) or Err(errno as i32).
+    // Open an existing file for reading.
     pub fn open(path: str) Result[File, i32] {
-        var fd: i32 = 0;
-        unsafe { fd = unix.open(path, 0, 0); }  // O_RDONLY = 0
-        if (fd < 0) { ret Err(fd); }
-        ret Ok(File { fd: fd });
+        @cfg(target_os = "linux") {
+            unsafe {
+                const fd: i32 = unix.open(path, 0, 0);
+                if (fd < 0) { ret Err(fd); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
+        @cfg(target_os = "windows") {
+            unsafe {
+                const raw: usize = win32_core.create_file(
+                    core.str_as_ptr(path), 2147483648 as u32, 3, 0, 3, 128, 0
+                );
+                const handle: isize = raw as isize;
+                if (handle == -1) { ret Err(-1); }
+                ret Ok(File { handle: handle });
+            }
+        }
+        ret Err(-1);
     }
 
-    // Create or truncate file for writing. Mode 0o644 = 420.
+    // Create or truncate a file for writing.
     pub fn create(path: str) Result[File, i32] {
-        var fd: i32 = 0;
-        // O_WRONLY=1 | O_CREAT=64 | O_TRUNC=512 = 577; mode 0o644 = 420
-        unsafe { fd = unix.open(path, 577, 420); }
-        if (fd < 0) { ret Err(fd); }
-        ret Ok(File { fd: fd });
+        @cfg(target_os = "linux") {
+            unsafe {
+                const fd: i32 = unix.open(path, 577, 420);
+                if (fd < 0) { ret Err(fd); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
+        @cfg(target_os = "windows") {
+            unsafe {
+                const raw: usize = win32_core.create_file(
+                    core.str_as_ptr(path), 1073741824, 3, 0, 2, 128, 0
+                );
+                const handle: isize = raw as isize;
+                if (handle == -1) { ret Err(-1); }
+                ret Ok(File { handle: handle });
+            }
+        }
+        ret Err(-1);
     }
 
-    // Open for reading and writing, creating if needed. Mode 0o644.
+    // Open for reading and writing, creating the file when needed.
     pub fn open_rw(path: str) Result[File, i32] {
-        var fd: i32 = 0;
-        // O_RDWR=2 | O_CREAT=64 = 66; mode 0o644 = 420
-        unsafe { fd = unix.open(path, 66, 420); }
-        if (fd < 0) { ret Err(fd); }
-        ret Ok(File { fd: fd });
+        @cfg(target_os = "linux") {
+            unsafe {
+                const fd: i32 = unix.open(path, 66, 420);
+                if (fd < 0) { ret Err(fd); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
+        @cfg(target_os = "windows") {
+            unsafe {
+                const raw: usize = win32_core.create_file(
+                    core.str_as_ptr(path), 3221225472 as u32, 3, 0, 4, 128, 0
+                );
+                const handle: isize = raw as isize;
+                if (handle == -1) { ret Err(-1); }
+                ret Ok(File { handle: handle });
+            }
+        }
+        ret Err(-1);
     }
 
-    // Open in append mode, creating if needed. Mode 0o644.
+    // Open for append, creating the file when needed.
     pub fn open_append(path: str) Result[File, i32] {
-        var fd: i32 = 0;
-        // O_WRONLY=1 | O_CREAT=64 | O_APPEND=1024 = 1089; mode 0o644 = 420
-        unsafe { fd = unix.open(path, 1089, 420); }
-        if (fd < 0) { ret Err(fd); }
-        ret Ok(File { fd: fd });
+        @cfg(target_os = "linux") {
+            unsafe {
+                const fd: i32 = unix.open(path, 1089, 420);
+                if (fd < 0) { ret Err(fd); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
+        @cfg(target_os = "windows") {
+            const opened: Result[File, i32] = File.open_rw(path);
+            if (opened.is_err()) { ret Err(opened.unwrap_err()); }
+            const file: File = opened.unwrap();
+            file.seek(0, 2);
+            ret Ok(file);
+        }
+        ret Err(-1);
     }
 
-    // Raw buffer read. The caller owns the allocation and must guarantee that
-    // `buf` is writable for at least `n` bytes.
+    // Raw buffer read. The caller guarantees `buf` is writable for `n` bytes.
     pub unsafe fn read(self: File, buf: *u8, n: usize) isize {
-        var r: isize = 0;
-        r = unix.read(self.fd, buf, n);
-        ret r;
+        @cfg(target_os = "linux") {
+            ret core.read(self.handle as i32, buf, n);
+        }
+        @cfg(target_os = "windows") {
+            var count: u32 = 0;
+            const ok: i32 = win32_core.read_file(
+                self.handle as usize, buf, n as u32, &count, 0
+            );
+            if (ok == 0) { ret -1; }
+            ret count as isize;
+        }
+        ret -1;
     }
 
-    // Write an exact immutable byte string; its stored length is authoritative.
     pub fn write(self: File, buf: bytes) isize {
-        var r: isize = 0;
-        unsafe { r = core.write_bytes(self.fd, buf.as_ptr(), buf.len()); }
-        ret r;
+        var result: isize = -1;
+        unsafe { result = self.write_raw(buf.as_ptr(), buf.len()); }
+        ret result;
     }
 
-    // Raw buffer write for FFI-style callers. The caller must guarantee that
-    // `buf` is readable for at least `n` bytes.
+    // Raw buffer write. The caller guarantees `buf` is readable for `n` bytes.
     pub unsafe fn write_raw(self: File, buf: *u8, n: usize) isize {
-        ret core.write_bytes(self.fd, buf, n);
+        @cfg(target_os = "linux") {
+            ret core.write_bytes(self.handle as i32, buf, n);
+        }
+        @cfg(target_os = "windows") {
+            var count: u32 = 0;
+            const ok: i32 = win32_core.write_file(
+                self.handle as usize, buf, n as u32, &count, 0
+            );
+            if (ok == 0) { ret -1; }
+            ret count as isize;
+        }
+        ret -1;
     }
 
-    // Write an entire string. Returns bytes written or negative errno.
-    pub fn write_str(self: File, s: str) isize {
-        var r: isize = 0;
-        unsafe { r = unix.write(self.fd, s, core.strlen(s)); }
-        ret r;
+    pub fn write_str(self: File, text: str) isize {
+        var result: isize = -1;
+        unsafe { result = self.write_raw(core.str_as_ptr(text), core.strlen(text)); }
+        ret result;
     }
 
-    // Close the file descriptor. Returns 0 on success or negative errno.
+    // Explicit close is available for scarce-resource handoff. It invalidates
+    // this File, so the later automatic destructor is a harmless no-op.
     pub fn close(self: File) i32 {
-        var r: i32 = 0;
-        unsafe { r = unix.close(self.fd); }
-        ret r;
+        if (self.handle < 0) { ret 0; }
+        var result: i32 = 0;
+        @cfg(target_os = "linux") {
+            unsafe { result = unix.close(self.handle as i32); }
+        }
+        @cfg(target_os = "windows") {
+            unsafe {
+                if (win32_core.close_handle(self.handle as usize) == 0) { result = -1; }
+            }
+        }
+        self.handle = -1;
+        ret result;
     }
 
-    // Seek to offset. whence: 0=SET, 1=CUR, 2=END. Returns new position.
+    // Destructor discovered by whole-program analysis.
+    pub fn free(self: File) void {
+        self.close();
+    }
+
     pub fn seek(self: File, offset: i64, whence: i32) i64 {
-        var r: i64 = 0;
-        unsafe { r = unix.lseek(self.fd, offset, whence); }
-        ret r;
+        @cfg(target_os = "linux") {
+            unsafe { ret unix.lseek(self.handle as i32, offset, whence); }
+        }
+        @cfg(target_os = "windows") {
+            var position: i64 = 0;
+            unsafe {
+                const ok: i32 = win32_core.seek(
+                    self.handle as usize, offset, &position, whence as u32
+                );
+                if (ok == 0) { ret -1; }
+                ret position;
+            }
+        }
+        ret -1;
     }
 
-    // Get the underlying file descriptor.
-    pub fn fd(self: File) i32 { ret self.fd; }
+    // Linux descriptor, or a truncated Windows HANDLE for compatibility.
+    pub fn fd(self: File) i32 { ret self.handle as i32; }
+    pub fn raw_handle(self: File) usize { ret self.handle as usize; }
 
-    // Flush kernel buffers to disk.
     pub fn sync(self: File) i32 {
-        var r: i32 = 0;
-        unsafe { r = unix.fsync(self.fd); }
-        ret r;
+        @cfg(target_os = "linux") {
+            unsafe { ret unix.fsync(self.handle as i32); }
+        }
+        @cfg(target_os = "windows") {
+            unsafe {
+                if (win32_core.sync(self.handle as usize) == 0) { ret -1; }
+            }
+            ret 0;
+        }
+        ret -1;
     }
 
-    // Truncate or extend file to exactly len bytes.
+    // File truncation is currently implemented by the Linux backend.
     pub fn truncate(self: File, len: i64) i32 {
-        var r: i32 = 0;
-        unsafe { r = unix.ftruncate(self.fd, len); }
-        ret r;
+        @cfg(target_os = "linux") {
+            unsafe { ret unix.ftruncate(self.handle as i32, len); }
+        }
+        ret -1;
     }
 }
-
-// ── Seek origin constants ─────────────────────────────────────────────────────
 
 pub fn seek_set() i32 { ret 0; }
 pub fn seek_cur() i32 { ret 1; }
 pub fn seek_end() i32 { ret 2; }
 
-// ── Path operations ───────────────────────────────────────────────────────────
+// Read a UTF-8 text file into an owned String. File closure is automatic on
+// success and every error path; only the private raw staging allocation needs
+// explicit release before it has been promoted into String ownership.
+pub fn read_to_string(path: str) Result[String, i32] {
+    const opened: Result[File, i32] = File.open(path);
+    if (opened.is_err()) { ret Err(opened.unwrap_err()); }
+    const file: File = opened.unwrap();
+    var capacity: usize = 4096;
+    var length: usize = 0;
+    var data: *u8 = 0;
+    unsafe { data = core.malloc(capacity + 1); }
+    if (data == 0) { ret Err(-1); }
 
-// Returns true if path exists and is accessible.
+    for (true) {
+        if (length == capacity) {
+            capacity = capacity * 2;
+            var grown: *u8 = 0;
+            unsafe { grown = core.realloc(data, capacity + 1); }
+            if (grown == 0) {
+                unsafe { core.free(data); }
+                ret Err(-1);
+            }
+            data = grown;
+        }
+        var count: isize = -1;
+        unsafe { count = file.read(data + length, capacity - length); }
+        if (count < 0) {
+            unsafe { core.free(data); }
+            ret Err(count as i32);
+        }
+        if (count == 0) { break; }
+        length = length + count as usize;
+    }
+    unsafe { *(data + length) = 0; }
+    var result: String = String.new();
+    unsafe { result = String.from_raw(data, length, capacity + 1); }
+    ret Ok(result);
+}
+
 pub fn exists(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.access(path, 0); }  // F_OK = 0
-    ret r == 0;
+    @cfg(target_os = "linux") {
+        unsafe { ret unix.access(path, 0) == 0; }
+    }
+    @cfg(target_os = "windows") {
+        unsafe {
+            ret win32_core.file_attributes(core.str_as_ptr(path)) != 4294967295 as u32;
+        }
+    }
+    ret false;
 }
 
-// Returns true if path is readable.
 pub fn readable(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.access(path, 4); }  // R_OK = 4
-    ret r == 0;
+    const opened: Result[File, i32] = File.open(path);
+    if (opened.is_err()) { ret false; }
+    const file: File = opened.unwrap();
+    ret true;
 }
 
-// Returns true if path is writable.
 pub fn writable(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.access(path, 2); }  // W_OK = 2
-    ret r == 0;
+    @cfg(target_os = "linux") {
+        unsafe { ret unix.access(path, 2) == 0; }
+    }
+    @cfg(target_os = "windows") { ret exists(path); }
+    ret false;
 }
 
-// Delete a file. Returns true on success.
 pub fn remove(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.unlink(path); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.unlink(path) == 0; } }
+    @cfg(target_os = "windows") {
+        unsafe { ret win32_core.delete_file(core.str_as_ptr(path)) != 0; }
+    }
+    ret false;
 }
 
-// Create a directory. Mode 0o755 = 493. Returns true on success.
 pub fn mkdir(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.mkdir(path, 493); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.mkdir(path, 493) == 0; } }
+    @cfg(target_os = "windows") {
+        unsafe { ret win32_core.create_directory(core.str_as_ptr(path), 0) != 0; }
+    }
+    ret false;
 }
 
-// Create a directory with explicit mode. Returns true on success.
 pub fn mkdir_mode(path: str, mode: u32) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.mkdir(path, mode); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.mkdir(path, mode) == 0; } }
+    @cfg(target_os = "windows") { ret mkdir(path); }
+    ret false;
 }
 
-// Remove an empty directory. Returns true on success.
 pub fn rmdir(path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.rmdir(path); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.rmdir(path) == 0; } }
+    @cfg(target_os = "windows") {
+        unsafe { ret win32_core.remove_directory(core.str_as_ptr(path)) != 0; }
+    }
+    ret false;
 }
 
-// Rename or move a file. Returns true on success.
 pub fn rename(from: str, to: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.rename(from, to); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.rename(from, to) == 0; } }
+    @cfg(target_os = "windows") {
+        unsafe {
+            ret win32_core.move_file(core.str_as_ptr(from), core.str_as_ptr(to)) != 0;
+        }
+    }
+    ret false;
 }
 
-// Create a hard link. Returns true on success.
 pub fn link(existing: str, new_path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.link(existing, new_path); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.link(existing, new_path) == 0; } }
+    ret false;
 }
 
-// Create a symbolic link. Returns true on success.
 pub fn symlink(target: str, link_path: str) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.symlink(target, link_path); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.symlink(target, link_path) == 0; } }
+    ret false;
 }
 
-// Change file permissions. Mode 0o644 = 420, 0o755 = 493.
 pub fn chmod(path: str, mode: u32) bool {
-    var r: i32 = 0;
-    unsafe { r = unix.chmod(path, mode); }
-    ret r == 0;
+    @cfg(target_os = "linux") { unsafe { ret unix.chmod(path, mode) == 0; } }
+    ret false;
 }

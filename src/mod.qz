@@ -6,6 +6,7 @@ pub reexport io;
 pub reexport collections;
 pub reexport unix;
 pub reexport windows;
+pub reexport win32_core;
 pub reexport fs;
 pub reexport net;
 pub reexport os;

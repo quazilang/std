@@ -36,6 +36,19 @@ pub fn sleep_ms(ms: u64) void;
 @intrinsic("quazi.getenv")
 pub unsafe fn getenv(name: str) *u8;
 
+// Fill `buf` with the platform hostname and return its byte length. Returns -1
+// when the buffer is empty/too small or the operating-system query fails.
+@intrinsic("quazi.os.hostname")
+pub unsafe fn hostname(buf: *u8, capacity: usize) isize;
+
+// Cross-platform physical-memory totals in bytes. A return value of zero means
+// the host query failed.
+@intrinsic("quazi.os.memory_total")
+pub fn memory_total() u64;
+
+@intrinsic("quazi.os.memory_available")
+pub fn memory_available() u64;
+
 // ── Memory ───────────────────────────────────────────────────────────────────
 
 // Returns pointer to allocated heap block, or null on failure.
@@ -88,3 +101,14 @@ pub fn str_byte_at(s: str, i: usize) u8;
 // Useful for building strings byte-by-byte. Caller must free with core.free.
 @intrinsic("quazi.str.from_byte")
 pub fn str_from_byte(b: u8) str;
+
+// Borrow the address of immutable UTF-8 text for pointer-correct native API
+// calls. The pointer is valid only as long as `s` remains alive and must never
+// be freed or written through.
+@intrinsic("quazi.str.as_ptr")
+pub unsafe fn str_as_ptr(s: str) *u8;
+
+// Representation-only view of a NUL-terminated pointer after the caller has
+// established that the bytes are valid UTF-8. The returned str is borrowed.
+@intrinsic("quazi.str.from_ptr")
+pub unsafe fn str_from_ptr(ptr: *u8) str;

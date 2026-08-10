@@ -39,3 +39,16 @@
 - Until the language has hash/equality/drop trait bounds for raw table slots,
   `Map` and `Set` intentionally store `usize` values rather than pretending to
   be sound generic containers.
+- `std.fs.File` owns an operating-system handle. Its idempotent `free(self)`
+  destructor closes the handle automatically at lexical scope exit, including
+  early returns; callers should use `close()` only when they need an earlier,
+  explicit release. Linux operations use syscalls and Windows operations use
+  the pointer-correct internal `std.win32_core` bindings.
+- `std.fs.read_to_string(path)` returns an owned `String`, closes its temporary
+  `File` automatically, and reports open/read/allocation failures through
+  `Result`. Cross-platform application code should prefer `std.fs` and
+  `std.os` over importing `std.unix`, `std.windows`, or `std.win32_core`.
+- `std.os.env`, `hostname`, `name`, `memory_total`, and `memory_available`
+  provide owned or value-based cross-platform system information. Their Linux
+  implementations use kernel state/syscalls; their Windows implementations use
+  Win32 APIs. Neither contract requires libc or a shell.
