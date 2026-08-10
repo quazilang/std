@@ -1,25 +1,96 @@
 // std.io — console I/O
 // UTF-8 contract: all str/&str parameters are valid UTF-8.
 
-import std.core.write;
+import std.core.write as raw_write;
 import std.core.read as sys_read;
 import std.core.strlen;
 import std.core.malloc;
 import std.core.free;
-import std.core.str_from_byte;
-import std.core.str_concat;
-// @intrinsic("quazi.write")
-// fn write(fd: i32, buf: str, count: usize) isize;
+import std.core.realloc;
+import std.core.str_as_ptr;
+import std.win32_core;
 
-// @intrinsic("quazi.read")
-// fn read(fd: i32, buf: *u8, count: usize) isize;
+@cfg(target_os = "linux")
+fn write_text(fd: i32, s: str) isize {
+    var result: isize = 0;
+    unsafe { result = raw_write(fd, s, strlen(s)); }
+    ret result;
+}
 
-// @intrinsic("quazi.strlen")
-// fn strlen(s: str) usize;
+@cfg(target_os = "windows")
+fn write_text(fd: i32, s: str) isize {
+    const byte_len: usize = strlen(s);
+    if (byte_len == 0) { ret 0; }
+    if ((fd != 1 && fd != 2) || byte_len > 2147483647) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
 
-// @intrinsic("quazi.malloc")
-// unsafe fn malloc(size: usize) *u8;
+    var handle: usize = 0;
+    var mode: *u32 = 0;
+    unsafe {
+        if (fd == 1) { handle = win32_core.get_std_handle(4294967285); }
+        else { handle = win32_core.get_std_handle(4294967284); }
+        mode = malloc(4) as *u32;
+    }
+    if (mode == 0) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
 
+    var is_console: i32 = 0;
+    unsafe {
+        is_console = win32_core.get_console_mode(handle, mode);
+        free(mode as *u8);
+    }
+    // Pipes and files have no console mode and must keep portable UTF-8 bytes.
+    if (is_console == 0) {
+        var raw_result: isize = 0;
+        unsafe { raw_result = raw_write(fd, s, byte_len); }
+        ret raw_result;
+    }
+
+    var wide_len: i32 = 0;
+    unsafe {
+        wide_len = win32_core.utf8_to_utf16(
+            65001, 8, str_as_ptr(s), byte_len as i32, 0, 0
+        );
+    }
+    if (wide_len <= 0) { ret -1; }
+
+    var wide: *u16 = 0;
+    var written: *u32 = 0;
+    unsafe {
+        wide = malloc((wide_len as usize) * 2) as *u16;
+        written = malloc(4) as *u32;
+    }
+    if (wide == 0 || written == 0) {
+        unsafe {
+            if (wide != 0) { free(wide as *u8); }
+            if (written != 0) { free(written as *u8); }
+        }
+        ret -1;
+    }
+
+    var converted: i32 = 0;
+    var succeeded: i32 = 0;
+    unsafe {
+        converted = win32_core.utf8_to_utf16(
+            65001, 8, str_as_ptr(s), byte_len as i32, wide, wide_len
+        );
+        if (converted > 0) {
+            succeeded = win32_core.write_console_utf16(
+                handle, wide, converted as u32, written, 0
+            );
+        }
+        free(wide as *u8);
+        free(written as *u8);
+    }
+    if (succeeded == 0) { ret -1; }
+    ret byte_len as isize;
+}
 // ── Writer types ──────────────────────────────────────────────────────────────
 
 pub struct Stdout { fd: i32, }
@@ -30,45 +101,45 @@ pub fn stderr() Stderr { ret Stderr { fd: 2 }; }
 
 impl Write for Stdout {
     pub fn write(self: Stdout, s: str) void {
-        write(1, s, strlen(s));
+        write_text(1, s);
     }
 
     pub fn writeln(self: Stdout, s: str) void {
-        write(1, s, strlen(s));
-        write(1, "\n", 1);
+        write_text(1, s);
+        write_text(1, "\n");
     }
 
     @format
     pub fn writef(self: Stdout, s: str, ...args: any) void {
-        write(1, s, strlen(s));
+        write_text(1, s);
     }
 
     @format
     pub fn writelnf(self: Stdout, s: str, ...args: any) void {
-        write(1, s, strlen(s));
-        write(1, "\n", 1);
+        write_text(1, s);
+        write_text(1, "\n");
     }
 }
 
 impl Write for Stderr {
     pub fn write(self: Stderr, s: str) void {
-        write(2, s, strlen(s));
+        write_text(2, s);
     }
 
     pub fn writeln(self: Stderr, s: str) void {
-        write(2, s, strlen(s));
-        write(2, "\n", 1);
+        write_text(2, s);
+        write_text(2, "\n");
     }
 
     @format
     pub fn writef(self: Stderr, s: str, ...args: any) void {
-        write(2, s, strlen(s));
+        write_text(2, s);
     }
 
     @format
     pub fn writelnf(self: Stderr, s: str, ...args: any) void {
-        write(2, s, strlen(s));
-        write(2, "\n", 1);
+        write_text(2, s);
+        write_text(2, "\n");
     }
 }
 
@@ -76,100 +147,207 @@ impl Write for Stderr {
 
 @format
 pub fn print(s: str, ...args: any) void {
-    write(1, s, strlen(s));
+    write_text(1, s);
 }
 
 @format
 pub fn println(s: str, ...args: any) void {
-    write(1, s, strlen(s));
-    write(1, "\n", 1);
+    write_text(1, s);
+    write_text(1, "\n");
 }
 
 // ── stderr convenience ────────────────────────────────────────────────────────
 
 @format
 pub fn err(s: str, ...args: any) void {
-    write(2, s, strlen(s));
+    write_text(2, s);
 }
 
 @format
 pub fn errln(s: str, ...args: any) void {
-    write(2, s, strlen(s));
-    write(2, "\n", 1);
+    write_text(2, s);
+    write_text(2, "\n");
 }
 
 // ── arbitrary fd ─────────────────────────────────────────────────────────────
 
 pub fn writeln(fd: i32, s: str) void {
-    write(fd, s, strlen(s));
-    write(fd, "\n", 1);
+    write_text(fd, s);
+    write_text(fd, "\n");
 }
 
 // ── stdin ─────────────────────────────────────────────────────────────────────
 
-unsafe fn read_bytes(buf: *u8, n: usize) isize {
-    ret sys_read(0, buf, n);
+pub enum ReadError {
+    AllocationFailed,
+    CapacityOverflow,
+    InputFailed,
+    InvalidUtf8,
 }
 
-unsafe fn read_buf() *u8 {
-    var buf: *u8 = malloc(4096);
-    sys_read(0, buf, 4095);
-    ret buf;
+unsafe fn __io_is_continuation(buf: *u8, idx: usize, len: usize) bool {
+    if (idx >= len) { ret false; }
+    var b: u8 = *(buf + idx);
+    ret b >= 128 && b <= 191;
 }
 
-// Internal: read one byte from stdin.
-// Returns the byte value (0..255) on success, or -1 on EOF/error.
-unsafe fn __io_read_one(buf: *u8) i32 {
-    var n: isize = sys_read(0, buf, 1);
-    if (n <= 0) {
-        ret 0 - 1;
+unsafe fn __io_valid_utf8(buf: *u8, len: usize) bool {
+    var i: usize = 0;
+    for (i < len) {
+        var b0: u8 = *(buf + i);
+        if (b0 <= 127) {
+            i = i + 1;
+        } else if (b0 >= 194 && b0 <= 223) {
+            if (!__io_is_continuation(buf, i + 1, len)) { ret false; }
+            i = i + 2;
+        } else if (b0 >= 224 && b0 <= 239) {
+            if (i + 2 >= len) { ret false; }
+            var b1: u8 = *(buf + i + 1);
+            var b2: u8 = *(buf + i + 2);
+            if (b2 < 128 || b2 > 191) { ret false; }
+            if (b0 == 224) {
+                if (b1 < 160 || b1 > 191) { ret false; }
+            } else if (b0 == 237) {
+                if (b1 < 128 || b1 > 159) { ret false; }
+            } else if (b1 < 128 || b1 > 191) {
+                ret false;
+            }
+            i = i + 3;
+        } else if (b0 >= 240 && b0 <= 244) {
+            if (i + 3 >= len) { ret false; }
+            var b1: u8 = *(buf + i + 1);
+            if (!__io_is_continuation(buf, i + 2, len)) { ret false; }
+            if (!__io_is_continuation(buf, i + 3, len)) { ret false; }
+            if (b0 == 240) {
+                if (b1 < 144 || b1 > 191) { ret false; }
+            } else if (b0 == 244) {
+                if (b1 < 128 || b1 > 143) { ret false; }
+            } else if (b1 < 128 || b1 > 191) {
+                ret false;
+            }
+            i = i + 4;
+        } else {
+            ret false;
+        }
     }
-    var b: u8 = *buf;
-    var u_b: u32 = b as u32;
-    var byte_val: u32 = u_b % 256;
-    ret byte_val as i32;
+    ret true;
 }
 
-// Read from stdin until `delimiter` byte is encountered or EOF.
-// The delimiter itself is NOT included in the returned string.
-// Returns the accumulated characters as a str (heap-allocated, caller should free).
-pub fn read(delimiter: u8) str {
-    var result: str = "";
-    var buf: *u8;
-    unsafe { buf = malloc(2); }
-    var delim_i32: i32 = delimiter as i32;
+// Read from stdin until `delimiter` or EOF. The delimiter is not returned.
+// Returns an owned, UTF-8-validated String and frees all buffers on failure.
+pub fn read(delimiter: u8) Result[String, ReadError] {
+    var cap: usize = 64;
+    var len: usize = 0;
+    var buf: *u8 = 0;
+    unsafe { buf = malloc(cap); }
+    if (buf == 0) { ret Err(ReadError.AllocationFailed); }
+
     for (true) {
-        var b: i32 = 0;
-        unsafe { b = __io_read_one(buf); }
-        if (b < 0) {
-            break;
+        if (len + 1 >= cap) {
+            if (cap > 9223372036854775807) {
+                unsafe { free(buf); }
+                ret Err(ReadError.CapacityOverflow);
+            }
+            var new_cap: usize = cap * 2;
+            var new_buf: *u8 = 0;
+            unsafe { new_buf = realloc(buf, new_cap); }
+            if (new_buf == 0) {
+                unsafe { free(buf); }
+                ret Err(ReadError.AllocationFailed);
+            }
+            buf = new_buf;
+            cap = new_cap;
         }
-        if (b == delim_i32) {
-            break;
+
+        var n: isize = 0;
+        unsafe { n = sys_read(0, buf + len, 1); }
+        if (n == 0) { break; }
+        if (n < 0) {
+            unsafe { free(buf); }
+            ret Err(ReadError.InputFailed);
         }
-        var ch: str = str_from_byte(b as u8);
-        result = str_concat(result, ch);
+        var b: u8 = 0;
+        unsafe { b = *(buf + len); }
+        if (b == delimiter) { break; }
+        len = len + 1;
     }
-    unsafe { free(buf); }
-    ret result;
+
+    var valid: bool = false;
+    unsafe { valid = __io_valid_utf8(buf, len); }
+    if (!valid) {
+        unsafe { free(buf); }
+        ret Err(ReadError.InvalidUtf8);
+    }
+    var result: String;
+    unsafe {
+        *(buf + len) = 0;
+        result = String.from_raw(buf, len, cap);
+    }
+    ret Ok(result);
 }
 
-// Read a full line from stdin (until newline). The trailing '\n' is NOT included.
-pub fn readln() str {
+// Read a full line. The trailing newline is not included.
+pub fn readln() Result[String, ReadError] {
     ret read(10); // 10 is '\n'
 }
 
-// Read a single character (byte) from stdin. Returns a 1-character str.
-// Returns "" on EOF.
-pub fn readkey() str {
-    var buf: *u8;
-    unsafe { buf = malloc(2); }
-    var b: i32 = 0;
-    unsafe { b = __io_read_one(buf); }
-    unsafe { free(buf); }
-    if (b < 0) {
-        ret "";
+// Read one complete UTF-8 scalar value. EOF returns an empty String.
+pub fn readkey() Result[String, ReadError] {
+    var buf: *u8 = 0;
+    unsafe { buf = malloc(5); }
+    if (buf == 0) { ret Err(ReadError.AllocationFailed); }
+
+    var n: isize = 0;
+    unsafe { n = sys_read(0, buf, 1); }
+    if (n == 0) {
+        var empty: String;
+        unsafe {
+            *buf = 0;
+            empty = String.from_raw(buf, 0, 5);
+        }
+        ret Ok(empty);
     }
-    ret str_from_byte(b as u8);
+    if (n < 0) {
+        unsafe { free(buf); }
+        ret Err(ReadError.InputFailed);
+    }
+
+    var first: u8 = 0;
+    unsafe { first = *buf; }
+    var width: usize = 1;
+    if (first >= 194 && first <= 223) {
+        width = 2;
+    } else if (first >= 224 && first <= 239) {
+        width = 3;
+    } else if (first >= 240 && first <= 244) {
+        width = 4;
+    } else if (first > 127) {
+        unsafe { free(buf); }
+        ret Err(ReadError.InvalidUtf8);
+    }
+
+    var pos: usize = 1;
+    for (pos < width) {
+        unsafe { n = sys_read(0, buf + pos, width - pos); }
+        if (n <= 0) {
+            unsafe { free(buf); }
+            if (n < 0) { ret Err(ReadError.InputFailed); }
+            ret Err(ReadError.InvalidUtf8);
+        }
+        pos = pos + (n as usize);
+    }
+
+    var valid: bool = false;
+    unsafe { valid = __io_valid_utf8(buf, width); }
+    if (!valid) {
+        unsafe { free(buf); }
+        ret Err(ReadError.InvalidUtf8);
+    }
+    var result: String;
+    unsafe {
+        *(buf + width) = 0;
+        result = String.from_raw(buf, width, 5);
+    }
+    ret Ok(result);
 }
 

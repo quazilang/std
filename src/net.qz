@@ -49,18 +49,18 @@ impl TcpStream {
         ret r;
     }
 
-    // Send len bytes from buf. Returns bytes sent or negative errno.
-    pub fn send_bytes(self: TcpStream, buf: str, len: usize) isize {
+    // Send an exact immutable byte string.
+    pub fn send_bytes(self: TcpStream, buf: bytes) isize {
         var r: isize = 0;
-        unsafe { r = unix.write(self.fd, buf, len); }
+        unsafe { r = core.write_bytes(self.fd, buf.as_ptr(), buf.len()); }
         ret r;
     }
 
-    // Receive up to len bytes into buf. Returns bytes received or negative errno.
-    // 0 means the connection was closed by the peer.
-    pub fn recv(self: TcpStream, buf: str, len: usize) isize {
+    // Raw receive buffer. The caller must guarantee that `buf` is writable for
+    // at least `len` bytes. 0 means the peer closed the connection.
+    pub unsafe fn recv(self: TcpStream, buf: *u8, len: usize) isize {
         var r: isize = 0;
-        unsafe { r = unix.read(self.fd, buf, len); }
+        r = unix.read(self.fd, buf, len);
         ret r;
     }
 

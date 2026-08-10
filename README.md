@@ -6,14 +6,20 @@ This repository contains the core modules, abstractions, and platform-specific b
 
 ## Modules Overview
 
-- `core`: Platform-neutral intrinsics (I/O, memory management, process primitives).
-- `collections`: Core data structures (`map`, `set`, etc.).
-- `fs`: File system operations.
+- `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
+- `collections`: Fallible, non-panicking `usize` map and set types.
+- `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
+- `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `net`: Networking and sockets.
-- `os`: Operating system utilities and environment variables.
+- `os`: Cross-platform host, memory, process, and environment information.
 - `thread`: Threading and concurrency primitives.
 - `unix` / `windows`: OS-specific platform bindings.
+
+Application code should normally use `std.fs` and `std.os`. Their Linux paths
+use direct syscalls and their Windows paths use Win32 handles/APIs, without
+shelling out or requiring libc. The low-level platform modules are intended for
+implementing facilities that the portable surface does not yet expose.
 
 ## Usage
 
@@ -22,7 +28,7 @@ This library is automatically linked by the Quazi compiler (`qz`) when building 
 To import a module, simply use:
 ```quazi
 import std.io;
-import std.collections.map;
+import std.collections.Map;
 
 fn main() i32 {
     io.println("Hello from Quazi!");
@@ -59,3 +65,81 @@ legacy strings when the caller accepts their NUL-terminated representation.
 `CStr.from_ptr` borrows a foreign pointer and is unsafe; it does not take
 ownership. Borrowed UTF-8 validation remains explicit follow-up work rather than
 an implicit conversion at the ABI boundary.
+
+## I/O
+
+Input returns owned, UTF-8-validated strings and makes failure explicit:
+
+```quazi
+import std.io;
+
+fn main() i32 {
+    var line: String = io.readln().unwrap();
+    io.println("you entered: {}", line.as_str());
+    ret 0;
+}
+```
+
+`io.read`, `io.readln`, and `io.readkey` return
+`Result[String, io.ReadError]`. File and socket byte writes take `bytes` and use
+its exact stored length. Raw pointer reads/writes remain available as explicitly
+`unsafe` operations.
+
+On Windows, stdout/stderr connected to a console are converted from UTF-8 to
+UTF-16 and written with `WriteConsoleW`; redirected files and pipes retain UTF-8
+bytes. This makes Unicode output independent of the active Windows code page.
+
+## Mathematics
+
+`std.math` provides integer `gcd`, `lcm`, factorial, permutation, and
+combination helpers. Its floating-point surface includes rounding,
+interpolation, degree/radian conversion, square/cube roots, `hypot`,
+trigonometric and hyperbolic functions, exponentials, logarithms, and powers.
+Angles use radians unless explicitly converted. The routines are written in
+pure Quazi and do not link libc or libm; they are lightweight approximations
+rather than correctly rounded scientific-library replacements.
+
+## Filesystem and system information
+
+`std.fs.File` is an owning value. A successfully opened handle closes
+automatically when its lexical scope ends or returns early; `close()` is only
+needed when the handle must be released before then. Whole-file reads return an
+owned string:
+
+```quazi
+import std.fs;
+import std.os;
+
+fn describe() Result[String, i32] {
+    const hostname: String = os.hostname();
+    const text: String = fs.read_to_string("system.txt")?;
+    ret Ok(text);
+}
+```
+
+Portable system queries include `os.env`, `os.name`, `os.hostname`,
+`os.version`, `os.cpu_name`, `os.shell`, `os.terminal`, `os.memory_total`, and
+`os.memory_available`. `fs.count_entries` counts immediate non-dot directory
+entries with `getdents64` or Win32 enumeration handles. On Linux these APIs are
+backed by kernel state and syscalls; on Windows they use CPUID, shared kernel
+release data, process snapshots, and Win32. They do not execute shell commands
+and do not require callers to manually free returned `String` values.
+
+## Collections
+
+`Map` currently stores `usize -> usize`, and `Set` stores `usize`. Constructors
+and insertion are fallible; lookup uses `Option` instead of exiting the process:
+
+```quazi
+import std.collections.Map;
+import std.collections.MapError;
+
+fn example() Result[usize, MapError] {
+    var map: Map = Map.new()?;
+    map = map.insert(7, 42)?;
+    ret Ok(map.get(7).unwrap());
+}
+```
+
+The deliberately concrete element types avoid unsound generic raw storage until
+Quazi can express hash/equality bounds and drop-aware slots.
