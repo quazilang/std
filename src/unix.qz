@@ -95,6 +95,11 @@ pub fn dup3(oldfd: i32, newfd: i32, flags: i32) i32;
 @syscall("ioctl")
 pub fn ioctl(fd: i32, request: usize, arg: usize) i32;
 
+// Pointer-valued ioctl argument. Unsafe because the request controls how much
+// memory the kernel reads or writes through `arg`.
+@syscall("ioctl")
+pub unsafe fn ioctl_ptr(fd: i32, request: usize, arg: *u8) i32;
+
 // cmd: F_DUPFD=0, F_GETFD=1, F_SETFD=2, F_GETFL=3, F_SETFL=4
 @syscall("fcntl")
 pub fn fcntl(fd: i32, cmd: i32, arg: i64) i32;

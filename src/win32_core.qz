@@ -19,6 +19,9 @@ pub unsafe fn get_std_handle(kind: u32) usize;
 @api("GetConsoleMode")
 pub unsafe fn get_console_mode(console: usize, mode: *u32) i32;
 
+@api("SetConsoleMode")
+pub unsafe fn set_console_mode(console: usize, mode: u32) i32;
+
 @api("MultiByteToWideChar")
 pub unsafe fn utf8_to_utf16(code_page: u32, flags: u32, input: *u8,
     input_len: i32, output: *u16, output_len: i32) i32;
