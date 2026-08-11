@@ -184,6 +184,7 @@ pub enum ReadError {
     AllocationFailed,
     CapacityOverflow,
     InputFailed,
+    InvalidDelimiter,
     InvalidUtf8,
 }
 
@@ -258,6 +259,18 @@ unsafe fn __io_is_continuation(buf: *u8, idx: usize, len: usize) bool {
     ret b >= 128 && b <= 191;
 }
 
+unsafe fn __io_ends_with(buf: *u8, len: usize, delimiter: *u8,
+    delimiter_len: usize) bool {
+    if (delimiter_len == 0 || delimiter_len > len) { ret false; }
+    const start: usize = len - delimiter_len;
+    var index: usize = 0;
+    for (index < delimiter_len) {
+        if (*(buf + start + index) != *(delimiter + index)) { ret false; }
+        index++;
+    }
+    ret true;
+}
+
 unsafe fn __io_valid_utf8(buf: *u8, len: usize) bool {
     var i: usize = 0;
     for (i < len) {
@@ -300,9 +313,16 @@ unsafe fn __io_valid_utf8(buf: *u8, len: usize) bool {
     ret true;
 }
 
-// Read from stdin until `delimiter` or EOF. The delimiter is not returned.
+// Read from stdin until the UTF-8 `delimiter` or EOF. The delimiter is not
+// returned. Interactive custom delimiters use immediate input; Enter is
+// normalized from Windows CRLF/CR to `\n`.
 // Returns an owned, UTF-8-validated String and frees all buffers on failure.
-pub fn read(delimiter: u8) Result[String, ReadError] {
+pub fn read(delimiter: str) Result[String, ReadError] {
+    const delimiter_len: usize = strlen(delimiter);
+    if (delimiter_len == 0) { ret Err(ReadError.InvalidDelimiter); }
+    var delimiter_ptr: *u8 = 0;
+    unsafe { delimiter_ptr = str_as_ptr(delimiter); }
+
     var cap: usize = 64;
     var len: usize = 0;
     var buf: *u8 = 0;
@@ -310,7 +330,8 @@ pub fn read(delimiter: u8) Result[String, ReadError] {
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 
     var input_state: *u8 = 0;
-    if (delimiter != 10) {
+    var skip_lf_after_cr: bool = false;
+    if (delimiter != "\n") {
         unsafe { input_state = __io_begin_immediate_input(); }
     }
 
@@ -349,13 +370,32 @@ pub fn read(delimiter: u8) Result[String, ReadError] {
         }
         var b: u8 = 0;
         unsafe { b = *(buf + len); }
+        if (b == 10 && skip_lf_after_cr) {
+            skip_lf_after_cr = false;
+            continue;
+        }
+        skip_lf_after_cr = false;
+        // Windows canonical input reports Enter as CRLF. Discard CR while
+        // readln waits for LF; immediate input reports only CR, normalized to LF.
+        if (b == 13) {
+            if (delimiter == "\n" && input_state == 0) { continue; }
+            b = 10;
+            skip_lf_after_cr = true;
+            unsafe { *(buf + len) = b; }
+        }
         // Immediate terminal mode disables kernel/console echo so behavior is
         // identical on Linux and Windows. Redirected input is never echoed.
         if (input_state != 0) {
-            unsafe { raw_write_bytes(1, buf + len, 1); }
+            if (b == 10) { write_text(1, "\r\n"); }
+            else { unsafe { raw_write_bytes(1, buf + len, 1); } }
         }
-        if (b == delimiter) { break; }
         len = len + 1;
+        var matched: bool = false;
+        unsafe { matched = __io_ends_with(buf, len, delimiter_ptr, delimiter_len); }
+        if (matched) {
+            len = len - delimiter_len;
+            break;
+        }
     }
 
     unsafe { __io_end_immediate_input(input_state); }
@@ -376,7 +416,7 @@ pub fn read(delimiter: u8) Result[String, ReadError] {
 
 // Read a full line. The trailing newline is not included.
 pub fn readln() Result[String, ReadError] {
-    ret read(10); // 10 is '\n'
+    ret read("\n");
 }
 
 // Read one complete UTF-8 scalar value. EOF returns an empty String.
@@ -409,6 +449,10 @@ pub fn readkey() Result[String, ReadError] {
 
     var first: u8 = 0;
     unsafe { first = *buf; }
+    if (first == 13) {
+        first = 10;
+        unsafe { *buf = first; }
+    }
     var width: usize = 1;
     if (first >= 194 && first <= 223) {
         width = 2;
