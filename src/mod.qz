@@ -1,15 +1,15 @@
-// std root module gateway — lazy re-exports for all std.* imports.
-// Files are only loaded when explicitly imported (not eagerly).
+// std root module gateway — public imports for all std.* modules.
+// A consumer still loads only the modules it imports.
 
-pub reexport core;
-pub reexport io;
-pub reexport collections;
-pub reexport unix;
-pub reexport windows;
-pub reexport win32_core;
-pub reexport fs;
-pub reexport net;
-pub reexport os;
-pub reexport thread;
-pub reexport ffi;
-pub reexport math;
+pub import core;
+pub import io;
+pub import collections;
+pub import unix;
+pub import windows;
+pub import win32_core;
+pub import fs;
+pub import net;
+pub import os;
+pub import thread;
+pub import ffi;
+pub import math;

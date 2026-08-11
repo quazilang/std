@@ -1,5 +1,8 @@
 # Standard-library FFI
 
+The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
+`.`; the removed `pub reexport` spelling must not be reintroduced.
+
 `src/ffi.qz` owns the public low-level C interoperability vocabulary.
 
 - C aliases describe the x86-64 SysV and Win64 data models while fixed-width
