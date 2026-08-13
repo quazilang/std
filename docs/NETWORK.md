@@ -7,4 +7,4 @@ one-request local-server responses.
 
 HTTPS is not supported without a TLS implementation. Callers must keep receive
 limits explicit and close sockets on success and error paths. The executable
-client/server walkthrough is in the compiler repository's `examples/25-std-net`.
+client/server walkthrough is in the compiler repository's `examples/26-http-client-server`.
