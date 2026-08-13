@@ -23,10 +23,10 @@
 // ── File I/O ─────────────────────────────────────────────────────────────────
 
 @syscall("read")
-pub unsafe fn read(fd: i32, buf: str, count: usize) isize;
+pub unsafe fn read(fd: i32, buf: *u8, count: usize) isize;
 
 @syscall("write")
-pub unsafe fn write(fd: i32, buf: str, count: usize) isize;
+pub unsafe fn write(fd: i32, buf: *u8, count: usize) isize;
 
 // flags: O_RDONLY=0, O_WRONLY=1, O_RDWR=2, O_CREAT=64, O_TRUNC=512, O_APPEND=1024
 @syscall("open")

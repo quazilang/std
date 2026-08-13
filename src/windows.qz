@@ -576,10 +576,10 @@ pub unsafe fn accept(s: usize, addr: *u8, addrlen: *i32) usize;
 pub unsafe fn connect(s: usize, addr: *u8, addrlen: i32) i32;
 
 @api("send")
-pub fn send(s: usize, buf: str, len: i32, flags: i32) i32;
+pub unsafe fn send(s: usize, buf: *u8, len: i32, flags: i32) i32;
 
 @api("recv")
-pub fn recv(s: usize, buf: str, len: i32, flags: i32) i32;
+pub unsafe fn recv(s: usize, buf: *u8, len: i32, flags: i32) i32;
 
 // to: pointer to destination sockaddr
 @api("sendto")

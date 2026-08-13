@@ -1,150 +1,218 @@
-// std.net — TCP/IP networking
-// Cross-platform: Linux uses raw syscalls via unix.*, Windows @cfg pending.
-// Only 3 ops genuinely need intrinsics (require sockaddr_in construction or
-// null-pointer passing impossible to express in void code):
-//   quazi.net.bind_tcp, quazi.net.connect_tcp, quazi.net.accept_tcp
-// Everything else delegates to unix.socket / unix.listen / unix.write /
-// unix.read / unix.close which already exist as @syscall wrappers.
+// std.net — TCP and HTTP/1.1 client/server building blocks.
 import std.core;
 import std.unix;
 
-// ── Intrinsics (only ops that need C-struct construction) ─────────────────────
-
-// Bind a socket to 0.0.0.0:port (constructs sockaddr_in on stack, byte-swaps
-// port to big-endian). Returns 0 on success or negative errno.
 @intrinsic("quazi.net.bind_tcp")
-unsafe fn __net_bind_tcp(sockfd: i32, port: i32) i32;
+unsafe fn __net_bind_tcp(socket: isize, port: i32) i32;
 
-// Connect sockfd to ip_str:port (uses inet_pton + constructs sockaddr_in).
-// Returns 0 on success or negative errno.
 @intrinsic("quazi.net.connect_tcp")
-unsafe fn __net_connect_tcp(sockfd: i32, ip: str, port: i32) i32;
+unsafe fn __net_connect_tcp(socket: isize, ip: str, port: i32) i32;
 
-// ── TcpStream ────────────────────────────────────────────────────────────────
-
-pub struct TcpStream {
-    fd: i32,
+fn __socket() isize {
+    var socket: i32 = 0;
+    unsafe { socket = unix.socket(2, 1, 0); }
+    ret socket as isize;
 }
+
+fn __close(socket: isize) void {
+    unsafe { unix.close(socket as i32); }
+}
+
+fn __listen(socket: isize, backlog: i32) i32 {
+    var result: i32 = 0;
+    unsafe { result = unix.listen(socket as i32, backlog); }
+    ret result;
+}
+
+fn __accept(socket: isize) isize {
+    var accepted: i32 = 0;
+    unsafe { accepted = unix.accept(socket as i32, 0, 0); }
+    ret accepted as isize;
+}
+
+unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
+    ret unix.write(socket as i32, data, length);
+}
+
+unsafe fn __recv(socket: isize, data: *u8, length: usize) isize {
+    ret unix.read(socket as i32, data, length);
+}
+
+pub struct TcpStream { socket: isize, }
 
 impl TcpStream {
-    // Connect to ip:port (dotted-decimal IPv4, e.g. "127.0.0.1").
-    // Returns Ok(TcpStream) or Err(errno as i32).
     pub fn connect(ip: str, port: i32) Result[TcpStream, i32] {
-        var fd: i32 = 0;
-        unsafe { fd = unix.socket(2, 1, 0); }  // AF_INET=2, SOCK_STREAM=1
-        if (fd < 0) { ret Err(fd); }
-        var r: i32 = 0;
-        unsafe { r = __net_connect_tcp(fd, ip, port); }
-        if (r < 0) {
-            unsafe { unix.close(fd); }
-            ret Err(r);
+        const socket: isize = __socket();
+        if (socket < 0) { ret Err(socket as i32); }
+        var result: i32 = 0;
+        unsafe { result = __net_connect_tcp(socket, ip, port); }
+        if (result < 0) { __close(socket); ret Err(result); }
+        ret Ok(TcpStream { socket: socket });
+    }
+
+    pub fn send(self: TcpStream, text: str) Result[usize, i32] {
+        const length: usize = text.bytes_len();
+        var sent: usize = 0;
+        unsafe {
+            const data: *u8 = core.str_as_ptr(text);
+            for (sent < length) {
+                const count: isize = __send(self.socket, data + sent, length - sent);
+                if (count <= 0) { ret Err(count as i32); }
+                sent = sent + count as usize;
+            }
         }
-        ret Ok(TcpStream { fd: fd });
+        ret Ok(sent);
     }
 
-    // Send the string s over the connection. Returns bytes sent or negative errno.
-    pub fn send(self: TcpStream, s: str) isize {
-        var r: isize = 0;
-        unsafe { r = unix.write(self.fd, s, core.strlen(s)); }
-        ret r;
+    pub unsafe fn recv(self: TcpStream, data: *u8, length: usize) isize {
+        ret __recv(self.socket, data, length);
     }
 
-    // Send an exact immutable byte string.
-    pub fn send_bytes(self: TcpStream, buf: bytes) isize {
-        var r: isize = 0;
-        unsafe { r = core.write_bytes(self.fd, buf.as_ptr(), buf.len()); }
-        ret r;
+    pub fn receive(self: TcpStream, limit: usize) Result[String, i32] {
+        if (limit == 0) { ret Ok(String.new()); }
+        var data: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); }
+        if (data == 0) { ret Err(-1); }
+        var count: isize = 0;
+        unsafe { count = __recv(self.socket, data, limit); }
+        if (count < 0) { unsafe { core.free(data); } ret Err(count as i32); }
+        unsafe { *(data + count as usize) = 0; }
+        var text: String = String.new();
+        unsafe { text = String.from_raw(data, count as usize, limit + 1); }
+        ret Ok(text);
     }
 
-    // Raw receive buffer. The caller must guarantee that `buf` is writable for
-    // at least `len` bytes. 0 means the peer closed the connection.
-    pub unsafe fn recv(self: TcpStream, buf: *u8, len: usize) isize {
-        var r: isize = 0;
-        r = unix.read(self.fd, buf, len);
-        ret r;
-    }
-
-    // Close the connection.
-    pub fn close(self: TcpStream) void {
-        unsafe { unix.close(self.fd); }
-    }
-
-    // Returns the underlying socket file descriptor.
-    pub fn fd(self: TcpStream) i32 { ret self.fd; }
+    pub fn close(self: TcpStream) void { __close(self.socket); }
+    pub fn handle(self: TcpStream) isize { ret self.socket; }
 }
 
-// ── TcpListener ──────────────────────────────────────────────────────────────
-
-pub struct TcpListener {
-    fd: i32,
-}
+pub struct TcpListener { socket: isize, }
 
 impl TcpListener {
-    // Bind to 0.0.0.0:port and start listening (backlog 128).
-    // Returns Ok(TcpListener) or Err(errno as i32).
     pub fn bind(port: i32) Result[TcpListener, i32] {
-        var fd: i32 = 0;
-        unsafe { fd = unix.socket(2, 1, 0); }  // AF_INET=2, SOCK_STREAM=1
-        if (fd < 0) { ret Err(fd); }
-        var r: i32 = 0;
-        unsafe { r = __net_bind_tcp(fd, port); }
-        if (r < 0) {
-            unsafe { unix.close(fd); }
-            ret Err(r);
-        }
-        unsafe { r = unix.listen(fd, 128); }
-        if (r < 0) {
-            unsafe { unix.close(fd); }
-            ret Err(r);
-        }
-        ret Ok(TcpListener { fd: fd });
+        const socket: isize = __socket();
+        if (socket < 0) { ret Err(socket as i32); }
+        var result: i32 = 0;
+        unsafe { result = __net_bind_tcp(socket, port); }
+        if (result < 0) { __close(socket); ret Err(result); }
+        result = __listen(socket, 128);
+        if (result < 0) { __close(socket); ret Err(result); }
+        ret Ok(TcpListener { socket: socket });
     }
 
-    // Accept the next incoming connection. Blocks until a client connects.
-    // Returns Ok(TcpStream) or Err(errno as i32).
     pub fn accept(self: TcpListener) Result[TcpStream, i32] {
-        var client: i32 = 0;
-        unsafe { client = unix.accept(self.fd, 0, 0); }
-        if (client < 0) { ret Err(client); }
-        ret Ok(TcpStream { fd: client });
+        const socket: isize = __accept(self.socket);
+        if (socket < 0) { ret Err(socket as i32); }
+        ret Ok(TcpStream { socket: socket });
     }
 
-    // Close the listener socket.
-    pub fn close(self: TcpListener) void {
-        unsafe { unix.close(self.fd); }
-    }
-
-    // Returns the underlying socket file descriptor.
-    pub fn fd(self: TcpListener) i32 { ret self.fd; }
+    pub fn close(self: TcpListener) void { __close(self.socket); }
 }
 
-// ── UdpSocket ────────────────────────────────────────────────────────────────
-
-pub struct UdpSocket {
-    fd: i32,
+pub struct HttpResponse {
+    status: i32,
+    reason: str,
+    body: str,
+    content_type: str,
 }
 
-impl UdpSocket {
-    // Bind a UDP socket to 0.0.0.0:port for receiving.
-    // Returns Ok(UdpSocket) or Err(errno as i32).
-    pub fn bind(port: i32) Result[UdpSocket, i32] {
-        var fd: i32 = 0;
-        unsafe { fd = unix.socket(2, 2, 0); }  // AF_INET=2, SOCK_DGRAM=2
-        if (fd < 0) { ret Err(fd); }
-        var r: i32 = 0;
-        unsafe { r = __net_bind_tcp(fd, port); }
-        if (r < 0) {
-            unsafe { unix.close(fd); }
-            ret Err(r);
-        }
-        ret Ok(UdpSocket { fd: fd });
+impl HttpResponse {
+    pub fn text(status: i32, body: str) HttpResponse {
+        var reason: str = "OK";
+        if (status == 201) { reason = "Created"; }
+        else if (status == 400) { reason = "Bad Request"; }
+        else if (status == 404) { reason = "Not Found"; }
+        else if (status == 500) { reason = "Internal Server Error"; }
+        ret HttpResponse { status: status, reason: reason, body: body, content_type: "text/plain; charset=utf-8" };
     }
 
-    // Close the socket.
-    pub fn close(self: UdpSocket) void {
-        unsafe { unix.close(self.fd); }
+    pub fn encode(self: HttpResponse) String {
+        var output: String = String.from("HTTP/1.1 ");
+        output = output.push_str(self.status.to_string());
+        output = output.push_str(" ");
+        output = output.push_str(self.reason);
+        output = output.push_str("\r\nContent-Type: ");
+        output = output.push_str(self.content_type);
+        output = output.push_str("\r\nContent-Length: ");
+        output = output.push_str(self.body.bytes_len().to_string());
+        output = output.push_str("\r\nConnection: close\r\n\r\n");
+        output = output.push_str(self.body);
+        ret output;
+    }
+}
+
+pub struct HttpConnection { stream: TcpStream, }
+
+impl HttpConnection {
+    pub fn read_request(self: HttpConnection, limit: usize) Result[String, i32] {
+        ret self.stream.receive(limit);
     }
 
-    // Returns the underlying file descriptor.
-    pub fn fd(self: UdpSocket) i32 { ret self.fd; }
+    pub fn respond(self: HttpConnection, response: HttpResponse) Result[usize, i32] {
+        const encoded: String = response.encode();
+        const result: Result[usize, i32] = self.stream.send(encoded.as_str());
+        self.stream.close();
+        ret result;
+    }
+}
+
+pub struct HttpServer { listener: TcpListener, }
+
+impl HttpServer {
+    pub fn bind(port: i32) Result[HttpServer, i32] {
+        const listener: Result[TcpListener, i32] = TcpListener.bind(port);
+        if (listener.is_err()) { ret Err(listener.unwrap_err()); }
+        ret Ok(HttpServer { listener: listener.unwrap() });
+    }
+
+    pub fn accept(self: HttpServer) Result[HttpConnection, i32] {
+        const stream: Result[TcpStream, i32] = self.listener.accept();
+        if (stream.is_err()) { ret Err(stream.unwrap_err()); }
+        ret Ok(HttpConnection { stream: stream.unwrap() });
+    }
+
+    pub fn close(self: HttpServer) void { self.listener.close(); }
+
+    // Accept one request, send one response, close client and listener.
+    pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, i32] {
+        const accepted: Result[TcpStream, i32] = self.listener.accept();
+        if (accepted.is_err()) { self.listener.close(); ret Err(accepted.unwrap_err()); }
+        const stream: TcpStream = accepted.unwrap();
+        const request: Result[String, i32] = stream.receive(limit);
+        if (request.is_err()) { stream.close(); self.listener.close(); ret Err(request.unwrap_err()); }
+        const encoded: String = response.encode();
+        const sent: Result[usize, i32] = stream.send(encoded.as_str());
+        stream.close();
+        self.listener.close();
+        if (sent.is_err()) { ret Err(sent.unwrap_err()); }
+        ret request;
+    }
+}
+
+pub fn http_request(ip: str, port: i32, method: str, path: str, body: str) Result[String, i32] {
+    const connected: Result[TcpStream, i32] = TcpStream.connect(ip, port);
+    if (connected.is_err()) { ret Err(connected.unwrap_err()); }
+    const stream: TcpStream = connected.unwrap();
+    var request: String = String.from(method);
+    request = request.push_str(" ");
+    request = request.push_str(path);
+    request = request.push_str(" HTTP/1.1\r\nHost: ");
+    request = request.push_str(ip);
+    request = request.push_str("\r\nContent-Length: ");
+    request = request.push_str(body.bytes_len().to_string());
+    request = request.push_str("\r\nConnection: close\r\n\r\n");
+    request = request.push_str(body);
+    const sent: Result[usize, i32] = stream.send(request.as_str());
+    if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
+    const response: Result[String, i32] = stream.receive(1024 * 1024);
+    stream.close();
+    ret response;
+}
+
+pub fn http_get(ip: str, port: i32, path: str) Result[String, i32] {
+    ret http_request(ip, port, "GET", path, "");
+}
+
+pub fn http_post(ip: str, port: i32, path: str, body: str) Result[String, i32] {
+    ret http_request(ip, port, "POST", path, body);
 }
