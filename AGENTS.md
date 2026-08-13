@@ -79,6 +79,6 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   interpolation, exponent, logarithm, and power helpers. Angles use radians;
   approximations must document their accuracy goal and must not add an implicit
   libc/libm dependency.
-- `std.net` owns Linux socket handles and exposes complete-send TCP,
+- `std.net` owns cross-platform Linux/Winsock socket handles and exposes complete-send TCP,
   bounded receives, HTTP/1.1 requests, and explicit local-server
   accept/read/respond primitives. HTTPS requires a separate TLS implementation.

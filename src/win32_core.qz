@@ -80,3 +80,31 @@ pub unsafe fn next_process(snapshot: usize, entry: *u8) i32;
 
 @api("GetCurrentProcessId")
 pub unsafe fn current_process_id() u32;
+
+// Minimal pointer-correct Winsock2 substrate used by std.net.
+@api("WSAStartup")
+pub unsafe fn winsock_startup(version: u16, data: *u8) i32;
+
+@api("WSACleanup")
+pub unsafe fn winsock_cleanup() i32;
+
+@api("WSAGetLastError")
+pub unsafe fn winsock_last_error() i32;
+
+@api("socket")
+pub unsafe fn socket(af: i32, kind: i32, protocol: i32) usize;
+
+@api("closesocket")
+pub unsafe fn close_socket(socket: usize) i32;
+
+@api("listen")
+pub unsafe fn listen_socket(socket: usize, backlog: i32) i32;
+
+@api("accept")
+pub unsafe fn accept_socket(socket: usize, address: *u8, address_length: *i32) usize;
+
+@api("send")
+pub unsafe fn send_socket(socket: usize, data: *u8, length: i32, flags: i32) i32;
+
+@api("recv")
+pub unsafe fn receive_socket(socket: usize, data: *u8, length: i32, flags: i32) i32;

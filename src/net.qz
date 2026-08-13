@@ -1,6 +1,7 @@
 // std.net — TCP and HTTP/1.1 client/server building blocks.
 import std.core;
 import std.unix;
+import std.win32_core;
 
 @intrinsic("quazi.net.bind_tcp")
 unsafe fn __net_bind_tcp(socket: isize, port: i32) i32;
@@ -9,33 +10,115 @@ unsafe fn __net_bind_tcp(socket: isize, port: i32) i32;
 unsafe fn __net_connect_tcp(socket: isize, ip: str, port: i32) i32;
 
 fn __socket() isize {
-    var socket: i32 = 0;
-    unsafe { socket = unix.socket(2, 1, 0); }
-    ret socket as isize;
+    @cfg(target_os = "linux") {
+        var socket: i32 = 0;
+        unsafe { socket = unix.socket(2, 1, 0); }
+        ret socket as isize;
+    }
+    @cfg(target_os = "windows") {
+        var startup_data: *u8 = 0;
+        unsafe { startup_data = core.malloc(512); }
+        if (startup_data == 0) { ret -1; }
+        var started: i32 = 0;
+        unsafe {
+            started = win32_core.winsock_startup(514, startup_data);
+            core.free(startup_data);
+        }
+        if (started != 0) { ret -(started as isize); }
+        var socket: usize = 0;
+        unsafe { socket = win32_core.socket(2, 1, 6); }
+        if (socket as isize < 0) {
+            var error: i32 = 0;
+            unsafe {
+                error = win32_core.winsock_last_error();
+                win32_core.winsock_cleanup();
+            }
+            ret -(error as isize);
+        }
+        ret socket as isize;
+    }
+    ret -1;
 }
 
 fn __close(socket: isize) void {
-    unsafe { unix.close(socket as i32); }
+    @cfg(target_os = "linux") { unsafe { unix.close(socket as i32); } }
+    @cfg(target_os = "windows") {
+        unsafe {
+            win32_core.close_socket(socket as usize);
+            win32_core.winsock_cleanup();
+        }
+    }
 }
 
 fn __listen(socket: isize, backlog: i32) i32 {
-    var result: i32 = 0;
-    unsafe { result = unix.listen(socket as i32, backlog); }
-    ret result;
+    @cfg(target_os = "linux") {
+        var result: i32 = 0;
+        unsafe { result = unix.listen(socket as i32, backlog); }
+        ret result;
+    }
+    @cfg(target_os = "windows") {
+        var result: i32 = 0;
+        unsafe { result = win32_core.listen_socket(socket as usize, backlog); }
+        ret result;
+    }
+    ret -1;
 }
 
 fn __accept(socket: isize) isize {
-    var accepted: i32 = 0;
-    unsafe { accepted = unix.accept(socket as i32, 0, 0); }
-    ret accepted as isize;
+    @cfg(target_os = "linux") {
+        var accepted: i32 = 0;
+        unsafe { accepted = unix.accept(socket as i32, 0, 0); }
+        ret accepted as isize;
+    }
+    @cfg(target_os = "windows") {
+        var startup_data: *u8 = 0;
+        unsafe { startup_data = core.malloc(512); }
+        if (startup_data == 0) { ret -1; }
+        var started: i32 = 0;
+        unsafe {
+            started = win32_core.winsock_startup(514, startup_data);
+            core.free(startup_data);
+        }
+        if (started != 0) { ret -(started as isize); }
+        var accepted: usize = 0;
+        unsafe { accepted = win32_core.accept_socket(socket as usize, 0, 0); }
+        if (accepted as isize < 0) {
+            var error: i32 = 0;
+            unsafe {
+                error = win32_core.winsock_last_error();
+                win32_core.winsock_cleanup();
+            }
+            ret -(error as isize);
+        }
+        ret accepted as isize;
+    }
+    ret -1;
 }
 
 unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
-    ret unix.write(socket as i32, data, length);
+    @cfg(target_os = "linux") { ret unix.write(socket as i32, data, length); }
+    @cfg(target_os = "windows") {
+        ret win32_core.send_socket(socket as usize, data, length as i32, 0) as isize;
+    }
+    ret -1;
 }
 
 unsafe fn __recv(socket: isize, data: *u8, length: usize) isize {
-    ret unix.read(socket as i32, data, length);
+    @cfg(target_os = "linux") { ret unix.read(socket as i32, data, length); }
+    @cfg(target_os = "windows") {
+        ret win32_core.receive_socket(socket as usize, data, length as i32, 0) as isize;
+    }
+    ret -1;
+}
+
+fn __error(result: i32) i32 {
+    @cfg(target_os = "linux") { ret result; }
+    @cfg(target_os = "windows") {
+        var code: i32 = 0;
+        unsafe { code = win32_core.winsock_last_error(); }
+        ret -code;
+    }
+    ret result;
 }
 
 pub struct TcpStream { socket: isize, }
@@ -46,7 +129,7 @@ impl TcpStream {
         if (socket < 0) { ret Err(socket as i32); }
         var result: i32 = 0;
         unsafe { result = __net_connect_tcp(socket, ip, port); }
-        if (result < 0) { __close(socket); ret Err(result); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
         ret Ok(TcpStream { socket: socket });
     }
 
@@ -94,9 +177,9 @@ impl TcpListener {
         if (socket < 0) { ret Err(socket as i32); }
         var result: i32 = 0;
         unsafe { result = __net_bind_tcp(socket, port); }
-        if (result < 0) { __close(socket); ret Err(result); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
         result = __listen(socket, 128);
-        if (result < 0) { __close(socket); ret Err(result); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
         ret Ok(TcpListener { socket: socket });
     }
 
@@ -175,9 +258,9 @@ impl HttpServer {
 
     // Accept one request, send one response, close client and listener.
     pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, i32] {
-        const accepted: Result[TcpStream, i32] = self.listener.accept();
-        if (accepted.is_err()) { self.listener.close(); ret Err(accepted.unwrap_err()); }
-        const stream: TcpStream = accepted.unwrap();
+        const client_socket: isize = __accept(self.listener.socket);
+        if (client_socket < 0) { self.listener.close(); ret Err(client_socket as i32); }
+        const stream: TcpStream = TcpStream { socket: client_socket };
         const request: Result[String, i32] = stream.receive(limit);
         if (request.is_err()) { stream.close(); self.listener.close(); ret Err(request.unwrap_err()); }
         const encoded: String = response.encode();
