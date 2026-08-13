@@ -83,9 +83,13 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   probabilities, unbiased integer ranges, collection choice/shuffling, and
   random bytes. It uses the compiler's system-random intrinsic and returns
   `RandomError.Unavailable` when secure system entropy is unavailable.
-- `std.net` owns cross-platform Linux/Winsock socket handles and exposes complete-send TCP,
-  bounded receives, HTTP/1.1 requests, and explicit local-server
-  accept/read/respond primitives. HTTPS requires a separate TLS implementation.
+- `std.net` owns cross-platform Linux/Winsock socket handles and exposes IPv4
+  TCP streams/listeners, UDP datagrams, DNS resolution, structured HTTP/1.1
+  request/response/header parsing, chunked responses, response limits, and
+  local-server primitives. HTTPS requires a separate TLS implementation.
+- `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
+  typed errors and owned handles. Symbols require an explicit unsafe cast to an
+  exact `@repr(C)` callback.
 - Safe `std.net` operations return `NetError`; safe fallible `std.fs` operations
   return `FsError`. Stable variants normalize Linux/Windows errors, `message()`
   provides display text, and `Native(code)` preserves unknown platform failures.

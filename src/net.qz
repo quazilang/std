@@ -1,11 +1,24 @@
-// std.net — TCP and HTTP/1.1 client/server building blocks.
+// std.net — structured IPv4 TCP, UDP, and HTTP/1.1 client/server APIs.
+// HTTPS intentionally stays separate: transport security requires a TLS module.
 import std.core;
+import std.ffi.{c_char, CString, CStringError};
 import std.unix;
 import std.win32_core;
+
+@cfg(target_os = "linux")
+@api("getaddrinfo")
+unsafe fn __linux_getaddrinfo(node: *c_char, service: *c_char, hints: *u8, result: **u8) i32;
+
+@cfg(target_os = "linux")
+@api("freeaddrinfo")
+unsafe fn __linux_freeaddrinfo(result: *u8) void;
 
 pub enum NetError {
     InvalidAddress,
     InvalidPort,
+    InvalidUrl,
+    InvalidHttp,
+    NameResolutionFailed,
     ConnectionRefused,
     AddressInUse,
     AddressNotAvailable,
@@ -18,7 +31,9 @@ pub enum NetError {
     PermissionDenied,
     BrokenPipe,
     MessageTooLarge,
+    LimitExceeded,
     AllocationFailed,
+    TlsUnavailable,
     Unsupported,
     Native(i32),
 }
@@ -28,6 +43,9 @@ impl NetError {
         ret match self {
             NetError.InvalidAddress => "invalid network address",
             NetError.InvalidPort => "port must be between 0 and 65535",
+            NetError.InvalidUrl => "invalid URL",
+            NetError.InvalidHttp => "invalid HTTP/1.1 message",
+            NetError.NameResolutionFailed => "host name could not be resolved",
             NetError.ConnectionRefused => "connection refused",
             NetError.AddressInUse => "address already in use",
             NetError.AddressNotAvailable => "address is not available",
@@ -40,7 +58,9 @@ impl NetError {
             NetError.PermissionDenied => "network permission denied",
             NetError.BrokenPipe => "connection is closed",
             NetError.MessageTooLarge => "network message is too large",
+            NetError.LimitExceeded => "network response exceeded configured limit",
             NetError.AllocationFailed => "network buffer allocation failed",
+            NetError.TlsUnavailable => "HTTPS requires a TLS transport",
             NetError.Unsupported => "network operation is unsupported",
             NetError.Native(_) => "unclassified operating-system network error",
         };
@@ -64,30 +84,45 @@ fn __net_error(code: i32) NetError {
     ret NetError.Native(code);
 }
 
+fn __cstring_error(error: CStringError) NetError {
+    ret match error {
+        CStringError.InteriorNul(_) => NetError.InvalidAddress,
+        CStringError.AllocationFailed => NetError.AllocationFailed,
+    };
+}
+
 @intrinsic("quazi.net.bind_tcp")
-unsafe fn __net_bind_tcp(socket: isize, port: i32) i32;
+unsafe fn __net_bind(socket: isize, port: i32) i32;
 
 @intrinsic("quazi.net.connect_tcp")
-unsafe fn __net_connect_tcp(socket: isize, ip: str, port: i32) i32;
+unsafe fn __net_connect(socket: isize, ip: str, port: i32) i32;
 
-fn __socket() isize {
-    @cfg(target_os = "linux") {
-        var socket: i32 = 0;
-        unsafe { socket = unix.socket(2, 1, 0); }
-        ret socket as isize;
-    }
+fn __winsock_start() i32 {
     @cfg(target_os = "windows") {
         var startup_data: *u8 = 0;
         unsafe { startup_data = core.malloc(512); }
         if (startup_data == 0) { ret -1; }
-        var started: i32 = 0;
+        var result: i32 = 0;
         unsafe {
-            started = win32_core.winsock_startup(514, startup_data);
+            result = win32_core.winsock_startup(514, startup_data);
             core.free(startup_data);
         }
-        if (started != 0) { ret -(started as isize); }
+        if (result != 0) { ret -result; }
+    }
+    ret 0;
+}
+
+fn __socket(kind: i32, protocol: i32) isize {
+    @cfg(target_os = "linux") {
+        var socket: i32 = 0;
+        unsafe { socket = unix.socket(2, kind, protocol); }
+        ret socket as isize;
+    }
+    @cfg(target_os = "windows") {
+        const started: i32 = __winsock_start();
+        if (started < 0) { ret started as isize; }
         var socket: usize = 0;
-        unsafe { socket = win32_core.socket(2, 1, 6); }
+        unsafe { socket = win32_core.socket(2, kind, protocol); }
         if (socket as isize < 0) {
             var error: i32 = 0;
             unsafe {
@@ -102,6 +137,7 @@ fn __socket() isize {
 }
 
 fn __close(socket: isize) void {
+    if (socket < 0) { ret; }
     @cfg(target_os = "linux") { unsafe { unix.close(socket as i32); } }
     @cfg(target_os = "windows") {
         unsafe {
@@ -132,15 +168,8 @@ fn __accept(socket: isize) isize {
         ret accepted as isize;
     }
     @cfg(target_os = "windows") {
-        var startup_data: *u8 = 0;
-        unsafe { startup_data = core.malloc(512); }
-        if (startup_data == 0) { ret -1; }
-        var started: i32 = 0;
-        unsafe {
-            started = win32_core.winsock_startup(514, startup_data);
-            core.free(startup_data);
-        }
-        if (started != 0) { ret -(started as isize); }
+        const started: i32 = __winsock_start();
+        if (started < 0) { ret started as isize; }
         var accepted: usize = 0;
         unsafe { accepted = win32_core.accept_socket(socket as usize, 0, 0); }
         if (accepted as isize < 0) {
@@ -182,29 +211,179 @@ fn __error(result: i32) i32 {
     ret result;
 }
 
+fn __resolve_ipv4(host: str) Result[String, NetError] {
+    const encoded: Result[CString, CStringError] = CString.try_from_str(host);
+    if (encoded.is_err()) { ret Err(__cstring_error(encoded.unwrap_err())); }
+    const name: CString = encoded.unwrap();
+    var hints: *u8 = 0;
+    var result_slot: *u8 = 0;
+    unsafe {
+        hints = core.malloc(48);
+        result_slot = core.malloc(8);
+    }
+    if (hints == 0 || result_slot == 0) {
+        if (hints != 0) { unsafe { core.free(hints); } }
+        if (result_slot != 0) { unsafe { core.free(result_slot); } }
+        name.free();
+        ret Err(NetError.AllocationFailed);
+    }
+    unsafe {
+        core.memset(hints, 0, 48);
+        core.memset(result_slot, 0, 8);
+        *(hints as *i32 + 1) = 2;
+        *(hints as *i32 + 2) = 1;
+    }
+    var code: i32 = 0;
+    @cfg(target_os = "windows") {
+        const started: i32 = __winsock_start();
+        if (started < 0) {
+            unsafe { core.free(hints); core.free(result_slot); }
+            name.free();
+            ret Err(__net_error(started));
+        }
+        unsafe { code = win32_core.get_address_info(name.as_ptr(), 0, hints, result_slot as **u8); }
+    }
+    @cfg(target_os = "linux") {
+        unsafe { code = __linux_getaddrinfo(name.as_ptr(), 0, hints, result_slot as **u8); }
+    }
+    name.free();
+    unsafe { core.free(hints); }
+    if (code != 0) {
+        @cfg(target_os = "windows") { unsafe { win32_core.winsock_cleanup(); } }
+        unsafe { core.free(result_slot); }
+        ret Err(NetError.NameResolutionFailed);
+    }
+    var info: *u8 = 0;
+    var address: *u8 = 0;
+    unsafe {
+        info = *(result_slot as **u8);
+        @cfg(target_os = "windows") { address = *((info + 32) as **u8); }
+        @cfg(target_os = "linux") { address = *((info + 24) as **u8); }
+    }
+    if (info == 0 || address == 0) {
+        @cfg(target_os = "windows") { unsafe { win32_core.winsock_cleanup(); } }
+        unsafe { core.free(result_slot); }
+        ret Err(NetError.NameResolutionFailed);
+    }
+    var raw: u32 = 0;
+    unsafe { raw = *((address + 4) as *u32); }
+    var ip: String = String.from((raw & 255).to_string());
+    ip = ip.push_str(".");
+    ip = ip.push_str(((raw >> 8) & 255).to_string());
+    ip = ip.push_str(".");
+    ip = ip.push_str(((raw >> 16) & 255).to_string());
+    ip = ip.push_str(".");
+    ip = ip.push_str(((raw >> 24) & 255).to_string());
+    @cfg(target_os = "windows") {
+        unsafe { win32_core.free_address_info(info); win32_core.winsock_cleanup(); }
+    }
+    @cfg(target_os = "linux") { unsafe { __linux_freeaddrinfo(info); } }
+    unsafe { core.free(result_slot); }
+    ret Ok(ip);
+}
+
+pub struct SocketAddress {
+    host: String,
+    port: i32,
+}
+
+impl SocketAddress {
+    pub fn new(host: str, port: i32) Result[SocketAddress, NetError] {
+        if (host.is_empty()) { ret Err(NetError.InvalidAddress); }
+        if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
+        ret Ok(SocketAddress { host: String.from(host), port: port });
+    }
+    pub fn host(self: SocketAddress) str { ret self.host.as_str(); }
+    pub fn port(self: SocketAddress) i32 { ret self.port; }
+    pub fn resolve(self: SocketAddress) Result[SocketAddress, NetError] {
+        const resolved: Result[String, NetError] = __resolve_ipv4(self.host.as_str());
+        if (resolved.is_err()) { ret Err(resolved.unwrap_err()); }
+        ret Ok(SocketAddress { host: resolved.unwrap(), port: self.port });
+    }
+}
+
+fn __sockaddr(address: SocketAddress) Result[*u8, NetError] {
+    const resolved: Result[SocketAddress, NetError] = address.resolve();
+    if (resolved.is_err()) { ret Err(resolved.unwrap_err()); }
+    const numeric: SocketAddress = resolved.unwrap();
+    var parts: Array[u32] = Array.new();
+    var value: u32 = 0;
+    var digits: i32 = 0;
+    const text: str = numeric.host();
+    for i : 0..text.bytes_len() {
+        const byte: u8 = core.str_byte_at(text, i);
+        if (byte == 46) {
+            if (digits == 0 || value > 255) { ret Err(NetError.InvalidAddress); }
+            parts.push(value); value = 0; digits = 0;
+        } else {
+            if (byte < 48 || byte > 57) { ret Err(NetError.InvalidAddress); }
+            value = value * 10 + (byte - 48) as u32; digits++;
+        }
+    }
+    if (digits == 0 || value > 255) { ret Err(NetError.InvalidAddress); }
+    parts.push(value);
+    if (parts.len() != 4) { ret Err(NetError.InvalidAddress); }
+    var raw: *u8 = 0;
+    unsafe { raw = core.malloc(16); }
+    if (raw == 0) { ret Err(NetError.AllocationFailed); }
+    const port: u16 = numeric.port() as u16;
+    const network_port: u16 = (port << 8) | (port >> 8);
+    const network_ip: u32 = parts[0] | (parts[1] << 8) | (parts[2] << 16) | (parts[3] << 24);
+    unsafe {
+        core.memset(raw, 0, 16);
+        *(raw as *u16) = 2;
+        *((raw + 2) as *u16) = network_port;
+        *((raw + 4) as *u32) = network_ip;
+    }
+    ret Ok(raw);
+}
+
+pub enum Shutdown { Read, Write, Both }
+
 pub struct TcpStream { socket: isize, }
 
 impl TcpStream {
-    pub fn connect(ip: str, port: i32) Result[TcpStream, NetError] {
-        if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
-        const socket: isize = __socket();
+    pub fn connect(host: str, port: i32) Result[TcpStream, NetError] {
+        const requested: Result[SocketAddress, NetError] = SocketAddress.new(host, port);
+        if (requested.is_err()) { ret Err(requested.unwrap_err()); }
+        const unresolved: SocketAddress = requested.unwrap();
+        const address: Result[SocketAddress, NetError] = unresolved.resolve();
+        if (address.is_err()) { ret Err(address.unwrap_err()); }
+        const numeric: SocketAddress = address.unwrap();
+        const socket: isize = __socket(1, 6);
         if (socket < 0) { ret Err(__net_error(socket as i32)); }
         var result: i32 = 0;
-        unsafe { result = __net_connect_tcp(socket, ip, port); }
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
+        unsafe { result = __net_connect(socket, numeric.host(), port); }
+        if (result < 0) {
+            const error: i32 = __error(result);
+            __close(socket);
+            ret Err(__net_error(error));
+        }
         ret Ok(TcpStream { socket: socket });
     }
 
     pub fn send(self: TcpStream, text: str) Result[usize, NetError] {
-        const length: usize = text.bytes_len();
-        var sent: usize = 0;
+        var data: *u8 = 0;
+        var result: Result[usize, NetError] = Err(NetError.Unsupported);
         unsafe {
-            const data: *u8 = core.str_as_ptr(text);
-            for (sent < length) {
-                const count: isize = __send(self.socket, data + sent, length - sent);
-                if (count <= 0) { ret Err(__net_error(__error(count as i32))); }
-                sent = sent + count as usize;
-            }
+            data = core.str_as_ptr(text);
+            result = self.send_raw(data, text.bytes_len());
+        }
+        ret result;
+    }
+
+    pub fn send_bytes(self: TcpStream, data: bytes) Result[usize, NetError] {
+        var result: Result[usize, NetError] = Err(NetError.Unsupported);
+        unsafe { result = self.send_raw(data.as_ptr(), data.len()); }
+        ret result;
+    }
+
+    pub unsafe fn send_raw(self: TcpStream, data: *u8, length: usize) Result[usize, NetError] {
+        var sent: usize = 0;
+        for (sent < length) {
+            const count: isize = __send(self.socket, data + sent, length - sent);
+            if (count <= 0) { ret Err(__net_error(__error(count as i32))); }
+            sent = sent + count as usize;
         }
         ret Ok(sent);
     }
@@ -220,29 +399,65 @@ impl TcpStream {
         if (data == 0) { ret Err(NetError.AllocationFailed); }
         var count: isize = 0;
         unsafe { count = __recv(self.socket, data, limit); }
-        if (count < 0) { unsafe { core.free(data); } ret Err(__net_error(__error(count as i32))); }
+        if (count < 0) {
+            unsafe { core.free(data); }
+            ret Err(__net_error(__error(count as i32)));
+        }
         unsafe { *(data + count as usize) = 0; }
         var text: String = String.new();
         unsafe { text = String.from_raw(data, count as usize, limit + 1); }
         ret Ok(text);
     }
 
-    pub fn close(self: TcpStream) void { __close(self.socket); }
+    pub fn receive_all(self: TcpStream, limit: usize) Result[String, NetError] {
+        var output: String = String.new();
+        for (true) {
+            if (output.bytes_len() >= limit) { ret Err(NetError.LimitExceeded); }
+            var size: usize = 8192;
+            if (limit - output.bytes_len() < size) { size = limit - output.bytes_len(); }
+            const chunk: Result[String, NetError] = self.receive(size);
+            if (chunk.is_err()) { ret Err(chunk.unwrap_err()); }
+            const text: String = chunk.unwrap();
+            if (text.bytes_len() == 0) { ret Ok(output); }
+            output = output.push_str(text.as_str());
+        }
+        ret Ok(output);
+    }
+
+    pub fn shutdown(self: TcpStream, how: Shutdown) Result[bool, NetError] {
+        var mode: i32 = 2;
+        if (how == Shutdown.Read) { mode = 0; }
+        else if (how == Shutdown.Write) { mode = 1; }
+        var result: i32 = 0;
+        @cfg(target_os = "linux") { unsafe { result = unix.shutdown(self.socket as i32, mode); } }
+        @cfg(target_os = "windows") { unsafe { result = win32_core.shutdown_socket(self.socket as usize, mode); } }
+        if (result < 0) { ret Err(__net_error(__error(result))); }
+        ret Ok(true);
+    }
+
+    pub fn close(self: TcpStream) void { __close(self.socket); self.socket = -1; }
+    pub fn free(self: TcpStream) void { self.close(); }
     pub fn handle(self: TcpStream) isize { ret self.socket; }
 }
 
 pub struct TcpListener { socket: isize, }
 
 impl TcpListener {
-    pub fn bind(port: i32) Result[TcpListener, NetError] {
+    pub fn bind(port: i32) Result[TcpListener, NetError] { ret TcpListener.bind_with_backlog(port, 128); }
+
+    pub fn bind_with_backlog(port: i32, backlog: i32) Result[TcpListener, NetError] {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
-        const socket: isize = __socket();
+        const socket: isize = __socket(1, 6);
         if (socket < 0) { ret Err(__net_error(socket as i32)); }
         var result: i32 = 0;
-        unsafe { result = __net_bind_tcp(socket, port); }
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
-        result = __listen(socket, 128);
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
+        unsafe { result = __net_bind(socket, port); }
+        if (result < 0) {
+            const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));
+        }
+        result = __listen(socket, backlog);
+        if (result < 0) {
+            const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));
+        }
         ret Ok(TcpListener { socket: socket });
     }
 
@@ -252,54 +467,502 @@ impl TcpListener {
         ret Ok(TcpStream { socket: socket });
     }
 
-    pub fn close(self: TcpListener) void { __close(self.socket); }
+    pub fn close(self: TcpListener) void { __close(self.socket); self.socket = -1; }
+    pub fn free(self: TcpListener) void { self.close(); }
+    pub fn handle(self: TcpListener) isize { ret self.socket; }
+}
+
+pub struct UdpDatagram { data: String, address: SocketAddress, }
+
+impl UdpDatagram {
+    pub fn text(self: UdpDatagram) str { ret self.data.as_str(); }
+    pub fn address(self: UdpDatagram) SocketAddress { ret self.address; }
+}
+
+pub struct UdpSocket { socket: isize, }
+
+impl UdpSocket {
+    pub fn bind(port: i32) Result[UdpSocket, NetError] {
+        if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
+        const socket: isize = __socket(2, 17);
+        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        var result: i32 = 0;
+        unsafe { result = __net_bind(socket, port); }
+        if (result < 0) {
+            const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));
+        }
+        ret Ok(UdpSocket { socket: socket });
+    }
+
+    pub fn connect(host: str, port: i32) Result[UdpSocket, NetError] {
+        const requested: Result[SocketAddress, NetError] = SocketAddress.new(host, port);
+        if (requested.is_err()) { ret Err(requested.unwrap_err()); }
+        const unresolved: SocketAddress = requested.unwrap();
+        const address: Result[SocketAddress, NetError] = unresolved.resolve();
+        if (address.is_err()) { ret Err(address.unwrap_err()); }
+        const numeric: SocketAddress = address.unwrap();
+        const socket: isize = __socket(2, 17);
+        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        var result: i32 = 0;
+        unsafe { result = __net_connect(socket, numeric.host(), port); }
+        if (result < 0) {
+            const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));
+        }
+        ret Ok(UdpSocket { socket: socket });
+    }
+
+    pub fn send(self: UdpSocket, text: str) Result[usize, NetError] {
+        var result: isize = 0;
+        unsafe { result = __send(self.socket, core.str_as_ptr(text), text.bytes_len()); }
+        if (result < 0) { ret Err(__net_error(__error(result as i32))); }
+        ret Ok(result as usize);
+    }
+
+    pub fn send_to(self: UdpSocket, text: str, address: SocketAddress) Result[usize, NetError] {
+        const encoded: Result[*u8, NetError] = __sockaddr(address);
+        if (encoded.is_err()) { ret Err(encoded.unwrap_err()); }
+        const raw_address: *u8 = encoded.unwrap();
+        var result: isize = 0;
+        unsafe {
+            @cfg(target_os = "linux") {
+                result = unix.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
+            }
+            @cfg(target_os = "windows") {
+                result = win32_core.send_to_socket(self.socket as usize, core.str_as_ptr(text), text.bytes_len() as i32, 0, raw_address, 16) as isize;
+            }
+            core.free(raw_address);
+        }
+        if (result < 0) { ret Err(__net_error(__error(result as i32))); }
+        ret Ok(result as usize);
+    }
+
+    pub fn receive(self: UdpSocket, limit: usize) Result[String, NetError] {
+        if (limit == 0) { ret Ok(String.new()); }
+        var data: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); }
+        if (data == 0) { ret Err(NetError.AllocationFailed); }
+        var count: isize = 0;
+        unsafe { count = __recv(self.socket, data, limit); }
+        if (count < 0) { unsafe { core.free(data); } ret Err(__net_error(__error(count as i32))); }
+        unsafe { *(data + count as usize) = 0; }
+        var text: String = String.new();
+        unsafe { text = String.from_raw(data, count as usize, limit + 1); }
+        ret Ok(text);
+    }
+
+    pub fn receive_from(self: UdpSocket, limit: usize) Result[UdpDatagram, NetError] {
+        if (limit == 0) { ret Err(NetError.MessageTooLarge); }
+        var data: *u8 = 0;
+        var raw_address: *u8 = 0;
+        var raw_length: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); raw_address = core.malloc(16); raw_length = core.malloc(4); }
+        if (data == 0 || raw_address == 0 || raw_length == 0) {
+            if (data != 0) { unsafe { core.free(data); } }
+            if (raw_address != 0) { unsafe { core.free(raw_address); } }
+            if (raw_length != 0) { unsafe { core.free(raw_length); } }
+            ret Err(NetError.AllocationFailed);
+        }
+        unsafe { *(raw_length as *u32) = 16; }
+        var count: isize = 0;
+        unsafe {
+            @cfg(target_os = "linux") {
+                count = unix.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
+            }
+            @cfg(target_os = "windows") {
+                count = win32_core.receive_from_socket(self.socket as usize, data, limit as i32, 0, raw_address, raw_length as *i32) as isize;
+            }
+        }
+        if (count < 0) {
+            unsafe { core.free(data); core.free(raw_address); core.free(raw_length); }
+            ret Err(__net_error(__error(count as i32)));
+        }
+        var raw_ip: u32 = 0;
+        var raw_port: u16 = 0;
+        unsafe { raw_ip = *((raw_address + 4) as *u32); raw_port = *((raw_address + 2) as *u16); }
+        const port: i32 = (((raw_port << 8) | (raw_port >> 8)) as i32);
+        var host: String = String.from((raw_ip & 255).to_string());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 8) & 255).to_string());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 16) & 255).to_string());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 24) & 255).to_string());
+        unsafe { *(data + count as usize) = 0; core.free(raw_address); core.free(raw_length); }
+        var text: String = String.new();
+        unsafe { text = String.from_raw(data, count as usize, limit + 1); }
+        ret Ok(UdpDatagram { data: text, address: SocketAddress { host: host, port: port } });
+    }
+
+    pub fn close(self: UdpSocket) void { __close(self.socket); self.socket = -1; }
+    pub fn free(self: UdpSocket) void { self.close(); }
+    pub fn handle(self: UdpSocket) isize { ret self.socket; }
+}
+
+pub struct Header { name: String, value: String, }
+
+impl Header {
+    pub fn new(name: str, value: str) Header {
+        ret Header { name: String.from(name), value: String.from(value) };
+    }
+    pub fn name(self: Header) str { ret self.name.as_str(); }
+    pub fn value(self: Header) str { ret self.value.as_str(); }
+}
+
+pub struct Headers { items: Array[Header], }
+
+impl Headers {
+    pub fn new() Headers { ret Headers { items: Array.new() }; }
+    pub fn append(self: Headers, name: str, value: str) void { self.items.push(Header.new(name, value)); }
+    pub fn set(self: Headers, name: str, value: str) void {
+        const needle: String = name.to_lowercase();
+        for i : 0..self.items.len() {
+            const current: String = self.items[i].name().to_lowercase();
+            if (current == needle) { self.items.set(i, Header.new(name, value)); ret; }
+        }
+        self.append(name, value);
+    }
+    pub fn get(self: Headers, name: str) Option[str] {
+        const needle: String = name.to_lowercase();
+        for i : 0..self.items.len() {
+            const header: Header = self.items[i];
+            const current: String = header.name().to_lowercase();
+            if (current == needle) { ret Some(header.value()); }
+        }
+        ret None;
+    }
+    pub fn contains(self: Headers, name: str) bool { ret self.get(name).is_some(); }
+    pub fn len(self: Headers) usize { ret self.items.len(); }
+    pub fn get_at(self: Headers, index: usize) Header { ret self.items[index]; }
+    pub fn encode(self: Headers) String {
+        var output: String = String.new();
+        for i : 0..self.items.len() {
+            const header: Header = self.items[i];
+            output = output.push_str(header.name()); output = output.push_str(": ");
+            output = output.push_str(header.value()); output = output.push_str("\r\n");
+        }
+        ret output;
+    }
+}
+
+fn __parse_headers(block: str) Result[Headers, NetError] {
+    var headers: Headers = Headers.new();
+    var offset: usize = 0;
+    for (offset < block.bytes_len()) {
+        const remaining: String = block[offset as isize:];
+        const found: Option[usize] = remaining.find("\r\n");
+        var end: usize = block.bytes_len();
+        if (found.is_some()) { end = offset + found.unwrap(); }
+        if (end == offset) { break; }
+        const line: String = block[offset as isize:end as isize];
+        const colon: Option[usize] = line.find(":");
+        if (colon.is_none()) { ret Err(NetError.InvalidHttp); }
+        const split: usize = colon.unwrap();
+        const name: String = line[0:split as isize];
+        const value: String = line[(split + 1) as isize:];
+        const trimmed: String = value.trim();
+        headers.append(name.as_str(), trimmed.as_str());
+        if (found.is_none()) { break; }
+        offset = end + 2;
+    }
+    ret Ok(headers);
+}
+
+fn __hex_size(text: str) Result[usize, NetError] {
+    var value: usize = 0;
+    var digits: usize = 0;
+    for i : 0..text.bytes_len() {
+        const byte: u8 = core.str_byte_at(text, i);
+        if (byte == 59) { break; }
+        var digit: usize = 16;
+        if (byte >= 48 && byte <= 57) { digit = (byte - 48) as usize; }
+        else if (byte >= 65 && byte <= 70) { digit = (byte - 65 + 10) as usize; }
+        else if (byte >= 97 && byte <= 102) { digit = (byte - 97 + 10) as usize; }
+        if (digit >= 16) { ret Err(NetError.InvalidHttp); }
+        value = value * 16 + digit;
+        digits++;
+    }
+    if (digits == 0) { ret Err(NetError.InvalidHttp); }
+    ret Ok(value);
+}
+
+fn __decode_chunked(body: str, limit: usize) Result[String, NetError] {
+    var output: String = String.new();
+    var offset: usize = 0;
+    for (true) {
+        if (offset >= body.bytes_len()) { ret Err(NetError.InvalidHttp); }
+        const remaining: String = body[offset as isize:];
+        const found: Option[usize] = remaining.find("\r\n");
+        if (found.is_none()) { ret Err(NetError.InvalidHttp); }
+        const line_length: usize = found.unwrap();
+        const line: String = remaining[0:line_length as isize];
+        const parsed: Result[usize, NetError] = __hex_size(line.as_str());
+        if (parsed.is_err()) { ret Err(parsed.unwrap_err()); }
+        const size: usize = parsed.unwrap();
+        const data_start: usize = offset + line_length + 2;
+        if (size == 0) { ret Ok(output); }
+        if (size > limit || output.bytes_len() > limit - size) { ret Err(NetError.LimitExceeded); }
+        const data_end: usize = data_start + size;
+        if (data_end + 2 > body.bytes_len()) { ret Err(NetError.InvalidHttp); }
+        if (core.str_byte_at(body, data_end) != 13 || core.str_byte_at(body, data_end + 1) != 10) {
+            ret Err(NetError.InvalidHttp);
+        }
+        const chunk: String = body[data_start as isize:data_end as isize];
+        output = output.push_str(chunk.as_str());
+        offset = data_end + 2;
+    }
+    ret Ok(output);
+}
+
+pub enum HttpMethod { Get, Head, Post, Put, Patch, Delete, Options, Connect, Trace }
+
+impl HttpMethod {
+    pub fn name(self: HttpMethod) str {
+        ret match self {
+            HttpMethod.Get => "GET", HttpMethod.Head => "HEAD", HttpMethod.Post => "POST",
+            HttpMethod.Put => "PUT", HttpMethod.Patch => "PATCH", HttpMethod.Delete => "DELETE",
+            HttpMethod.Options => "OPTIONS", HttpMethod.Connect => "CONNECT", HttpMethod.Trace => "TRACE",
+        };
+    }
+}
+
+pub struct Url { scheme: String, host: String, port: i32, path: String, }
+
+impl Url {
+    pub fn parse(text: str) Result[Url, NetError] {
+        const separator: Option[usize] = text.find("://");
+        if (separator.is_none()) { ret Err(NetError.InvalidUrl); }
+        const scheme_end: usize = separator.unwrap();
+        const scheme: String = text[0:scheme_end as isize];
+        if (scheme != "http" && scheme != "https") { ret Err(NetError.InvalidUrl); }
+        const authority_start: usize = scheme_end + 3;
+        const rest: String = text[authority_start as isize:];
+        const slash: Option[usize] = rest.find("/");
+        var authority_end: usize = text.bytes_len();
+        var path: String = String.from("/");
+        if (slash.is_some()) {
+            authority_end = authority_start + slash.unwrap();
+            path = text[authority_end as isize:];
+        }
+        const authority: String = text[authority_start as isize:authority_end as isize];
+        if (authority.is_empty()) { ret Err(NetError.InvalidUrl); }
+        const colon: Option[usize] = authority.find(":");
+        var host: String = String.from(authority.as_str());
+        var port: i32 = 80;
+        if (scheme == "https") { port = 443; }
+        if (colon.is_some()) {
+            const split: usize = colon.unwrap();
+            host = authority[0:split as isize];
+            const port_text: String = authority[(split + 1) as isize:];
+            const parsed: Result[i32, ParseError] = port_text.parse_i32();
+            if (parsed.is_err()) { ret Err(NetError.InvalidPort); }
+            port = parsed.unwrap();
+        }
+        if (host.is_empty() || port < 0 || port > 65535) { ret Err(NetError.InvalidUrl); }
+        ret Ok(Url { scheme: scheme, host: host, port: port, path: path });
+    }
+    pub fn scheme(self: Url) str { ret self.scheme.as_str(); }
+    pub fn host(self: Url) str { ret self.host.as_str(); }
+    pub fn port(self: Url) i32 { ret self.port; }
+    pub fn path(self: Url) str { ret self.path.as_str(); }
+}
+
+pub struct HttpRequest {
+    method: String,
+    target: String,
+    host: String,
+    headers: Headers,
+    body: String,
+    response_limit: usize,
+}
+
+impl HttpRequest {
+    pub fn new(method: str, target: str, host: str) HttpRequest {
+        ret HttpRequest {
+            method: String.from(method), target: String.from(target), host: String.from(host),
+            headers: Headers.new(), body: String.new(), response_limit: 16 * 1024 * 1024,
+        };
+    }
+    pub fn with_method(method: HttpMethod, target: str, host: str) HttpRequest {
+        ret HttpRequest.new(method.name(), target, host);
+    }
+    pub fn from_url(method: HttpMethod, url: Url) HttpRequest {
+        ret HttpRequest.with_method(method, url.path(), url.host());
+    }
+    pub fn header(self: HttpRequest, name: str, value: str) HttpRequest {
+        self.headers.set(name, value); ret self;
+    }
+    pub fn body(self: HttpRequest, body: str) HttpRequest { self.body = String.from(body); ret self; }
+    pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest { self.response_limit = limit; ret self; }
+    pub fn method(self: HttpRequest) str { ret self.method.as_str(); }
+    pub fn target(self: HttpRequest) str { ret self.target.as_str(); }
+    pub fn host(self: HttpRequest) str { ret self.host.as_str(); }
+    pub fn headers(self: HttpRequest) Headers { ret self.headers; }
+    pub fn body_text(self: HttpRequest) str { ret self.body.as_str(); }
+    pub fn encode(self: HttpRequest) String {
+        var headers: Headers = self.headers;
+        if (!headers.contains("Host")) { headers.append("Host", self.host.as_str()); }
+        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_string()); }
+        if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
+        var output: String = String.from(self.method.as_str());
+        output = output.push_str(" "); output = output.push_str(self.target.as_str());
+        output = output.push_str(" HTTP/1.1\r\n");
+        const encoded_headers: String = headers.encode();
+        output = output.push_str(encoded_headers.as_str()); output = output.push_str("\r\n");
+        output = output.push_str(self.body.as_str());
+        ret output;
+    }
+    pub fn send(self: HttpRequest, port: i32) Result[HttpResponse, NetError] {
+        const connected: Result[TcpStream, NetError] = TcpStream.connect(self.host.as_str(), port);
+        if (connected.is_err()) { ret Err(connected.unwrap_err()); }
+        const stream: TcpStream = connected.unwrap();
+        const encoded: String = self.encode();
+        const sent: Result[usize, NetError] = stream.send(encoded.as_str());
+        if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
+        const received: Result[String, NetError] = stream.receive_all(self.response_limit);
+        stream.close();
+        if (received.is_err()) { ret Err(received.unwrap_err()); }
+        ret HttpResponse.parse(received.unwrap());
+    }
+    pub fn send_url(self: HttpRequest, url: Url) Result[HttpResponse, NetError] {
+        if (url.scheme() == "https") { ret Err(NetError.TlsUnavailable); }
+        ret self.send(url.port());
+    }
+    pub fn parse(raw: String) Result[HttpRequest, NetError] {
+        const split: Option[usize] = raw.find("\r\n\r\n");
+        if (split.is_none()) { ret Err(NetError.InvalidHttp); }
+        const head_end: usize = split.unwrap();
+        const head: String = raw[0:head_end as isize];
+        const line_end: Option[usize] = head.find("\r\n");
+        if (line_end.is_none()) { ret Err(NetError.InvalidHttp); }
+        const line_index: usize = line_end.unwrap();
+        const first: String = head[0:line_index as isize];
+        const first_space: Option[usize] = first.find(" ");
+        if (first_space.is_none()) { ret Err(NetError.InvalidHttp); }
+        const method_end: usize = first_space.unwrap();
+        const rest: String = first[(method_end + 1) as isize:];
+        const second_space: Option[usize] = rest.find(" ");
+        if (second_space.is_none()) { ret Err(NetError.InvalidHttp); }
+        const method: String = first[0:method_end as isize];
+        const target_end: usize = second_space.unwrap();
+        const target: String = rest[0:target_end as isize];
+        const version: String = rest[(target_end + 1) as isize:];
+        if (version != "HTTP/1.1" && version != "HTTP/1.0") { ret Err(NetError.InvalidHttp); }
+        const header_block: String = head[(line_index + 2) as isize:];
+        const parsed_headers: Result[Headers, NetError] = __parse_headers(header_block.as_str());
+        if (parsed_headers.is_err()) { ret Err(parsed_headers.unwrap_err()); }
+        const headers: Headers = parsed_headers.unwrap();
+        var host: String = String.new();
+        const host_value: Option[str] = headers.get("Host");
+        if (host_value.is_some()) { host = String.from(host_value.unwrap()); }
+        const body: String = raw[(head_end + 4) as isize:];
+        ret Ok(HttpRequest {
+            method: method, target: target, host: host, headers: headers, body: body,
+            response_limit: 16 * 1024 * 1024,
+        });
+    }
 }
 
 pub struct HttpResponse {
     status: i32,
-    reason: str,
-    body: str,
-    content_type: str,
+    reason: String,
+    headers: Headers,
+    body: String,
 }
 
 impl HttpResponse {
+    pub fn new(status: i32, reason: str, body: str) HttpResponse {
+        ret HttpResponse { status: status, reason: String.from(reason), headers: Headers.new(), body: String.from(body) };
+    }
     pub fn text(status: i32, body: str) HttpResponse {
         var reason: str = "OK";
         if (status == 201) { reason = "Created"; }
+        else if (status == 204) { reason = "No Content"; }
         else if (status == 400) { reason = "Bad Request"; }
+        else if (status == 401) { reason = "Unauthorized"; }
+        else if (status == 403) { reason = "Forbidden"; }
         else if (status == 404) { reason = "Not Found"; }
         else if (status == 500) { reason = "Internal Server Error"; }
-        ret HttpResponse { status: status, reason: reason, body: body, content_type: "text/plain; charset=utf-8" };
+        var response: HttpResponse = HttpResponse.new(status, reason, body);
+        response.headers.append("Content-Type", "text/plain; charset=utf-8");
+        ret response;
     }
-
+    pub fn header(self: HttpResponse, name: str, value: str) HttpResponse { self.headers.set(name, value); ret self; }
+    pub fn status(self: HttpResponse) i32 { ret self.status; }
+    pub fn reason(self: HttpResponse) str { ret self.reason.as_str(); }
+    pub fn headers(self: HttpResponse) Headers { ret self.headers; }
+    pub fn body(self: HttpResponse) str { ret self.body.as_str(); }
     pub fn encode(self: HttpResponse) String {
+        var headers: Headers = self.headers;
+        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_string()); }
+        if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
         var output: String = String.from("HTTP/1.1 ");
-        output = output.push_str(self.status.to_string());
-        output = output.push_str(" ");
-        output = output.push_str(self.reason);
-        output = output.push_str("\r\nContent-Type: ");
-        output = output.push_str(self.content_type);
-        output = output.push_str("\r\nContent-Length: ");
-        output = output.push_str(self.body.bytes_len().to_string());
-        output = output.push_str("\r\nConnection: close\r\n\r\n");
-        output = output.push_str(self.body);
+        output = output.push_str(self.status.to_string()); output = output.push_str(" ");
+        output = output.push_str(self.reason.as_str()); output = output.push_str("\r\n");
+        const encoded_headers: String = headers.encode();
+        output = output.push_str(encoded_headers.as_str()); output = output.push_str("\r\n");
+        output = output.push_str(self.body.as_str());
         ret output;
+    }
+    pub fn parse(raw: String) Result[HttpResponse, NetError] {
+        const split: Option[usize] = raw.find("\r\n\r\n");
+        if (split.is_none()) { ret Err(NetError.InvalidHttp); }
+        const head_end: usize = split.unwrap();
+        const head: String = raw[0:head_end as isize];
+        const line_end: Option[usize] = head.find("\r\n");
+        if (line_end.is_none()) { ret Err(NetError.InvalidHttp); }
+        const line_index: usize = line_end.unwrap();
+        const status_line: String = head[0:line_index as isize];
+        const first_space: Option[usize] = status_line.find(" ");
+        if (first_space.is_none()) { ret Err(NetError.InvalidHttp); }
+        const status_start: usize = first_space.unwrap() + 1;
+        const rest: String = status_line[status_start as isize:];
+        const second_space: Option[usize] = rest.find(" ");
+        if (second_space.is_none()) { ret Err(NetError.InvalidHttp); }
+        const reason_start: usize = second_space.unwrap() + 1;
+        const code_text: String = rest[0:(reason_start - 1) as isize];
+        const parsed_code: Result[i32, ParseError] = code_text.parse_i32();
+        if (parsed_code.is_err()) { ret Err(NetError.InvalidHttp); }
+        const reason: String = rest[reason_start as isize:];
+        const header_block: String = head[(line_index + 2) as isize:];
+        const parsed_headers: Result[Headers, NetError] = __parse_headers(header_block.as_str());
+        if (parsed_headers.is_err()) { ret Err(parsed_headers.unwrap_err()); }
+        const headers: Headers = parsed_headers.unwrap();
+        var body: String = raw[(head_end + 4) as isize:];
+        const transfer: Option[str] = headers.get("Transfer-Encoding");
+        if (transfer.is_some()) {
+            const transfer_value: str = transfer.unwrap();
+            const encoding: String = transfer_value.to_lowercase();
+            if (encoding.contains("chunked")) {
+                const decoded: Result[String, NetError] = __decode_chunked(body.as_str(), 16 * 1024 * 1024);
+                if (decoded.is_err()) { ret Err(decoded.unwrap_err()); }
+                body = decoded.unwrap();
+            }
+        }
+        const content_length: Option[str] = headers.get("Content-Length");
+        if (content_length.is_some()) {
+            const length_value: str = content_length.unwrap();
+            const length_text: String = String.from(length_value);
+            const expected: Result[usize, ParseError] = length_text.parse_usize();
+            if (expected.is_err()) { ret Err(NetError.InvalidHttp); }
+            const expected_length: usize = expected.unwrap();
+            if (body.bytes_len() < expected_length) { ret Err(NetError.InvalidHttp); }
+        }
+        ret Ok(HttpResponse { status: parsed_code.unwrap(), reason: reason, headers: headers, body: body });
     }
 }
 
 pub struct HttpConnection { stream: TcpStream, }
 
 impl HttpConnection {
-    pub fn read_request(self: HttpConnection, limit: usize) Result[String, NetError] {
-        ret self.stream.receive(limit);
+    pub fn read(self: HttpConnection, limit: usize) Result[HttpRequest, NetError] {
+        const raw: Result[String, NetError] = self.stream.receive(limit);
+        if (raw.is_err()) { ret Err(raw.unwrap_err()); }
+        ret HttpRequest.parse(raw.unwrap());
     }
-
+    pub fn read_request(self: HttpConnection, limit: usize) Result[String, NetError] { ret self.stream.receive(limit); }
     pub fn respond(self: HttpConnection, response: HttpResponse) Result[usize, NetError] {
         const encoded: String = response.encode();
         const result: Result[usize, NetError] = self.stream.send(encoded.as_str());
-        self.stream.close();
-        ret result;
+        self.stream.close(); ret result;
     }
+    pub fn close(self: HttpConnection) void { self.stream.close(); }
 }
 
 pub struct HttpServer { listener: TcpListener, }
@@ -310,55 +973,40 @@ impl HttpServer {
         if (listener.is_err()) { ret Err(listener.unwrap_err()); }
         ret Ok(HttpServer { listener: listener.unwrap() });
     }
-
     pub fn accept(self: HttpServer) Result[HttpConnection, NetError] {
         const stream: Result[TcpStream, NetError] = self.listener.accept();
         if (stream.is_err()) { ret Err(stream.unwrap_err()); }
         ret Ok(HttpConnection { stream: stream.unwrap() });
     }
-
     pub fn close(self: HttpServer) void { self.listener.close(); }
-
-    // Accept one request, send one response, close client and listener.
+    pub fn free(self: HttpServer) void { self.close(); }
     pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, NetError] {
-        const client_socket: isize = __accept(self.listener.socket);
-        if (client_socket < 0) { self.listener.close(); ret Err(__net_error(client_socket as i32)); }
-        const stream: TcpStream = TcpStream { socket: client_socket };
-        const request: Result[String, NetError] = stream.receive(limit);
-        if (request.is_err()) { stream.close(); self.listener.close(); ret Err(request.unwrap_err()); }
-        const encoded: String = response.encode();
-        const sent: Result[usize, NetError] = stream.send(encoded.as_str());
-        stream.close();
-        self.listener.close();
+        const connection: Result[HttpConnection, NetError] = self.accept();
+        if (connection.is_err()) { self.close(); ret Err(connection.unwrap_err()); }
+        const client: HttpConnection = connection.unwrap();
+        const request: Result[String, NetError] = client.read_request(limit);
+        if (request.is_err()) { client.close(); self.close(); ret Err(request.unwrap_err()); }
+        const sent: Result[usize, NetError] = client.respond(response);
+        self.close();
         if (sent.is_err()) { ret Err(sent.unwrap_err()); }
         ret request;
     }
 }
 
-pub fn http_request(ip: str, port: i32, method: str, path: str, body: str) Result[String, NetError] {
-    const connected: Result[TcpStream, NetError] = TcpStream.connect(ip, port);
-    if (connected.is_err()) { ret Err(connected.unwrap_err()); }
-    const stream: TcpStream = connected.unwrap();
-    var request: String = String.from(method);
-    request = request.push_str(" ");
-    request = request.push_str(path);
-    request = request.push_str(" HTTP/1.1\r\nHost: ");
-    request = request.push_str(ip);
-    request = request.push_str("\r\nContent-Length: ");
-    request = request.push_str(body.bytes_len().to_string());
-    request = request.push_str("\r\nConnection: close\r\n\r\n");
-    request = request.push_str(body);
-    const sent: Result[usize, NetError] = stream.send(request.as_str());
-    if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
-    const response: Result[String, NetError] = stream.receive(1024 * 1024);
-    stream.close();
-    ret response;
+// Compatibility helpers. New code should construct HttpRequest and inspect HttpResponse.
+pub fn http_request(host: str, port: i32, method: str, path: str, body: str) Result[String, NetError] {
+    var request: HttpRequest = HttpRequest.new(method, path, host);
+    request = request.body(body);
+    const response: Result[HttpResponse, NetError] = request.send(port);
+    if (response.is_err()) { ret Err(response.unwrap_err()); }
+    const completed: HttpResponse = response.unwrap();
+    ret Ok(String.from(completed.body()));
 }
 
-pub fn http_get(ip: str, port: i32, path: str) Result[String, NetError] {
-    ret http_request(ip, port, "GET", path, "");
+pub fn http_get(host: str, port: i32, path: str) Result[String, NetError] {
+    ret http_request(host, port, "GET", path, "");
 }
 
-pub fn http_post(ip: str, port: i32, path: str, body: str) Result[String, NetError] {
-    ret http_request(ip, port, "POST", path, body);
+pub fn http_post(host: str, port: i32, path: str, body: str) Result[String, NetError] {
+    ret http_request(host, port, "POST", path, body);
 }

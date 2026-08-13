@@ -1,0 +1,116 @@
+// std.dylib — explicit runtime loading of native shared libraries.
+// Symbols are untyped addresses. Cast them to an @repr(C) callback only inside
+// unsafe code, while this DynamicLibrary remains open.
+import std.ffi.{c_char, CString, CStringError};
+import std.win32_core;
+
+@cfg(target_os = "linux")
+@api("dlopen")
+unsafe fn __linux_open(path: *c_char, flags: i32) usize;
+
+@cfg(target_os = "linux")
+@api("dlsym")
+unsafe fn __linux_symbol(library: usize, name: *c_char) usize;
+
+@cfg(target_os = "linux")
+@api("dlclose")
+unsafe fn __linux_close(library: usize) i32;
+
+pub enum DynamicLibraryError {
+    InvalidName(usize),
+    AllocationFailed,
+    OpenFailed,
+    SymbolNotFound,
+    Native(i32),
+}
+
+impl DynamicLibraryError {
+    pub fn message(self: DynamicLibraryError) str {
+        ret match self {
+            DynamicLibraryError.InvalidName(_) => "dynamic library path or symbol contains NUL",
+            DynamicLibraryError.AllocationFailed => "dynamic library name allocation failed",
+            DynamicLibraryError.OpenFailed => "dynamic library could not be opened",
+            DynamicLibraryError.SymbolNotFound => "dynamic library symbol was not found",
+            DynamicLibraryError.Native(_) => "native dynamic library operation failed",
+        };
+    }
+}
+
+fn __name_error(error: CStringError) DynamicLibraryError {
+    ret match error {
+        CStringError.InteriorNul(index) => DynamicLibraryError.InvalidName(index),
+        CStringError.AllocationFailed => DynamicLibraryError.AllocationFailed,
+    };
+}
+
+pub struct DynamicLibrary {
+    handle: usize,
+}
+
+impl DynamicLibrary {
+    pub fn open(path: str) Result[DynamicLibrary, DynamicLibraryError] {
+        const encoded: Result[CString, CStringError] = CString.try_from_str(path);
+        if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
+        const name: CString = encoded.unwrap();
+        var handle: usize = 0;
+        unsafe {
+            @cfg(target_os = "windows") { handle = win32_core.load_library(name.as_ptr()); }
+            @cfg(target_os = "linux") { handle = __linux_open(name.as_ptr(), 2); }
+        }
+        name.free();
+        if (handle == 0) {
+            @cfg(target_os = "windows") {
+                var code: i32 = 0;
+                unsafe { code = win32_core.last_error() as i32; }
+                ret Err(DynamicLibraryError.Native(code));
+            }
+            ret Err(DynamicLibraryError.OpenFailed);
+        }
+        ret Ok(DynamicLibrary { handle: handle });
+    }
+
+    // Address stays valid only while the library remains open. Cast to an
+    // exact @repr(C) callback signature before invoking it.
+    pub unsafe fn symbol(self: DynamicLibrary, name: str) Result[usize, DynamicLibraryError] {
+        const encoded: Result[CString, CStringError] = CString.try_from_str(name);
+        if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
+        const symbol_name: CString = encoded.unwrap();
+        var address: usize = 0;
+        @cfg(target_os = "windows") {
+            address = win32_core.library_symbol(self.handle, symbol_name.as_ptr());
+        }
+        @cfg(target_os = "linux") {
+            address = __linux_symbol(self.handle, symbol_name.as_ptr());
+        }
+        symbol_name.free();
+        if (address == 0) { ret Err(DynamicLibraryError.SymbolNotFound); }
+        ret Ok(address);
+    }
+
+    pub fn close(self: DynamicLibrary) Result[bool, DynamicLibraryError] {
+        if (self.handle == 0) { ret Ok(false); }
+        var result: i32 = 0;
+        unsafe {
+            @cfg(target_os = "windows") { result = win32_core.free_library(self.handle); }
+            @cfg(target_os = "linux") { result = __linux_close(self.handle); }
+        }
+        @cfg(target_os = "windows") {
+            if (result == 0) {
+                var code: i32 = 0;
+                unsafe { code = win32_core.last_error() as i32; }
+                ret Err(DynamicLibraryError.Native(code));
+            }
+        }
+        @cfg(target_os = "linux") {
+            if (result != 0) { ret Err(DynamicLibraryError.Native(result)); }
+        }
+        self.handle = 0;
+        ret Ok(true);
+    }
+
+    pub fn free(self: DynamicLibrary) void {
+        const ignored: Result[bool, DynamicLibraryError] = self.close();
+    }
+
+    pub fn raw_handle(self: DynamicLibrary) usize { ret self.handle; }
+}

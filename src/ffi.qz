@@ -100,6 +100,30 @@ impl CString {
         ret Ok(CString { ptr: raw, len: length });
     }
 
+    // Checked construction from UTF-8 text. Unlike from_unchecked, this keeps
+    // the stored byte length and rejects embedded NUL bytes.
+    pub fn try_from_str(value: str) Result[CString, CStringError] {
+        const length: usize = value.bytes_len();
+        for i : 0..length {
+            if (core.str_byte_at(value, i) == 0) {
+                ret Err(CStringError.InteriorNul(i));
+            }
+        }
+
+        var raw: *u8 = 0;
+        unsafe {
+            raw = core.malloc(length + 1);
+            if (raw == 0) {
+                ret Err(CStringError.AllocationFailed);
+            }
+            for i : 0..length {
+                *(raw + i) = core.str_byte_at(value, i);
+            }
+            *(raw + length) = 0;
+        }
+        ret Ok(CString { ptr: raw, len: length });
+    }
+
     // Legacy str has no stored byte length, so embedded NUL cannot be detected.
     // Keep this constructor explicit and unsafe rather than claiming it is checked.
     pub unsafe fn from_unchecked(text: str) CString {

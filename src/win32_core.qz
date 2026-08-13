@@ -108,3 +108,27 @@ pub unsafe fn send_socket(socket: usize, data: *u8, length: i32, flags: i32) i32
 
 @api("recv")
 pub unsafe fn receive_socket(socket: usize, data: *u8, length: i32, flags: i32) i32;
+
+@api("sendto")
+pub unsafe fn send_to_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: i32) i32;
+
+@api("recvfrom")
+pub unsafe fn receive_from_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: *i32) i32;
+
+@api("shutdown")
+pub unsafe fn shutdown_socket(socket: usize, how: i32) i32;
+
+@api("LoadLibraryA")
+pub unsafe fn load_library(path: *i8) usize;
+
+@api("GetProcAddress")
+pub unsafe fn library_symbol(library: usize, name: *i8) usize;
+
+@api("FreeLibrary")
+pub unsafe fn free_library(library: usize) i32;
+
+@api("getaddrinfo")
+pub unsafe fn get_address_info(node: *i8, service: *i8, hints: *u8, result: **u8) i32;
+
+@api("freeaddrinfo")
+pub unsafe fn free_address_info(result: *u8) void;
