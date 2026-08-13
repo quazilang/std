@@ -11,6 +11,7 @@ This repository contains the core modules, abstractions, and platform-specific b
 - `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
+- `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
 - `os`: Cross-platform host, memory, process, and environment information.
 - `thread`: Threading and concurrency primitives.

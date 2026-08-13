@@ -13,3 +13,4 @@ pub import os;
 pub import thread;
 pub import ffi;
 pub import math;
+pub import random;

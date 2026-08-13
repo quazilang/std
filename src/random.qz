@@ -1,0 +1,137 @@
+// std.random — operating-system-backed secure random helpers.
+//
+// The compiler lowers these private intrinsics to the host OS CSPRNG. Calls
+// fail explicitly when secure system entropy is unavailable. Range selection
+// uses rejection sampling, never modulo bias.
+
+@intrinsic("quazi.random.system_u64")
+unsafe fn __system_u64(output: *u64) bool;
+
+@intrinsic("quazi.random.system_f64")
+unsafe fn __system_f64(output: *f64) bool;
+
+pub enum RandomError {
+    Unavailable,
+    InvalidRange,
+    EmptyCollection,
+    InvalidProbability,
+}
+
+impl RandomError {
+    pub fn message(self: RandomError) str {
+        ret match self {
+            RandomError.Unavailable => "secure system random is unavailable",
+            RandomError.InvalidRange => "random range is empty or reversed",
+            RandomError.EmptyCollection => "cannot choose from an empty collection",
+            RandomError.InvalidProbability => "probability must be between 0.0 and 1.0",
+        };
+    }
+}
+
+pub fn next_u64() Result[u64, RandomError] {
+    var value: u64 = 0;
+    var available: bool = false;
+    unsafe { available = __system_u64(&value); }
+    if (!available) { ret Err(RandomError.Unavailable); }
+    ret Ok(value);
+}
+
+pub fn next_u32() Result[u32, RandomError] {
+    ret Ok((next_u64()? >> 32) as u32);
+}
+
+pub fn next_u8() Result[u8, RandomError] {
+    ret Ok(next_u64()? as u8);
+}
+
+pub fn next_i64() Result[i64, RandomError] {
+    ret Ok(next_u64()? as i64);
+}
+
+pub fn next_i32() Result[i32, RandomError] {
+    ret Ok(next_u64()? as i32);
+}
+
+pub fn boolean() Result[bool, RandomError] {
+    ret Ok((next_u64()? & 1) == 1);
+}
+
+// Uniform f64 in [0.0, 1.0), using 53 random mantissa bits.
+pub fn float() Result[f64, RandomError] {
+    var value: f64 = 0.0;
+    var available: bool = false;
+    unsafe { available = __system_f64(&value); }
+    if (!available) { ret Err(RandomError.Unavailable); }
+    ret Ok(value);
+}
+
+pub fn chance(probability: f64) Result[bool, RandomError] {
+    if (probability < 0.0 || probability > 1.0) {
+        ret Err(RandomError.InvalidProbability);
+    }
+    if (probability == 0.0) { ret Ok(false); }
+    if (probability == 1.0) { ret Ok(true); }
+    ret Ok(float()? < probability);
+}
+
+// Uniform integer from an exclusive (`a..b`) or inclusive (`a..=b`) Range.
+pub fn range(bounds: Range) Result[i64, RandomError] {
+    const sign_bit: u64 = (1 as u64) << 63;
+    const start: u64 = (bounds.start as u64) ^ sign_bit;
+    const end: u64 = (bounds.end as u64) ^ sign_bit;
+
+    if (bounds.inclusive) {
+        if (start > end) { ret Err(RandomError.InvalidRange); }
+    } else {
+        if (start >= end) { ret Err(RandomError.InvalidRange); }
+    }
+
+    var width: u64 = end - start;
+    if (bounds.inclusive) { width = width + 1; }
+    if (width == 0) { ret Ok((next_u64()? ^ sign_bit) as i64); }
+
+    const threshold: u64 = (0 - width) % width;
+    var value: u64 = next_u64()?;
+    for (value < threshold) { value = next_u64()?; }
+    const selected: u64 = start + (value % width);
+    ret Ok((selected ^ sign_bit) as i64);
+}
+
+pub fn choose[T](items: &Array[T]) Result[T, RandomError] {
+    const collection: Array[T] = *items;
+    if (collection.is_empty()) { ret Err(RandomError.EmptyCollection); }
+    const index: usize = range(0..(collection.len() as i64))? as usize;
+    ret Ok(collection[index]);
+}
+
+// Fisher-Yates shuffle. Array storage is shared, so this mutates the supplied
+// collection and returns it for convenient chaining.
+pub fn shuffle[T](items: Array[T]) Result[Array[T], RandomError] {
+    var remaining: usize = items.len();
+    for (remaining > 1) {
+        const index: usize = range(0..(remaining as i64))? as usize;
+        remaining = remaining - 1;
+        const temporary: T = items[index];
+        items.set(index, items[remaining]);
+        items.set(remaining, temporary);
+    }
+    ret Ok(items);
+}
+
+pub fn random_bytes(count: usize) Result[Array[u8], RandomError] {
+    var output: Array[u8] = Array.new();
+    var index: usize = 0;
+    var word: u64 = 0;
+    var available: usize = 0;
+    for (index < count) {
+        if (available == 0) {
+            word = next_u64()?;
+            available = 8;
+        }
+        output.push((word & 255) as u8);
+        word = word >> 8;
+        available = available - 1;
+        index = index + 1;
+    }
+    ret Ok(output);
+}

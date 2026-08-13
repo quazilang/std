@@ -79,6 +79,10 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   interpolation, exponent, logarithm, and power helpers. Angles use radians;
   approximations must document their accuracy goal and must not add an implicit
   libc/libm dependency.
+- `std.random` provides OS-CSPRNG-backed secure random integers, floats,
+  probabilities, unbiased integer ranges, collection choice/shuffling, and
+  random bytes. It uses the compiler's system-random intrinsic and returns
+  `RandomError.Unavailable` when secure system entropy is unavailable.
 - `std.net` owns cross-platform Linux/Winsock socket handles and exposes complete-send TCP,
   bounded receives, HTTP/1.1 requests, and explicit local-server
   accept/read/respond primitives. HTTPS requires a separate TLS implementation.
