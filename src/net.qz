@@ -3,6 +3,67 @@ import std.core;
 import std.unix;
 import std.win32_core;
 
+pub enum NetError {
+    InvalidAddress,
+    InvalidPort,
+    ConnectionRefused,
+    AddressInUse,
+    AddressNotAvailable,
+    TimedOut,
+    ConnectionReset,
+    NotConnected,
+    WouldBlock,
+    NetworkUnreachable,
+    HostUnreachable,
+    PermissionDenied,
+    BrokenPipe,
+    MessageTooLarge,
+    AllocationFailed,
+    Unsupported,
+    Native(i32),
+}
+
+impl NetError {
+    pub fn message(self: NetError) str {
+        ret match self {
+            NetError.InvalidAddress => "invalid network address",
+            NetError.InvalidPort => "port must be between 0 and 65535",
+            NetError.ConnectionRefused => "connection refused",
+            NetError.AddressInUse => "address already in use",
+            NetError.AddressNotAvailable => "address is not available",
+            NetError.TimedOut => "network operation timed out",
+            NetError.ConnectionReset => "connection reset by peer",
+            NetError.NotConnected => "socket is not connected",
+            NetError.WouldBlock => "network operation would block",
+            NetError.NetworkUnreachable => "network is unreachable",
+            NetError.HostUnreachable => "host is unreachable",
+            NetError.PermissionDenied => "network permission denied",
+            NetError.BrokenPipe => "connection is closed",
+            NetError.MessageTooLarge => "network message is too large",
+            NetError.AllocationFailed => "network buffer allocation failed",
+            NetError.Unsupported => "network operation is unsupported",
+            NetError.Native(_) => "unclassified operating-system network error",
+        };
+    }
+}
+
+fn __net_error(code: i32) NetError {
+    if (code == -111 || code == -10061) { ret NetError.ConnectionRefused; }
+    if (code == -98 || code == -10048) { ret NetError.AddressInUse; }
+    if (code == -99 || code == -10049) { ret NetError.AddressNotAvailable; }
+    if (code == -110 || code == -10060) { ret NetError.TimedOut; }
+    if (code == -104 || code == -10054) { ret NetError.ConnectionReset; }
+    if (code == -107 || code == -10057) { ret NetError.NotConnected; }
+    if (code == -11 || code == -10035) { ret NetError.WouldBlock; }
+    if (code == -101 || code == -10051) { ret NetError.NetworkUnreachable; }
+    if (code == -113 || code == -10065) { ret NetError.HostUnreachable; }
+    if (code == -13 || code == -10013) { ret NetError.PermissionDenied; }
+    if (code == -32 || code == -10058) { ret NetError.BrokenPipe; }
+    if (code == -90 || code == -10040) { ret NetError.MessageTooLarge; }
+    if (code == -22 || code == -10022) { ret NetError.InvalidAddress; }
+    ret NetError.Native(code);
+}
+
 @intrinsic("quazi.net.bind_tcp")
 unsafe fn __net_bind_tcp(socket: isize, port: i32) i32;
 
@@ -124,23 +185,24 @@ fn __error(result: i32) i32 {
 pub struct TcpStream { socket: isize, }
 
 impl TcpStream {
-    pub fn connect(ip: str, port: i32) Result[TcpStream, i32] {
+    pub fn connect(ip: str, port: i32) Result[TcpStream, NetError] {
+        if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         const socket: isize = __socket();
-        if (socket < 0) { ret Err(socket as i32); }
+        if (socket < 0) { ret Err(__net_error(socket as i32)); }
         var result: i32 = 0;
         unsafe { result = __net_connect_tcp(socket, ip, port); }
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
         ret Ok(TcpStream { socket: socket });
     }
 
-    pub fn send(self: TcpStream, text: str) Result[usize, i32] {
+    pub fn send(self: TcpStream, text: str) Result[usize, NetError] {
         const length: usize = text.bytes_len();
         var sent: usize = 0;
         unsafe {
             const data: *u8 = core.str_as_ptr(text);
             for (sent < length) {
                 const count: isize = __send(self.socket, data + sent, length - sent);
-                if (count <= 0) { ret Err(count as i32); }
+                if (count <= 0) { ret Err(__net_error(__error(count as i32))); }
                 sent = sent + count as usize;
             }
         }
@@ -151,14 +213,14 @@ impl TcpStream {
         ret __recv(self.socket, data, length);
     }
 
-    pub fn receive(self: TcpStream, limit: usize) Result[String, i32] {
+    pub fn receive(self: TcpStream, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
         unsafe { data = core.malloc(limit + 1); }
-        if (data == 0) { ret Err(-1); }
+        if (data == 0) { ret Err(NetError.AllocationFailed); }
         var count: isize = 0;
         unsafe { count = __recv(self.socket, data, limit); }
-        if (count < 0) { unsafe { core.free(data); } ret Err(count as i32); }
+        if (count < 0) { unsafe { core.free(data); } ret Err(__net_error(__error(count as i32))); }
         unsafe { *(data + count as usize) = 0; }
         var text: String = String.new();
         unsafe { text = String.from_raw(data, count as usize, limit + 1); }
@@ -172,20 +234,21 @@ impl TcpStream {
 pub struct TcpListener { socket: isize, }
 
 impl TcpListener {
-    pub fn bind(port: i32) Result[TcpListener, i32] {
+    pub fn bind(port: i32) Result[TcpListener, NetError] {
+        if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         const socket: isize = __socket();
-        if (socket < 0) { ret Err(socket as i32); }
+        if (socket < 0) { ret Err(__net_error(socket as i32)); }
         var result: i32 = 0;
         unsafe { result = __net_bind_tcp(socket, port); }
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
         result = __listen(socket, 128);
-        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(error); }
+        if (result < 0) { const error: i32 = __error(result); __close(socket); ret Err(__net_error(error)); }
         ret Ok(TcpListener { socket: socket });
     }
 
-    pub fn accept(self: TcpListener) Result[TcpStream, i32] {
+    pub fn accept(self: TcpListener) Result[TcpStream, NetError] {
         const socket: isize = __accept(self.socket);
-        if (socket < 0) { ret Err(socket as i32); }
+        if (socket < 0) { ret Err(__net_error(socket as i32)); }
         ret Ok(TcpStream { socket: socket });
     }
 
@@ -227,13 +290,13 @@ impl HttpResponse {
 pub struct HttpConnection { stream: TcpStream, }
 
 impl HttpConnection {
-    pub fn read_request(self: HttpConnection, limit: usize) Result[String, i32] {
+    pub fn read_request(self: HttpConnection, limit: usize) Result[String, NetError] {
         ret self.stream.receive(limit);
     }
 
-    pub fn respond(self: HttpConnection, response: HttpResponse) Result[usize, i32] {
+    pub fn respond(self: HttpConnection, response: HttpResponse) Result[usize, NetError] {
         const encoded: String = response.encode();
-        const result: Result[usize, i32] = self.stream.send(encoded.as_str());
+        const result: Result[usize, NetError] = self.stream.send(encoded.as_str());
         self.stream.close();
         ret result;
     }
@@ -242,14 +305,14 @@ impl HttpConnection {
 pub struct HttpServer { listener: TcpListener, }
 
 impl HttpServer {
-    pub fn bind(port: i32) Result[HttpServer, i32] {
-        const listener: Result[TcpListener, i32] = TcpListener.bind(port);
+    pub fn bind(port: i32) Result[HttpServer, NetError] {
+        const listener: Result[TcpListener, NetError] = TcpListener.bind(port);
         if (listener.is_err()) { ret Err(listener.unwrap_err()); }
         ret Ok(HttpServer { listener: listener.unwrap() });
     }
 
-    pub fn accept(self: HttpServer) Result[HttpConnection, i32] {
-        const stream: Result[TcpStream, i32] = self.listener.accept();
+    pub fn accept(self: HttpServer) Result[HttpConnection, NetError] {
+        const stream: Result[TcpStream, NetError] = self.listener.accept();
         if (stream.is_err()) { ret Err(stream.unwrap_err()); }
         ret Ok(HttpConnection { stream: stream.unwrap() });
     }
@@ -257,14 +320,14 @@ impl HttpServer {
     pub fn close(self: HttpServer) void { self.listener.close(); }
 
     // Accept one request, send one response, close client and listener.
-    pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, i32] {
+    pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, NetError] {
         const client_socket: isize = __accept(self.listener.socket);
-        if (client_socket < 0) { self.listener.close(); ret Err(client_socket as i32); }
+        if (client_socket < 0) { self.listener.close(); ret Err(__net_error(client_socket as i32)); }
         const stream: TcpStream = TcpStream { socket: client_socket };
-        const request: Result[String, i32] = stream.receive(limit);
+        const request: Result[String, NetError] = stream.receive(limit);
         if (request.is_err()) { stream.close(); self.listener.close(); ret Err(request.unwrap_err()); }
         const encoded: String = response.encode();
-        const sent: Result[usize, i32] = stream.send(encoded.as_str());
+        const sent: Result[usize, NetError] = stream.send(encoded.as_str());
         stream.close();
         self.listener.close();
         if (sent.is_err()) { ret Err(sent.unwrap_err()); }
@@ -272,8 +335,8 @@ impl HttpServer {
     }
 }
 
-pub fn http_request(ip: str, port: i32, method: str, path: str, body: str) Result[String, i32] {
-    const connected: Result[TcpStream, i32] = TcpStream.connect(ip, port);
+pub fn http_request(ip: str, port: i32, method: str, path: str, body: str) Result[String, NetError] {
+    const connected: Result[TcpStream, NetError] = TcpStream.connect(ip, port);
     if (connected.is_err()) { ret Err(connected.unwrap_err()); }
     const stream: TcpStream = connected.unwrap();
     var request: String = String.from(method);
@@ -285,17 +348,17 @@ pub fn http_request(ip: str, port: i32, method: str, path: str, body: str) Resul
     request = request.push_str(body.bytes_len().to_string());
     request = request.push_str("\r\nConnection: close\r\n\r\n");
     request = request.push_str(body);
-    const sent: Result[usize, i32] = stream.send(request.as_str());
+    const sent: Result[usize, NetError] = stream.send(request.as_str());
     if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
-    const response: Result[String, i32] = stream.receive(1024 * 1024);
+    const response: Result[String, NetError] = stream.receive(1024 * 1024);
     stream.close();
     ret response;
 }
 
-pub fn http_get(ip: str, port: i32, path: str) Result[String, i32] {
+pub fn http_get(ip: str, port: i32, path: str) Result[String, NetError] {
     ret http_request(ip, port, "GET", path, "");
 }
 
-pub fn http_post(ip: str, port: i32, path: str, body: str) Result[String, i32] {
+pub fn http_post(ip: str, port: i32, path: str, body: str) Result[String, NetError] {
     ret http_request(ip, port, "POST", path, body);
 }

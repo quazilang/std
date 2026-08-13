@@ -7,6 +7,65 @@ import std.core;
 import std.unix;
 import std.win32_core;
 
+pub enum FsError {
+    NotFound,
+    PermissionDenied,
+    AlreadyExists,
+    InvalidPath,
+    IsDirectory,
+    NotDirectory,
+    DirectoryNotEmpty,
+    ReadOnly,
+    NoSpace,
+    TooManyOpenFiles,
+    AllocationFailed,
+    InvalidData,
+    Unsupported,
+    Native(i32),
+}
+
+impl FsError {
+    pub fn message(self: FsError) str {
+        ret match self {
+            FsError.NotFound => "file or directory not found",
+            FsError.PermissionDenied => "file-system permission denied",
+            FsError.AlreadyExists => "file or directory already exists",
+            FsError.InvalidPath => "invalid file-system path",
+            FsError.IsDirectory => "expected a file, found a directory",
+            FsError.NotDirectory => "expected a directory",
+            FsError.DirectoryNotEmpty => "directory is not empty",
+            FsError.ReadOnly => "file system is read-only",
+            FsError.NoSpace => "no space left on device",
+            FsError.TooManyOpenFiles => "too many open files",
+            FsError.AllocationFailed => "file-system buffer allocation failed",
+            FsError.InvalidData => "invalid file-system data",
+            FsError.Unsupported => "file-system operation is unsupported",
+            FsError.Native(_) => "unclassified operating-system file error",
+        };
+    }
+}
+
+fn fs_error(code: i32) FsError {
+    if (code == -2 || code == 2 || code == 3) { ret FsError.NotFound; }
+    if (code == -13 || code == 5) { ret FsError.PermissionDenied; }
+    if (code == -17 || code == 80 || code == 183) { ret FsError.AlreadyExists; }
+    if (code == -22 || code == 87 || code == 123 || code == 161) { ret FsError.InvalidPath; }
+    if (code == -21) { ret FsError.IsDirectory; }
+    if (code == -20 || code == 267) { ret FsError.NotDirectory; }
+    if (code == -39 || code == 145) { ret FsError.DirectoryNotEmpty; }
+    if (code == -30 || code == 19) { ret FsError.ReadOnly; }
+    if (code == -28 || code == 112) { ret FsError.NoSpace; }
+    if (code == -24 || code == 4) { ret FsError.TooManyOpenFiles; }
+    if (code == -12 || code == 8 || code == 14) { ret FsError.AllocationFailed; }
+    ret FsError.Native(code);
+}
+
+fn last_fs_error() FsError {
+    var code: u32 = 0;
+    unsafe { code = win32_core.last_error(); }
+    ret fs_error(code as i32);
+}
+
 // Private ownership adapters keep raw buffers and directory handles inside the
 // same automatic-destruction model exposed by File and String.
 struct FsRawBuffer {
@@ -59,11 +118,11 @@ pub struct File {
 
 impl File {
     // Open an existing file for reading.
-    pub fn open(path: str) Result[File, i32] {
+    pub fn open(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
                 const fd: i32 = unix.open(path, 0, 0);
-                if (fd < 0) { ret Err(fd); }
+                if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
         }
@@ -73,19 +132,19 @@ impl File {
                     core.str_as_ptr(path), 2147483648 as u32, 3, 0, 3, 128, 0
                 );
                 const handle: isize = raw as isize;
-                if (handle == -1) { ret Err(-1); }
+                if (handle == -1) { ret Err(last_fs_error()); }
                 ret Ok(File { handle: handle });
             }
         }
-        ret Err(-1);
+        ret Err(FsError.Unsupported);
     }
 
     // Create or truncate a file for writing.
-    pub fn create(path: str) Result[File, i32] {
+    pub fn create(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
                 const fd: i32 = unix.open(path, 577, 420);
-                if (fd < 0) { ret Err(fd); }
+                if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
         }
@@ -95,19 +154,19 @@ impl File {
                     core.str_as_ptr(path), 1073741824, 3, 0, 2, 128, 0
                 );
                 const handle: isize = raw as isize;
-                if (handle == -1) { ret Err(-1); }
+                if (handle == -1) { ret Err(last_fs_error()); }
                 ret Ok(File { handle: handle });
             }
         }
-        ret Err(-1);
+        ret Err(FsError.Unsupported);
     }
 
     // Open for reading and writing, creating the file when needed.
-    pub fn open_rw(path: str) Result[File, i32] {
+    pub fn open_rw(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
                 const fd: i32 = unix.open(path, 66, 420);
-                if (fd < 0) { ret Err(fd); }
+                if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
         }
@@ -117,30 +176,31 @@ impl File {
                     core.str_as_ptr(path), 3221225472 as u32, 3, 0, 4, 128, 0
                 );
                 const handle: isize = raw as isize;
-                if (handle == -1) { ret Err(-1); }
+                if (handle == -1) { ret Err(last_fs_error()); }
                 ret Ok(File { handle: handle });
             }
         }
-        ret Err(-1);
+        ret Err(FsError.Unsupported);
     }
 
     // Open for append, creating the file when needed.
-    pub fn open_append(path: str) Result[File, i32] {
+    pub fn open_append(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
                 const fd: i32 = unix.open(path, 1089, 420);
-                if (fd < 0) { ret Err(fd); }
+                if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
         }
         @cfg(target_os = "windows") {
-            const opened: Result[File, i32] = File.open_rw(path);
+            const opened: Result[File, FsError] = File.open_rw(path);
             if (opened.is_err()) { ret Err(opened.unwrap_err()); }
             const file: File = opened.unwrap();
-            file.seek(0, 2);
+            const position: Result[i64, FsError] = file.seek(0, 2);
+            if (position.is_err()) { ret Err(position.unwrap_err()); }
             ret Ok(file);
         }
-        ret Err(-1);
+        ret Err(FsError.Unsupported);
     }
 
     // Raw buffer read. The caller guarantees `buf` is writable for `n` bytes.
@@ -159,10 +219,14 @@ impl File {
         ret -1;
     }
 
-    pub fn write(self: File, buf: bytes) isize {
+    pub fn write(self: File, buf: bytes) Result[usize, FsError] {
         var result: isize = -1;
         unsafe { result = self.write_raw(buf.as_ptr(), buf.len()); }
-        ret result;
+        if (result < 0) {
+            @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+            ret Err(fs_error(result as i32));
+        }
+        ret Ok(result as usize);
     }
 
     // Raw buffer write. The caller guarantees `buf` is readable for `n` bytes.
@@ -181,27 +245,36 @@ impl File {
         ret -1;
     }
 
-    pub fn write_str(self: File, text: str) isize {
+    pub fn write_str(self: File, text: str) Result[usize, FsError] {
         var result: isize = -1;
         unsafe { result = self.write_raw(core.str_as_ptr(text), core.strlen(text)); }
-        ret result;
+        if (result < 0) {
+            @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+            ret Err(fs_error(result as i32));
+        }
+        ret Ok(result as usize);
     }
 
     // Explicit close is available for scarce-resource handoff. It invalidates
     // this File, so the later automatic destructor is a harmless no-op.
-    pub fn close(self: File) i32 {
-        if (self.handle < 0) { ret 0; }
+    pub fn close(self: File) Result[bool, FsError] {
+        if (self.handle < 0) { ret Ok(false); }
         var result: i32 = 0;
         @cfg(target_os = "linux") {
             unsafe { result = unix.close(self.handle as i32); }
         }
         @cfg(target_os = "windows") {
             unsafe {
-                if (win32_core.close_handle(self.handle as usize) == 0) { result = -1; }
+                if (win32_core.close_handle(self.handle as usize) == 0) {
+                    const error: FsError = last_fs_error();
+                    self.handle = -1;
+                    ret Err(error);
+                }
             }
         }
         self.handle = -1;
-        ret result;
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
     }
 
     // Destructor discovered by whole-program analysis.
@@ -209,9 +282,12 @@ impl File {
         self.close();
     }
 
-    pub fn seek(self: File, offset: i64, whence: i32) i64 {
+    pub fn seek(self: File, offset: i64, whence: i32) Result[i64, FsError] {
         @cfg(target_os = "linux") {
-            unsafe { ret unix.lseek(self.handle as i32, offset, whence); }
+            var position: i64 = -1;
+            unsafe { position = unix.lseek(self.handle as i32, offset, whence); }
+            if (position < 0) { ret Err(fs_error(position as i32)); }
+            ret Ok(position);
         }
         @cfg(target_os = "windows") {
             var position: i64 = 0;
@@ -219,36 +295,42 @@ impl File {
                 const ok: i32 = win32_core.seek(
                     self.handle as usize, offset, &position, whence as u32
                 );
-                if (ok == 0) { ret -1; }
-                ret position;
+                if (ok == 0) { ret Err(last_fs_error()); }
+                ret Ok(position);
             }
         }
-        ret -1;
+        ret Err(FsError.Unsupported);
     }
 
     // Linux descriptor, or a truncated Windows HANDLE for compatibility.
     pub fn fd(self: File) i32 { ret self.handle as i32; }
     pub fn raw_handle(self: File) usize { ret self.handle as usize; }
 
-    pub fn sync(self: File) i32 {
+    pub fn sync(self: File) Result[bool, FsError] {
         @cfg(target_os = "linux") {
-            unsafe { ret unix.fsync(self.handle as i32); }
+            var result: i32 = -1;
+            unsafe { result = unix.fsync(self.handle as i32); }
+            if (result < 0) { ret Err(fs_error(result)); }
+            ret Ok(true);
         }
         @cfg(target_os = "windows") {
             unsafe {
-                if (win32_core.sync(self.handle as usize) == 0) { ret -1; }
+                if (win32_core.sync(self.handle as usize) == 0) { ret Err(last_fs_error()); }
             }
-            ret 0;
+            ret Ok(true);
         }
-        ret -1;
+        ret Err(FsError.Unsupported);
     }
 
     // File truncation is currently implemented by the Linux backend.
-    pub fn truncate(self: File, len: i64) i32 {
+    pub fn truncate(self: File, len: i64) Result[bool, FsError] {
         @cfg(target_os = "linux") {
-            unsafe { ret unix.ftruncate(self.handle as i32, len); }
+            var result: i32 = -1;
+            unsafe { result = unix.ftruncate(self.handle as i32, len); }
+            if (result < 0) { ret Err(fs_error(result)); }
+            ret Ok(true);
         }
-        ret -1;
+        ret Err(FsError.Unsupported);
     }
 }
 
@@ -259,27 +341,30 @@ pub fn seek_end() i32 { ret 2; }
 // Read a UTF-8 text file into an owned String. File closure is automatic on
 // success and every error path; only the private raw staging allocation needs
 // explicit release before it has been promoted into String ownership.
-pub fn read_to_string(path: str) Result[String, i32] {
-    const opened: Result[File, i32] = File.open(path);
+pub fn read_to_string(path: str) Result[String, FsError] {
+    const opened: Result[File, FsError] = File.open(path);
     if (opened.is_err()) { ret Err(opened.unwrap_err()); }
     const file: File = opened.unwrap();
     var capacity: usize = 4096;
     var length: usize = 0;
     var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
     unsafe { buffer.data = core.malloc(capacity + 1); }
-    if (buffer.data == 0) { ret Err(-1); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
 
     for (true) {
         if (length == capacity) {
             capacity = capacity * 2;
             var grown: *u8 = 0;
             unsafe { grown = core.realloc(buffer.data, capacity + 1); }
-            if (grown == 0) { ret Err(-1); }
+            if (grown == 0) { ret Err(FsError.AllocationFailed); }
             buffer.data = grown;
         }
         var count: isize = -1;
         unsafe { count = file.read(buffer.data + length, capacity - length); }
-        if (count < 0) { ret Err(count as i32); }
+        if (count < 0) {
+            @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+            ret Err(fs_error(count as i32));
+        }
         if (count == 0) { break; }
         length = length + count as usize;
     }
@@ -302,7 +387,7 @@ pub fn exists(path: str) bool {
 }
 
 pub fn readable(path: str) bool {
-    const opened: Result[File, i32] = File.open(path);
+    const opened: Result[File, FsError] = File.open(path);
     if (opened.is_err()) { ret false; }
     const file: File = opened.unwrap();
     ret true;
@@ -310,16 +395,16 @@ pub fn readable(path: str) bool {
 
 // Count immediate directory entries, excluding `.` and `..`. The scan buffer
 // and OS enumeration handle are closed automatically on success and errors.
-pub fn count_entries(path: str) Result[usize, i32] {
+pub fn count_entries(path: str) Result[usize, FsError] {
     const capacity: usize = 4096;
     var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
     unsafe { buffer.data = core.malloc(capacity); }
-    if (buffer.data == 0) { ret Err(-1); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
 
     @cfg(target_os = "linux") {
         var fd: i32 = -1;
         unsafe { fd = unix.open(path, 65536, 0); }
-        if (fd < 0) { ret Err(fd); }
+        if (fd < 0) { ret Err(fs_error(fd)); }
         var scan_data: *u8 = 0;
         unsafe { scan_data = buffer.take(); }
         const scan: DirectoryScan = DirectoryScan {
@@ -330,7 +415,7 @@ pub fn count_entries(path: str) Result[usize, i32] {
         for (true) {
             var batch_size: isize = -1;
             unsafe { batch_size = unix.getdents64(fd, scan.data, capacity); }
-            if (batch_size < 0) { ret Err(batch_size as i32); }
+            if (batch_size < 0) { ret Err(fs_error(batch_size as i32)); }
             if (batch_size == 0) { break; }
             var offset: usize = 0;
             for (offset < batch_size as usize) {
@@ -341,7 +426,7 @@ pub fn count_entries(path: str) Result[usize, i32] {
                         + (((*(scan.data + offset + 17)) as usize) << 8);
                 }
                 if (record_length < 20 || offset + record_length > batch_size as usize) {
-                    ret Err(-1);
+                    ret Err(FsError.InvalidData);
                 }
                 unsafe {
                     if (!is_dot_entry(scan.data + offset + 19)) { count++; }
@@ -366,7 +451,7 @@ pub fn count_entries(path: str) Result[usize, i32] {
             var error: u32 = 0;
             unsafe { error = win32_core.last_error(); }
             if (error == 2 || error == 18) { ret Ok(0); }
-            ret Err(error as i32);
+            ret Err(fs_error(error as i32));
         }
         var scan_data: *u8 = 0;
         unsafe { scan_data = buffer.take(); }
@@ -384,7 +469,7 @@ pub fn count_entries(path: str) Result[usize, i32] {
         ret Ok(count);
     }
 
-    ret Err(-1);
+    ret Err(FsError.Unsupported);
 }
 
 pub fn writable(path: str) bool {
@@ -395,57 +480,100 @@ pub fn writable(path: str) bool {
     ret false;
 }
 
-pub fn remove(path: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.unlink(path) == 0; } }
-    @cfg(target_os = "windows") {
-        unsafe { ret win32_core.delete_file(core.str_as_ptr(path)) != 0; }
+pub fn remove(path: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.unlink(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
     }
-    ret false;
-}
-
-pub fn mkdir(path: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.mkdir(path, 493) == 0; } }
-    @cfg(target_os = "windows") {
-        unsafe { ret win32_core.create_directory(core.str_as_ptr(path), 0) != 0; }
-    }
-    ret false;
-}
-
-pub fn mkdir_mode(path: str, mode: u32) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.mkdir(path, mode) == 0; } }
-    @cfg(target_os = "windows") { ret mkdir(path); }
-    ret false;
-}
-
-pub fn rmdir(path: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.rmdir(path) == 0; } }
-    @cfg(target_os = "windows") {
-        unsafe { ret win32_core.remove_directory(core.str_as_ptr(path)) != 0; }
-    }
-    ret false;
-}
-
-pub fn rename(from: str, to: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.rename(from, to) == 0; } }
     @cfg(target_os = "windows") {
         unsafe {
-            ret win32_core.move_file(core.str_as_ptr(from), core.str_as_ptr(to)) != 0;
+            if (win32_core.delete_file(core.str_as_ptr(path)) == 0) { ret Err(last_fs_error()); }
         }
+        ret Ok(true);
     }
-    ret false;
+    ret Err(FsError.Unsupported);
 }
 
-pub fn link(existing: str, new_path: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.link(existing, new_path) == 0; } }
-    ret false;
+pub fn mkdir(path: str) Result[bool, FsError] {
+    ret mkdir_mode(path, 493);
 }
 
-pub fn symlink(target: str, link_path: str) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.symlink(target, link_path) == 0; } }
-    ret false;
+pub fn mkdir_mode(path: str, mode: u32) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.mkdir(path, mode); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    @cfg(target_os = "windows") {
+        unsafe {
+            if (win32_core.create_directory(core.str_as_ptr(path), 0) == 0) { ret Err(last_fs_error()); }
+        }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
 }
 
-pub fn chmod(path: str, mode: u32) bool {
-    @cfg(target_os = "linux") { unsafe { ret unix.chmod(path, mode) == 0; } }
-    ret false;
+pub fn rmdir(path: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.rmdir(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    @cfg(target_os = "windows") {
+        unsafe {
+            if (win32_core.remove_directory(core.str_as_ptr(path)) == 0) { ret Err(last_fs_error()); }
+        }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
+}
+
+pub fn rename(from: str, to: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.rename(from, to); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    @cfg(target_os = "windows") {
+        unsafe {
+            if (win32_core.move_file(core.str_as_ptr(from), core.str_as_ptr(to)) == 0) { ret Err(last_fs_error()); }
+        }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
+}
+
+pub fn link(existing: str, new_path: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.link(existing, new_path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
+}
+
+pub fn symlink(target: str, link_path: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.symlink(target, link_path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
+}
+
+pub fn chmod(path: str, mode: u32) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = -1;
+        unsafe { result = unix.chmod(path, mode); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    ret Err(FsError.Unsupported);
 }
