@@ -82,3 +82,4 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
 - `std.net` owns cross-platform Linux/Winsock socket handles and exposes complete-send TCP,
   bounded receives, HTTP/1.1 requests, and explicit local-server
   accept/read/respond primitives. HTTPS requires a separate TLS implementation.
+- Network API details and limitations are maintained in `docs/NETWORK.md`.
