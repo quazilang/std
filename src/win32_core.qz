@@ -132,3 +132,92 @@ pub unsafe fn get_address_info(node: *i8, service: *i8, hints: *u8, result: **u8
 
 @api("freeaddrinfo")
 pub unsafe fn free_address_info(result: *u8) void;
+
+// ── Time ─────────────────────────────────────────────────────────────────────
+
+// High-resolution monotonic counter. lpPerformanceCount is LARGE_INTEGER* (i64*).
+@api("QueryPerformanceCounter")
+pub unsafe fn query_perf_counter(count: *i64) i32;
+
+// Ticks per second for QueryPerformanceCounter.
+@api("QueryPerformanceFrequency")
+pub unsafe fn query_perf_freq(freq: *i64) i32;
+
+// Wall-clock time as FILETIME (100-ns intervals since 1601-01-01), stored as u64.
+@api("GetSystemTimeAsFileTime")
+pub unsafe fn get_system_time_as_file_time(ft: *u64) void;
+
+// TIME_ZONE_INFORMATION pointer (172 bytes). Returns TIME_ZONE_ID_*.
+// 0=unknown, 1=standard, 2=daylight, 0xFFFFFFFF=error.
+@api("GetTimeZoneInformation")
+pub unsafe fn get_tz_info(info: *u8) u32;
+
+// ── Process ───────────────────────────────────────────────────────────────────
+
+// CreateProcessA. startup_info must be STARTUPINFOA (68 bytes), proc_info must
+// be PROCESS_INFORMATION (24 bytes). Returns nonzero on success.
+@api("CreateProcessA")
+pub unsafe fn create_process(
+    app: *u8, cmd_line: *u8, proc_attr: *u8, thread_attr: *u8,
+    inherit_handles: i32, flags: u32, environment: *u8, current_dir: *u8,
+    startup_info: *u8, proc_info: *u8) i32;
+
+// ms: INFINITE = 0xFFFFFFFF. Returns 0 (WAIT_OBJECT_0) on success.
+@api("WaitForSingleObject")
+pub unsafe fn wait_single_object(handle: usize, ms: u32) u32;
+
+// Fills *exit_code with the process exit code after WaitForSingleObject.
+@api("GetExitCodeProcess")
+pub unsafe fn get_exit_code_process(handle: usize, exit_code: *u32) i32;
+
+// Force-terminate a process.
+@api("TerminateProcess")
+pub unsafe fn terminate_process(handle: usize, exit_code: u32) i32;
+
+// Create an anonymous pipe. read_handle and write_handle are HANDLE* (usize*).
+@api("CreatePipe")
+pub unsafe fn create_pipe(
+    read_handle: *usize, write_handle: *usize,
+    security: *u8, size: u32) i32;
+
+// HANDLE_FLAG_INHERIT = 1. Used to prevent child inheriting a pipe handle.
+@api("SetHandleInformation")
+pub unsafe fn set_handle_info(handle: usize, mask: u32, flags: u32) i32;
+
+// Read from a pipe handle.
+@api("ReadFile")
+pub unsafe fn read_pipe(handle: usize, buf: *u8, count: u32, read: *u32, overlapped: *u8) i32;
+
+// ── Mutex (CRITICAL_SECTION) ──────────────────────────────────────────────────
+
+// CRITICAL_SECTION is 40 bytes on x64 Windows.
+@api("InitializeCriticalSection")
+pub unsafe fn cs_init(cs: *u8) void;
+
+@api("EnterCriticalSection")
+pub unsafe fn cs_enter(cs: *u8) void;
+
+@api("LeaveCriticalSection")
+pub unsafe fn cs_leave(cs: *u8) void;
+
+@api("DeleteCriticalSection")
+pub unsafe fn cs_delete(cs: *u8) void;
+
+// TryEnterCriticalSection: returns nonzero if lock was acquired.
+@api("TryEnterCriticalSection")
+pub unsafe fn cs_try_enter(cs: *u8) i32;
+
+// ── Additional OS API ─────────────────────────────────────────────────────────
+
+// GetUserNameA(lpBuffer, pcbBuffer). pcbBuffer is in/out: length on input,
+// written bytes (including NUL) on output. Returns nonzero on success.
+@api("GetUserNameA")
+pub unsafe fn get_username(buf: *u8, size: *u32) i32;
+
+// SetEnvironmentVariableA(name, value). Returns nonzero on success.
+@api("SetEnvironmentVariableA")
+pub unsafe fn set_environment_variable(name: *u8, value: *u8) i32;
+
+// GetCurrentDirectoryA(nBufferLength, lpBuffer). Returns written length.
+@api("GetCurrentDirectoryA")
+pub unsafe fn get_current_directory(size: u32, buf: *u8) u32;

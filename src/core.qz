@@ -29,6 +29,12 @@ pub unsafe fn stderr_write(buf: str, len: usize) isize;
 @intrinsic("quazi.exit")
 pub fn exit(code: i32) i32;
 
+@intrinsic("quazi.thread.spawn")
+pub unsafe fn thread_spawn(f: any) usize;
+
+@intrinsic("quazi.thread.join")
+pub unsafe fn thread_join(handle: usize) void;
+
 @intrinsic("quazi.sleep_ms")
 pub fn sleep_ms(ms: u64) void;
 

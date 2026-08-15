@@ -5,21 +5,10 @@
 // or fn(*u8) u32 (Windows). Pass as `any` to spawn.
 import std.core;
 import std.unix;
+import std.win32_core;
+import std.time;
 
-// ── Intrinsics ────────────────────────────────────────────────────────────────
-
-// Spawn a new thread running f. f must be a function pointer.
-// Linux: f is called as pthread_start_routine (fn(*u8) *u8).
-// Windows: f is called as LPTHREAD_START_ROUTINE (fn(*u8) u32).
-// Returns a thread handle (opaque usize) or 0 on failure.
-@intrinsic("quazi.thread.spawn")
-pub unsafe fn thread_spawn(f: any) usize;
-
-// Wait for the thread identified by handle to finish.
-// On Linux also frees the pthread_t storage allocated by thread_spawn.
-// On Windows closes the thread handle after waiting.
-@intrinsic("quazi.thread.join")
-pub unsafe fn thread_join(handle: usize) void;
+// Intrinsics have been moved to std.core.
 
 // ── Thread struct ─────────────────────────────────────────────────────────────
 
@@ -31,13 +20,13 @@ impl Thread {
     // Spawn a new thread running f.
     // f must be a zero-parameter-capturing function pointer (no captures).
     pub unsafe fn spawn(f: any) Thread {
-        var h: usize = thread_spawn(f);
+        var h: usize = core.thread_spawn(f);
         ret Thread { handle: h };
     }
 
     // Wait for the thread to finish. Consumes the handle.
     pub unsafe fn join(self: Thread) void {
-        thread_join(self.handle);
+        core.thread_join(self.handle);
     }
 
     // Returns the opaque thread handle.
@@ -48,7 +37,7 @@ impl Thread {
 
 // Suspend the current thread for ms milliseconds.
 pub fn sleep(ms: u64) void {
-    core.sleep_ms(ms);
+    time.sleep_ms(ms);
 }
 
 // Yield the processor to other threads.
@@ -62,3 +51,120 @@ pub fn current_tid() i32 {
     unsafe { r = unix.gettid(); }
     ret r;
 }
+
+// ── Mutex ────────────────────────────────────────────────────────────────────
+
+// pthread_mutex_t bindings (Linux). pthread is usually bundled with libc.
+// Projects that use Mutex must add `libraries = ["pthread"]` under [link] in
+// their quazi.toml (on Linux). Windows uses CRITICAL_SECTION, no extra linking.
+@cfg(target_os = "linux")
+@api("pthread_mutex_init")
+unsafe fn __mutex_init(mutex: *u8, attr: *u8) i32;
+
+@cfg(target_os = "linux")
+@api("pthread_mutex_lock")
+unsafe fn __mutex_lock(mutex: *u8) i32;
+
+@cfg(target_os = "linux")
+@api("pthread_mutex_trylock")
+unsafe fn __mutex_trylock(mutex: *u8) i32;
+
+@cfg(target_os = "linux")
+@api("pthread_mutex_unlock")
+unsafe fn __mutex_unlock(mutex: *u8) i32;
+
+@cfg(target_os = "linux")
+@api("pthread_mutex_destroy")
+unsafe fn __mutex_destroy(mutex: *u8) i32;
+
+// A mutual-exclusion lock. The inner pointer holds a heap-allocated OS primitive
+// (pthread_mutex_t on Linux, CRITICAL_SECTION on Windows). Because the pointer
+// is a plain value, threads can share a Mutex by passing &mutex to the spawned
+// function and casting it back to *Mutex inside the thread.
+//
+// Usage:
+//   const m = Mutex.new().unwrap();
+//   m.lock();
+//   // critical section …
+//   m.unlock();
+//
+// IMPORTANT: Never drop a locked Mutex; always unlock before free().
+pub struct Mutex {
+    inner: *u8, // pthread_mutex_t* or CRITICAL_SECTION*
+}
+
+impl Mutex {
+    // Create and initialise a new Mutex.
+    pub fn new() Result[Mutex, str] {
+        @cfg(target_os = "linux") {
+            // pthread_mutex_t on x86-64 Linux is 40 bytes.
+            var inner: *u8 = 0;
+            unsafe { inner = core.malloc(40); }
+            if (inner == 0) { ret Err("mutex allocation failed"); }
+            unsafe {
+                core.memset(inner, 0, 40);
+                if (__mutex_init(inner, 0) != 0) {
+                    core.free(inner);
+                    ret Err("pthread_mutex_init failed");
+                }
+            }
+            ret Ok(Mutex { inner: inner });
+        }
+        @cfg(target_os = "windows") {
+            // CRITICAL_SECTION on x64 Windows is 40 bytes.
+            var inner: *u8 = 0;
+            unsafe { inner = core.malloc(40); }
+            if (inner == 0) { ret Err("mutex allocation failed"); }
+            unsafe {
+                core.memset(inner, 0, 40);
+                win32_core.cs_init(inner);
+            }
+            ret Ok(Mutex { inner: inner });
+        }
+        ret Err("mutex not supported on this platform");
+    }
+
+    // Block until the lock is acquired.
+    pub fn lock(self: Mutex) void {
+        if (self.inner == 0) { ret; }
+        @cfg(target_os = "linux")  { unsafe { __mutex_lock(self.inner); } }
+        @cfg(target_os = "windows") { unsafe { win32_core.cs_enter(self.inner); } }
+    }
+
+    // Try to acquire the lock without blocking.
+    // Returns true when the lock was acquired, false when it was already held.
+    pub fn try_lock(self: Mutex) bool {
+        if (self.inner == 0) { ret false; }
+        @cfg(target_os = "linux") {
+            var r: i32 = 0;
+            unsafe { r = __mutex_trylock(self.inner); }
+            ret r == 0;
+        }
+        @cfg(target_os = "windows") {
+            var r: i32 = 0;
+            unsafe { r = win32_core.cs_try_enter(self.inner); }
+            ret r != 0;
+        }
+        ret false;
+    }
+
+    // Release the lock. Must be called from the same thread that called lock().
+    pub fn unlock(self: Mutex) void {
+        if (self.inner == 0) { ret; }
+        @cfg(target_os = "linux")  { unsafe { __mutex_unlock(self.inner); } }
+        @cfg(target_os = "windows") { unsafe { win32_core.cs_leave(self.inner); } }
+    }
+
+    // Destroy and free the mutex. The mutex must be unlocked before calling free().
+    pub fn free(self: Mutex) void {
+        if (self.inner == 0) { ret; }
+        @cfg(target_os = "linux")  { unsafe { __mutex_destroy(self.inner); } }
+        @cfg(target_os = "windows") { unsafe { win32_core.cs_delete(self.inner); } }
+        unsafe { core.free(self.inner); }
+        self.inner = 0;
+    }
+
+    // Raw pointer to the underlying OS primitive. Use for cross-thread sharing.
+    pub unsafe fn as_ptr(self: Mutex) *u8 { ret self.inner; }
+}
+

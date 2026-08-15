@@ -1,0 +1,676 @@
+// std.time — portable time: durations, monotonic instants, wall-clock, and date/time.
+//
+// Design:
+//   Duration    — a non-negative span of time with nanosecond precision
+//   Instant     — monotonic clock snapshot (not affected by NTP/clock changes)
+//   SystemTime  — wall-clock UTC timestamp (seconds + nanos since Unix epoch)
+//   DateTime    — Gregorian calendar date + time of day with timezone offset
+//
+// Platform:
+//   Linux   — clock_gettime(2) (CLOCK_REALTIME / CLOCK_MONOTONIC)
+//   Windows — QueryPerformanceCounter (Instant), GetSystemTimeAsFileTime (SystemTime),
+//             GetTimeZoneInformation (local offset)
+//
+// Timezone: UTC is always correct. For local time, Windows reads the system
+// timezone; Linux parses the TZ environment variable (UTC±HH:MM format) or
+// falls back to UTC when TZ is absent or unrecognised.
+
+import std.core;
+import std.unix;
+import std.win32_core;
+
+// ── Duration ─────────────────────────────────────────────────────────────────
+
+// A non-negative span of time with nanosecond resolution.
+pub struct Duration {
+    secs: u64,
+    nanos: u32,
+}
+
+impl Duration {
+    // Construct from parts. nanos must be < 1_000_000_000.
+    pub fn new(secs: u64, nanos: u32) Duration {
+        var s: u64 = secs + (nanos / 1000000000) as u64;
+        var n: u32 = nanos % 1000000000;
+        ret Duration { secs: s, nanos: n };
+    }
+
+    pub fn from_nanos(nanos: u64) Duration {
+        ret Duration { secs: nanos / 1000000000, nanos: (nanos % 1000000000) as u32 };
+    }
+
+    pub fn from_micros(micros: u64) Duration {
+        ret Duration { secs: micros / 1000000, nanos: ((micros % 1000000) * 1000) as u32 };
+    }
+
+    pub fn from_millis(ms: u64) Duration {
+        ret Duration { secs: ms / 1000, nanos: ((ms % 1000) * 1000000) as u32 };
+    }
+
+    pub fn from_secs(secs: u64) Duration {
+        ret Duration { secs: secs, nanos: 0 };
+    }
+
+    pub fn from_mins(mins: u64) Duration {
+        ret Duration { secs: mins * 60, nanos: 0 };
+    }
+
+    pub fn from_hours(hours: u64) Duration {
+        ret Duration { secs: hours * 3600, nanos: 0 };
+    }
+
+    // Total whole seconds.
+    pub fn as_secs(self: Duration) u64 { ret self.secs; }
+
+    // NOTE: f64 conversion is not currently available because Quazi does not
+    // allow integer ↔ float casts. Use as_millis() or as_nanos() instead.
+
+    // Total milliseconds (truncated).
+    pub fn as_millis(self: Duration) u64 {
+        ret self.secs * 1000 + self.nanos as u64 / 1000000;
+    }
+
+    // Total microseconds (truncated).
+    pub fn as_micros(self: Duration) u64 {
+        ret self.secs * 1000000 + self.nanos as u64 / 1000;
+    }
+
+    // Total nanoseconds. Saturates to u64::MAX on overflow.
+    pub fn as_nanos(self: Duration) u64 {
+        const hi: u64 = self.secs * 1000000000;
+        // Detect overflow: if secs > 0 and result wrapped, saturate.
+        if (self.secs > 0 && hi / self.secs != 1000000000) {
+            ret 18446744073709551615;
+        }
+        ret hi + self.nanos as u64;
+    }
+
+    // Nanosecond sub-second component (0 .. 999_999_999).
+    pub fn subsec_nanos(self: Duration) u32 { ret self.nanos; }
+
+    // Millisecond sub-second component (0 .. 999).
+    pub fn subsec_millis(self: Duration) u32 { ret self.nanos / 1000000; }
+
+    pub fn is_zero(self: Duration) bool {
+        ret self.secs == 0 && self.nanos == 0;
+    }
+
+    // Checked addition.
+    pub fn add(self: Duration, other: Duration) Duration {
+        var n: u32 = self.nanos + other.nanos;
+        var carry: u64 = 0;
+        if (n >= 1000000000) { n = n - 1000000000; carry = 1; }
+        ret Duration { secs: self.secs + other.secs + carry, nanos: n };
+    }
+
+    // Saturating subtraction — returns zero when other > self.
+    pub fn sub(self: Duration, other: Duration) Duration {
+        if (other.secs > self.secs) { ret Duration { secs: 0, nanos: 0 }; }
+        if (other.secs == self.secs && other.nanos >= self.nanos) {
+            ret Duration { secs: 0, nanos: 0 };
+        }
+        var n: u32 = 0;
+        var s: u64 = self.secs - other.secs;
+        if (other.nanos > self.nanos) {
+            n = self.nanos + 1000000000 - other.nanos;
+            s = s - 1;
+        } else {
+            n = self.nanos - other.nanos;
+        }
+        ret Duration { secs: s, nanos: n };
+    }
+
+    // Multiply by a scalar (saturates on overflow).
+    pub fn mul(self: Duration, factor: u64) Duration {
+        const ns_total: u64 = self.as_nanos();
+        ret Duration.from_nanos(ns_total * factor);
+    }
+}
+
+// ── Instant ───────────────────────────────────────────────────────────────────
+
+// A point on the monotonic clock. Use elapsed() or duration_since() to measure
+// time. Not meaningful across processes or after sleep-resume on some platforms.
+pub struct Instant {
+    secs: u64,
+    nanos: u32,
+}
+
+fn __monotonic_now() Instant {
+    @cfg(target_os = "linux") {
+        // struct timespec = { i64 sec, i64 nsec } — 16 bytes
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(16); }
+        if (buf == 0) { ret Instant { secs: 0, nanos: 0 }; }
+        unsafe {
+            core.memset(buf, 0, 16);
+            unix.clock_gettime(1, buf); // CLOCK_MONOTONIC = 1
+            const secs: u64 = (*((buf) as *i64)) as u64;
+            const nanos: u64 = (*((buf + 8) as *i64)) as u64;
+            core.free(buf);
+            ret Instant { secs: secs, nanos: nanos as u32 };
+        }
+        ret Instant { secs: 0, nanos: 0 };
+    }
+    @cfg(target_os = "windows") {
+        var freq: i64 = 0;
+        var count: i64 = 0;
+        unsafe {
+            win32_core.query_perf_freq(&freq);
+            win32_core.query_perf_counter(&count);
+        }
+        if (freq <= 0) { ret Instant { secs: 0, nanos: 0 }; }
+        const secs: u64 = (count / freq) as u64;
+        const rem_ticks: u64 = (count % freq) as u64;
+        const nanos: u32 = (rem_ticks * 1000000000 / freq as u64) as u32;
+        ret Instant { secs: secs, nanos: nanos };
+    }
+    ret Instant { secs: 0, nanos: 0 };
+}
+
+impl Instant {
+    // Capture the current monotonic time.
+    pub fn now() Instant { ret __monotonic_now(); }
+
+    // Time elapsed since this snapshot was taken.
+    pub fn elapsed(self: Instant) Duration {
+        const later: Instant = __monotonic_now();
+        ret later.duration_since(self);
+    }
+
+    // Duration from an earlier Instant to self. Returns zero if earlier > self.
+    pub fn duration_since(self: Instant, earlier: Instant) Duration {
+        if (earlier.secs > self.secs) { ret Duration { secs: 0, nanos: 0 }; }
+        if (earlier.secs == self.secs && earlier.nanos >= self.nanos) {
+            ret Duration { secs: 0, nanos: 0 };
+        }
+        var n: u32 = 0;
+        var s: u64 = self.secs - earlier.secs;
+        if (earlier.nanos > self.nanos) {
+            n = self.nanos + 1000000000 - earlier.nanos;
+            s = s - 1;
+        } else {
+            n = self.nanos - earlier.nanos;
+        }
+        ret Duration { secs: s, nanos: n };
+    }
+}
+
+// ── SystemTime ────────────────────────────────────────────────────────────────
+
+pub enum TimeError {
+    // Subtraction would produce a negative duration.
+    SystemTimeBeforeEpoch,
+    // Platform does not provide this information.
+    Unsupported,
+}
+
+impl TimeError {
+    pub fn message(self: TimeError) str {
+        ret match self {
+            TimeError.SystemTimeBeforeEpoch => "system time is before the Unix epoch",
+            TimeError.Unsupported => "time operation is unsupported on this platform",
+        };
+    }
+}
+
+// Wall-clock UTC timestamp: seconds + nanoseconds since 1970-01-01 00:00:00 UTC.
+pub struct SystemTime {
+    secs: i64,
+    nanos: u32,
+}
+
+fn __realtime_now() SystemTime {
+    @cfg(target_os = "linux") {
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(16); }
+        if (buf == 0) { ret SystemTime { secs: 0, nanos: 0 }; }
+        unsafe {
+            core.memset(buf, 0, 16);
+            unix.clock_gettime(0, buf); // CLOCK_REALTIME = 0
+            const secs: i64 = *((buf) as *i64);
+            const nanos: i64 = *((buf + 8) as *i64);
+            core.free(buf);
+            ret SystemTime { secs: secs, nanos: nanos as u32 };
+        }
+        ret SystemTime { secs: 0, nanos: 0 };
+    }
+    @cfg(target_os = "windows") {
+        var ft: u64 = 0;
+        unsafe { win32_core.get_system_time_as_file_time(&ft); }
+        // FILETIME = 100-ns intervals since 1601-01-01; epoch offset = 11644473600 s.
+        const epoch_offset: u64 = 116444736000000000;
+        if (ft < epoch_offset) { ret SystemTime { secs: 0, nanos: 0 }; }
+        const since_epoch: u64 = ft - epoch_offset;
+        const secs: i64 = (since_epoch / 10000000) as i64;
+        const nanos: u32 = ((since_epoch % 10000000) * 100) as u32;
+        ret SystemTime { secs: secs, nanos: nanos };
+    }
+    ret SystemTime { secs: 0, nanos: 0 };
+}
+
+impl SystemTime {
+    // Current wall-clock UTC time.
+    pub fn now() SystemTime { ret __realtime_now(); }
+
+    // Whole seconds since the Unix epoch (UTC).
+    pub fn unix_timestamp(self: SystemTime) i64 { ret self.secs; }
+
+    // Milliseconds since the Unix epoch.
+    pub fn unix_timestamp_millis(self: SystemTime) i64 {
+        ret self.secs * 1000 + self.nanos as i64 / 1000000;
+    }
+
+    // Nanoseconds since the Unix epoch.
+    pub fn unix_timestamp_nanos(self: SystemTime) i64 {
+        ret self.secs * 1000000000 + self.nanos as i64;
+    }
+
+    pub fn subsec_nanos(self: SystemTime) u32 { ret self.nanos; }
+
+    // Time elapsed since this SystemTime was captured.
+    pub fn elapsed(self: SystemTime) Duration {
+        const later: SystemTime = __realtime_now();
+        const result: Result[Duration, TimeError] = later.duration_since(self);
+        if (result.is_err()) { ret Duration { secs: 0, nanos: 0 }; }
+        ret result.unwrap();
+    }
+
+    // Duration from other to self. Returns Err when other > self.
+    pub fn duration_since(self: SystemTime, other: SystemTime) Result[Duration, TimeError] {
+        if (other.secs > self.secs) { ret Err(TimeError.SystemTimeBeforeEpoch); }
+        if (other.secs == self.secs && other.nanos > self.nanos) {
+            ret Err(TimeError.SystemTimeBeforeEpoch);
+        }
+        var n: u32 = 0;
+        var s: u64 = (self.secs - other.secs) as u64;
+        if (other.nanos > self.nanos) {
+            n = self.nanos + 1000000000 - other.nanos;
+            s = s - 1;
+        } else {
+            n = self.nanos - other.nanos;
+        }
+        ret Ok(Duration { secs: s, nanos: n });
+    }
+}
+
+// ── Timezone ──────────────────────────────────────────────────────────────────
+
+// Returns the local timezone offset in seconds east of UTC.
+// Positive = east (e.g. UTC+3 → 10800), negative = west.
+pub fn local_tz_offset() i32 {
+    @cfg(target_os = "windows") {
+        // TIME_ZONE_INFORMATION is 172 bytes.
+        var info: *u8 = 0;
+        unsafe { info = core.malloc(172); }
+        if (info == 0) { ret 0; }
+        unsafe { core.memset(info, 0, 172); }
+        var result: u32 = 0;
+        unsafe { result = win32_core.get_tz_info(info); }
+        if (result == 4294967295 as u32) { unsafe { core.free(info); } ret 0; }
+        // Bias (offset 0) = minutes west of UTC.
+        var bias: i32 = 0;
+        unsafe { bias = *((info) as *i32); }
+        // DaylightBias (offset 168) is added when result == TIME_ZONE_ID_DAYLIGHT (2).
+        if (result == 2) {
+            var dst: i32 = 0;
+            unsafe { dst = *((info + 168) as *i32); }
+            bias = bias + dst;
+        }
+        unsafe { core.free(info); }
+        ret -(bias * 60); // convert from minutes-west to seconds-east
+    }
+    @cfg(target_os = "linux") {
+        // Parse TZ env var (e.g. "UTC+3", "EST-5", "+05:30", "-08:00").
+        unsafe {
+            const tz_ptr: *u8 = core.getenv("TZ");
+            if (tz_ptr == 0) { ret 0; }
+            const tz: str = core.str_from_ptr(tz_ptr);
+            ret __parse_tz_offset(tz);
+        }
+        ret 0;
+    }
+    ret 0;
+}
+
+// Parse a TZ string into seconds east of UTC.
+fn __parse_tz_offset(tz: str) i32 {
+    const len: usize = core.strlen(tz);
+    var i: usize = 0;
+    // Skip leading alphabetic timezone name (e.g. "EST" in "EST+5").
+    for (i < len) {
+        const b: u8 = core.str_byte_at(tz, i);
+        if (b == 43 || b == 45 || (b >= 48 && b <= 57)) { break; }
+        i++;
+    }
+    if (i >= len) { ret 0; }
+    var sign: i32 = 1;
+    const first: u8 = core.str_byte_at(tz, i);
+    if (first == 43) { sign = 1; i++; }
+    else if (first == 45) { sign = -1; i++; }
+    var hours: i32 = 0;
+    for (i < len) {
+        const b: u8 = core.str_byte_at(tz, i);
+        if (b < 48 || b > 57) { break; }
+        hours = hours * 10 + (b - 48) as i32;
+        i++;
+    }
+    var minutes: i32 = 0;
+    if (i < len && core.str_byte_at(tz, i) == 58) { // ':'
+        i++;
+        for (i < len) {
+            const b: u8 = core.str_byte_at(tz, i);
+            if (b < 48 || b > 57) { break; }
+            minutes = minutes * 10 + (b - 48) as i32;
+            i++;
+        }
+    }
+    ret sign * (hours * 3600 + minutes * 60);
+}
+
+// ── DateTime ──────────────────────────────────────────────────────────────────
+
+// Gregorian date and time of day with nanosecond sub-second precision.
+pub struct DateTime {
+    year: i32,
+    month: u8,   // 1–12
+    day: u8,     // 1–31
+    hour: u8,    // 0–23
+    minute: u8,  // 0–59
+    second: u8,  // 0–59 (60 for leap seconds)
+    nanos: u32,
+    tz_offset_secs: i32, // seconds east of UTC
+}
+
+// Howard Hinnant's civil-from-days algorithm (days since 1970-01-01 → Y-M-D).
+// License: public domain algorithm.
+unsafe fn __civil_from_days(z: i64, year: *i32, month: *u8, day: *u8) void {
+    var z2: i64 = z + 719468;
+    var era: i64 = 0;
+    if (z2 >= 0) { era = z2 / 146097; }
+    else { era = (z2 - 146096) / 146097; }
+    const doe: u64 = (z2 - era * 146097) as u64;            // day of era  [0, 146096]
+    const yoe: u64 = (doe - doe/1460 + doe/36524 - doe/146096) / 365; // yr of era [0, 399]
+    const y: i64 = yoe as i64 + era * 400;
+    const doy: u64 = doe - (365*yoe + yoe/4 - yoe/100);     // day of year [0, 365]
+    const mp: u64 = (5*doy + 2) / 153;                       // month prime [0, 11]
+    var d: u8 = (doy - (153*mp+2)/5 + 1) as u8;              // day         [1, 31]
+    var m: u8 = 0;
+    if (mp < 10) { m = (mp + 3) as u8; } else { m = (mp - 9) as u8; }
+    var y_final: i64 = y;
+    if (m <= 2) { y_final = y + 1; }
+    unsafe { *year = y_final as i32; *month = m; *day = d; }
+}
+
+// Reverse: Y-M-D → days since 1970-01-01 (Howard Hinnant's days_from_civil).
+fn __days_from_civil(year: i32, month: u8, day: u8) i64 {
+    var y: i64 = year as i64;
+    const m: u8 = month;
+    if (m <= 2) { y = y - 1; }
+    var era: i64 = 0;
+    if (y >= 0) { era = y / 400; } else { era = (y - 399) / 400; }
+    const yoe: u64 = (y - era * 400) as u64;
+    var mp: u64 = 0;
+    if (m > 2) { mp = (m - 3) as u64; } else { mp = (m + 9) as u64; }
+    const doy: u64 = (153 * mp + 2) / 5 + (day as u64) - 1;
+    const doe: u64 = yoe * 365 + yoe/4 - yoe/100 + doy;
+    ret era * 146097 + doe as i64 - 719468;
+}
+
+impl DateTime {
+    // Construct from a Unix timestamp (seconds since 1970-01-01 UTC) plus
+    // timezone offset (seconds east of UTC). Sub-second nanos default to 0;
+    // set them with the result after calling this.
+    pub fn from_timestamp(ts: i64, tz_offset_secs: i32) DateTime {
+        const local_ts: i64 = ts + tz_offset_secs as i64;
+        var days: i64 = local_ts / 86400;
+        var tod: i64 = local_ts % 86400;
+        if (tod < 0) { tod = tod + 86400; days = days - 1; }
+        var year: i32 = 0;
+        var month: u8 = 0;
+        var day: u8 = 0;
+        unsafe { __civil_from_days(days, &year, &month, &day); }
+        const hour: u8 = (tod / 3600) as u8;
+        const minute: u8 = ((tod % 3600) / 60) as u8;
+        const second: u8 = (tod % 60) as u8;
+        ret DateTime {
+            year: year, month: month, day: day,
+            hour: hour, minute: minute, second: second,
+            nanos: 0, tz_offset_secs: tz_offset_secs,
+        };
+    }
+
+
+    // Use the module-level DateTime.from_timestamp.
+    pub fn year(self: DateTime) i32 { ret self.year; }
+    pub fn month(self: DateTime) u8 { ret self.month; }
+    pub fn day(self: DateTime) u8 { ret self.day; }
+    pub fn hour(self: DateTime) u8 { ret self.hour; }
+    pub fn minute(self: DateTime) u8 { ret self.minute; }
+    pub fn second(self: DateTime) u8 { ret self.second; }
+    pub fn nanos(self: DateTime) u32 { ret self.nanos; }
+    pub fn tz_offset_secs(self: DateTime) i32 { ret self.tz_offset_secs; }
+
+    // ISO 8601 weekday: 0=Monday … 6=Sunday.
+    pub fn weekday(self: DateTime) u8 {
+        const days: i64 = __days_from_civil(self.year, self.month, self.day);
+        // 1970-01-01 was a Thursday = ISO weekday 3 (Mon=0).
+        var wd: i64 = (days + 3) % 7;
+        if (wd < 0) { wd = wd + 7; }
+        ret wd as u8;
+    }
+
+    // Day of year: 1–366.
+    pub fn day_of_year(self: DateTime) u32 {
+        const days_to_ystart: i64 = __days_from_civil(self.year, 1, 1);
+        const days_to_self: i64 = __days_from_civil(self.year, self.month, self.day);
+        ret (days_to_self - days_to_ystart + 1) as u32;
+    }
+
+    // Unix timestamp (seconds since 1970-01-01 00:00:00 UTC) for this DateTime.
+    pub fn timestamp(self: DateTime) i64 {
+        const days: i64 = __days_from_civil(self.year, self.month, self.day);
+        const tod: i64 = self.hour as i64 * 3600
+            + self.minute as i64 * 60
+            + self.second as i64;
+        ret days * 86400 + tod - self.tz_offset_secs as i64;
+    }
+
+    // Format using strftime-style directives:
+    //   %Y  four-digit year      %y  two-digit year
+    //   %m  two-digit month      %d  two-digit day-of-month
+    //   %H  hour 00–23           %M  minute 00–59     %S  second 00–59
+    //   %3  millisecond 000–999  %9  nanosecond 000000000–999999999
+    //   %A  full weekday name    %a  abbreviated weekday
+    //   %B  full month name      %b  abbreviated month
+    //   %Z  timezone (+HH:MM)    %%  literal percent
+    pub fn format(self: DateTime, template: str) String {
+        var out: String = String.new();
+        const len: usize = core.strlen(template);
+        var i: usize = 0;
+        for (i < len) {
+            const b: u8 = core.str_byte_at(template, i);
+            if (b == 37 && i + 1 < len) { // '%'
+                i++;
+                const spec: u8 = core.str_byte_at(template, i);
+                if (spec == 89) {        // %Y
+                    out = out.push_str(__pad_i32(self.year, 4).as_str());
+                } else if (spec == 121) { // %y
+                    out = out.push_str(__pad_i32(self.year % 100, 2).as_str());
+                } else if (spec == 109) { // %m
+                    out = out.push_str(__pad_u8(self.month, 2).as_str());
+                } else if (spec == 100) { // %d
+                    out = out.push_str(__pad_u8(self.day, 2).as_str());
+                } else if (spec == 72) {  // %H
+                    out = out.push_str(__pad_u8(self.hour, 2).as_str());
+                } else if (spec == 77) {  // %M
+                    out = out.push_str(__pad_u8(self.minute, 2).as_str());
+                } else if (spec == 83) {  // %S
+                    out = out.push_str(__pad_u8(self.second, 2).as_str());
+                } else if (spec == 51) {  // %3 — milliseconds
+                    out = out.push_str(__pad_u32(self.nanos / 1000000, 3).as_str());
+                } else if (spec == 57) {  // %9 — nanoseconds
+                    out = out.push_str(__pad_u32(self.nanos, 9).as_str());
+                } else if (spec == 65) {  // %A — full weekday
+                    out = out.push_str(__weekday_full(self.weekday()));
+                } else if (spec == 97) {  // %a — short weekday
+                    out = out.push_str(__weekday_short(self.weekday()));
+                } else if (spec == 66) {  // %B — full month
+                    out = out.push_str(__month_full(self.month));
+                } else if (spec == 98) {  // %b — short month
+                    out = out.push_str(__month_short(self.month));
+                } else if (spec == 90) {  // %Z — timezone
+                    out = out.push_str(__tz_string(self.tz_offset_secs).as_str());
+                } else if (spec == 37) {  // %%
+                    out = out.push_str("%");
+                }
+                // Unknown spec: skip silently (KISS).
+            } else {
+                // Append the single byte as a string via core.
+                unsafe {
+                    var ch: *u8 = core.malloc(2);
+                    if (ch != 0) {
+                        *ch = b;
+                        *(ch + 1) = 0;
+                        out = out.push_str(core.str_from_ptr(ch));
+                        core.free(ch);
+                    }
+                }
+            }
+            i++;
+        }
+        ret out;
+    }
+}
+
+// Current UTC date and time.
+pub fn utc_now() DateTime {
+    const st: SystemTime = SystemTime.now();
+    var dt: DateTime = DateTime.from_timestamp(st.unix_timestamp(), 0);
+    dt.nanos = st.subsec_nanos();
+    ret dt;
+}
+
+// Current local date and time (reads TZ on Linux, system timezone on Windows).
+pub fn local_now() DateTime {
+    const st: SystemTime = SystemTime.now();
+    const offset: i32 = local_tz_offset();
+    var dt: DateTime = DateTime.from_timestamp(st.unix_timestamp(), offset);
+    dt.nanos = st.subsec_nanos();
+    ret dt;
+}
+
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+fn __pad_i32(value: i32, width: usize) String {
+    var text: String = String.from((value as i64).to_string());
+    for (text.bytes_len() < width) { text = String.from("0").push_str(text.as_str()); }
+    ret text;
+}
+
+fn __pad_u8(value: u8, width: usize) String {
+    var text: String = String.from((value as i64).to_string());
+    for (text.bytes_len() < width) { text = String.from("0").push_str(text.as_str()); }
+    ret text;
+}
+
+fn __pad_u32(value: u32, width: usize) String {
+    var text: String = String.from((value as i64).to_string());
+    for (text.bytes_len() < width) { text = String.from("0").push_str(text.as_str()); }
+    ret text;
+}
+
+fn __weekday_full(d: u8) str {
+    if (d == 0) { ret "Monday"; }
+    if (d == 1) { ret "Tuesday"; }
+    if (d == 2) { ret "Wednesday"; }
+    if (d == 3) { ret "Thursday"; }
+    if (d == 4) { ret "Friday"; }
+    if (d == 5) { ret "Saturday"; }
+    ret "Sunday";
+}
+
+fn __weekday_short(d: u8) str {
+    if (d == 0) { ret "Mon"; }
+    if (d == 1) { ret "Tue"; }
+    if (d == 2) { ret "Wed"; }
+    if (d == 3) { ret "Thu"; }
+    if (d == 4) { ret "Fri"; }
+    if (d == 5) { ret "Sat"; }
+    ret "Sun";
+}
+
+fn __month_full(m: u8) str {
+    if (m == 1)  { ret "January"; }
+    if (m == 2)  { ret "February"; }
+    if (m == 3)  { ret "March"; }
+    if (m == 4)  { ret "April"; }
+    if (m == 5)  { ret "May"; }
+    if (m == 6)  { ret "June"; }
+    if (m == 7)  { ret "July"; }
+    if (m == 8)  { ret "August"; }
+    if (m == 9)  { ret "September"; }
+    if (m == 10) { ret "October"; }
+    if (m == 11) { ret "November"; }
+    ret "December";
+}
+
+fn __month_short(m: u8) str {
+    if (m == 1)  { ret "Jan"; }
+    if (m == 2)  { ret "Feb"; }
+    if (m == 3)  { ret "Mar"; }
+    if (m == 4)  { ret "Apr"; }
+    if (m == 5)  { ret "May"; }
+    if (m == 6)  { ret "Jun"; }
+    if (m == 7)  { ret "Jul"; }
+    if (m == 8)  { ret "Aug"; }
+    if (m == 9)  { ret "Sep"; }
+    if (m == 10) { ret "Oct"; }
+    if (m == 11) { ret "Nov"; }
+    ret "Dec";
+}
+
+fn __tz_string(offset_secs: i32) String {
+    var abs_s: i32 = offset_secs;
+    var sign: str = "+";
+    if (offset_secs < 0) { sign = "-"; abs_s = -offset_secs; }
+    const h: i32 = abs_s / 3600;
+    const m: i32 = (abs_s % 3600) / 60;
+    var result: String = String.from(sign);
+    result = result.push_str(__pad_i32(h, 2).as_str());
+    result = result.push_str(":");
+    result = result.push_str(__pad_i32(m, 2).as_str());
+    ret result;
+}
+
+// ── Sleep ─────────────────────────────────────────────────────────────────────
+
+// Suspend the current thread for at least the given duration.
+pub fn sleep(duration: Duration) void {
+    sleep_ms(duration.as_millis());
+}
+
+// Convenience: sleep for ms milliseconds.
+pub fn sleep_ms(ms: u64) void {
+    @cfg(target_os = "linux") {
+        // timespec: 16 bytes. [secs: i64, nanos: i64]
+        var req: *i64 = 0;
+        unsafe {
+            req = core.malloc(16) as *i64;
+            *req = (ms / 1000) as i64;
+            *(req + 1) = ((ms % 1000) * 1000000) as i64;
+            var null_ptr: *u8 = 0;
+            unix.nanosleep(req as *u8, null_ptr);
+            core.free(req as *u8);
+        }
+    }
+    @cfg(target_os = "windows") {
+        unsafe { win32_core.sleep(ms as u32); }
+    }
+}
+
+// Convenience: sleep for secs seconds.
+pub fn sleep_secs(secs: u64) void {
+    sleep_ms(secs * 1000);
+}
+

@@ -386,4 +386,144 @@ impl f64 {
     pub fn degrees(self: f64) f64 { ret math.degrees(self); }
     pub fn radians(self: f64) f64 { ret math.radians(self); }
     pub fn pow(self: f64, exponent: f64) f64 { ret math.pow(self, exponent); }
+    pub fn is_nan(self: f64) bool { ret math.is_nan(self); }
+    pub fn is_finite(self: f64) bool { ret math.is_finite(self); }
+    pub fn is_infinite(self: f64) bool { ret math.is_infinite(self); }
+    pub fn is_normal(self: f64) bool { ret math.is_normal(self); }
+}
+
+// ── Mathematical constants ────────────────────────────────────────────────────
+
+// π — ratio of a circle's circumference to its diameter.
+pub fn pi() f64 { ret 3.14159265358979323846; }
+
+// τ = 2π — one full turn in radians.
+pub fn tau() f64 { ret 6.28318530717958647692; }
+
+// e — Euler's number, base of natural logarithm.
+pub fn e() f64 { ret 2.71828182845904523536; }
+
+// φ — golden ratio.
+pub fn phi() f64 { ret 1.61803398874989484820; }
+
+// √2 — square root of two.
+pub fn sqrt2() f64 { ret 1.41421356237309504880; }
+
+// ln 2 — natural logarithm of two.
+pub fn ln2() f64 { ret 0.69314718055994530941; }
+
+// ── Floating-point classification ─────────────────────────────────────────────
+
+// True when x is NaN (not-a-number). Uses the property x != x ↔ x is NaN.
+pub fn is_nan(x: f64) bool { ret x != x; }
+
+// True when x is ±∞.
+pub fn is_infinite(x: f64) bool {
+    if (math.is_nan(x)) { ret false; }
+    var pos: f64 = x;
+    if (pos < 0.0) { pos = -pos; }
+    // MAX_FINITE_F64 ≈ 1.798e308; anything larger must be infinity.
+    ret pos > 179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000.0;
+}
+
+// True when x is a finite, non-NaN number.
+pub fn is_finite(x: f64) bool {
+    ret !math.is_nan(x) && !math.is_infinite(x);
+}
+
+// True when x is a normal (not subnormal, not zero, not NaN, not infinite).
+pub fn is_normal(x: f64) bool {
+    if (!math.is_finite(x) || x == 0.0) { ret false; }
+    var pos: f64 = x;
+    if (pos < 0.0) { pos = -pos; }
+    // MIN_NORMAL_F64 ≈ 2.225e-308; anything less is subnormal.
+    ret pos >= 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000022250738585072014;
+}
+
+// ── Integer helpers ───────────────────────────────────────────────────────────
+
+// Absolute value of a 32-bit signed integer. Returns i32::MAX for i32::MIN.
+pub fn abs_i32(x: i32) i32 {
+    if (x < 0) { ret -x; }
+    ret x;
+}
+
+// Absolute value of a 64-bit signed integer. Returns i64::MAX for i64::MIN.
+pub fn abs_i64(x: i64) i64 {
+    if (x < 0) { ret -x; }
+    ret x;
+}
+
+// Clamp x to [lo, hi] (inclusive). lo must be ≤ hi.
+pub fn clamp_i64(x: i64, lo: i64, hi: i64) i64 {
+    if (x < lo) { ret lo; }
+    if (x > hi) { ret hi; }
+    ret x;
+}
+
+pub fn clamp_f64(x: f64, lo: f64, hi: f64) f64 {
+    if (x < lo) { ret lo; }
+    if (x > hi) { ret hi; }
+    ret x;
+}
+
+// Minimum of two i64 values.
+pub fn min_i64(a: i64, b: i64) i64 { if (a < b) { ret a; } ret b; }
+pub fn max_i64(a: i64, b: i64) i64 { if (a > b) { ret a; } ret b; }
+pub fn min_u64(a: u64, b: u64) u64 { if (a < b) { ret a; } ret b; }
+pub fn max_u64(a: u64, b: u64) u64 { if (a > b) { ret a; } ret b; }
+pub fn min_f64(a: f64, b: f64) f64 { if (a < b) { ret a; } ret b; }
+pub fn max_f64(a: f64, b: f64) f64 { if (a > b) { ret a; } ret b; }
+
+// Smallest power of two ≥ n. Returns 1 for n = 0.
+pub fn next_power_of_two(n: u64) u64 {
+    if (n <= 1) { ret 1; }
+    var v: u64 = n - 1;
+    v = v | (v >> 1);
+    v = v | (v >> 2);
+    v = v | (v >> 4);
+    v = v | (v >> 8);
+    v = v | (v >> 16);
+    v = v | (v >> 32);
+    ret v + 1;
+}
+
+// Number of set bits (population count) in a u64.
+pub fn count_ones(x: u64) u32 {
+    var n: u64 = x;
+    n = n - ((n >> 1) & 6148914691236517205 as u64);
+    n = (n & 3689348814741910323 as u64) + ((n >> 2) & 3689348814741910323 as u64);
+    n = (n + (n >> 4)) & 1085102592571150095 as u64;
+    ret ((n * 72340172838076673 as u64) >> 56) as u32;
+}
+
+// Integer base-2 logarithm (floor). Returns 0 for n = 0.
+pub fn ilog2(n: u64) u32 {
+    if (n == 0) { ret 0; }
+    var result: u32 = 0;
+    var v: u64 = n;
+    for (v > 1) { v = v >> 1; result++; }
+    ret result;
+}
+
+// Integer square root (floor). Returns largest r such that r*r ≤ n.
+// Uses a pure-integer bit-by-bit method (no float).
+pub fn isqrt(n: u64) u64 {
+    if (n == 0) { ret 0; }
+    var result: u64 = 0;
+    // Start at the highest power-of-four bit position.
+    var bit: u64 = 1;
+    bit = bit << 62; // 2^62 is the largest power of 4 that fits in u64
+    for (bit > n) { bit = bit >> 2; }
+    var x: u64 = n;
+    for (bit != 0) {
+        if (x >= result + bit) {
+            x = x - (result + bit);
+            result = (result >> 1) + bit;
+        } else {
+            result = result >> 1;
+        }
+        bit = bit >> 2;
+    }
+    ret result;
 }

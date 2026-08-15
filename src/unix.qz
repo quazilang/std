@@ -312,6 +312,8 @@ pub fn vfork() i32;
 @syscall("execve")
 pub unsafe fn execve(path: str, argv: *u8, envp: *u8) i32;
 
+// Note: execvp is a libc function, not a syscall. Use execve.
+
 @syscall("execveat")
 pub unsafe fn execveat(dirfd: i32, path: str, argv: *u8, envp: *u8, flags: i32) i32;
 

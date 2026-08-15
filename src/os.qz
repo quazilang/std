@@ -2,6 +2,8 @@
 // Cross-platform: uses core intrinsics (void.*) where possible,
 // falls back to unix.* for Linux-specific calls.
 import std.core;
+import std.fs.{File};
+import std.time;
 import std.unix;
 import std.win32_core;
 
@@ -140,7 +142,7 @@ pub fn exit(code: i32) void {
 
 // Suspend execution for ms milliseconds.
 pub fn sleep(ms: u64) void {
-    core.sleep_ms(ms);
+    time.sleep_ms(ms);
 }
 
 // Yield the CPU to other threads/processes.
@@ -374,3 +376,133 @@ pub fn umask(mask: u32) u32 {
     unsafe { r = unix.umask(mask); }
     ret r;
 }
+
+// ── High-level current-directory helpers ─────────────────────────────────────
+
+// Return the current working directory as an owned String.
+pub fn cwd_string() String {
+    @cfg(target_os = "linux") {
+        const cap: usize = 4096;
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(cap); }
+        if (buf == 0) { ret String.new(); }
+        unsafe { core.memset(buf, 0, cap); }
+        var result: isize = 0;
+        unsafe { result = unix.getcwd(buf, cap); }
+        if (result <= 0) { unsafe { core.free(buf); } ret String.new(); }
+        var len: usize = 0;
+        unsafe {
+            len = core.strlen(core.str_from_ptr(buf));
+            ret String.from_raw(buf, len, cap);
+        }
+        ret String.new();
+    }
+    @cfg(target_os = "windows") {
+        const cap: usize = 4096;
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(cap); }
+        if (buf == 0) { ret String.new(); }
+        unsafe { core.memset(buf, 0, cap); }
+        // GetCurrentDirectoryA(nBufferLength, lpBuffer) -> DWORD
+        var n: u32 = 0;
+        unsafe { n = win32_core.environment(".", buf, cap as u32); }
+        if (n == 0) { unsafe { core.free(buf); } ret String.new(); }
+        unsafe { ret String.from_raw(buf, n as usize, cap); }
+        ret String.new();
+    }
+    ret String.new();
+}
+
+// Change the current working directory.
+// Returns true on success, false on error.
+pub fn chdir(path: str) bool {
+    @cfg(target_os = "linux") {
+        var r: i32 = 0;
+        unsafe { r = unix.chdir(path); }
+        ret r == 0;
+    }
+    ret false;
+}
+
+// Set an environment variable in the current process.
+// Returns true on success.
+// Note: on Linux this requires the C runtime; this is a best-effort wrapper
+// around the setenv(3) syscall interface via the linux setenv syscall path.
+pub fn set_env(key: str, value: str) bool {
+    @cfg(target_os = "linux") {
+        // Build "KEY=VALUE\0" and pass to putenv equivalent.
+        // Quazi targets bare Linux without libc, so we write the env block.
+        // The conventional approach is to use __environ; we use a safe
+        // helper that allocates the string and calls the glibc putenv
+        // via @api if available, otherwise returns false.
+        // For now: signal success if getenv can see the key (not writable
+        // without libc putenv). Return false to indicate unsupported.
+        ret false;
+    }
+    @cfg(target_os = "windows") {
+        // SetEnvironmentVariableA(name, value) -> BOOL
+        unsafe {
+            var r: i32 = 0;
+            // Build null-terminated key and value using CString-like approach.
+            const k_len: usize = core.strlen(key);
+            const v_len: usize = core.strlen(value);
+            var k_buf: *u8 = core.malloc(k_len + 1);
+            var v_buf: *u8 = core.malloc(v_len + 1);
+            if (k_buf == 0 || v_buf == 0) {
+                if (k_buf != 0) { core.free(k_buf); }
+                if (v_buf != 0) { core.free(v_buf); }
+                ret false;
+            }
+            core.memcpy(k_buf, core.str_as_ptr(key), k_len); *(k_buf + k_len) = 0;
+            core.memcpy(v_buf, core.str_as_ptr(value), v_len); *(v_buf + v_len) = 0;
+            r = win32_core.set_environment_variable(k_buf, v_buf);
+            core.free(k_buf); core.free(v_buf);
+            ret r != 0;
+        }
+        ret false;
+    }
+    ret false;
+}
+
+// Return the login name of the current user as an owned String.
+// Returns an empty String when the information is unavailable.
+pub fn username() String {
+    @cfg(target_os = "linux") {
+        // Try the USER env variable first (simplest, no libc required).
+        unsafe {
+            const ptr: *u8 = core.getenv("USER");
+            if (ptr != 0) {
+                const s: str = core.str_from_ptr(ptr);
+                if (core.strlen(s) > 0) { ret String.from(s); }
+            }
+            // Fall back to LOGNAME.
+            const ptr2: *u8 = core.getenv("LOGNAME");
+            if (ptr2 != 0) {
+                const s2: str = core.str_from_ptr(ptr2);
+                if (core.strlen(s2) > 0) { ret String.from(s2); }
+            }
+        }
+        ret String.new();
+    }
+    @cfg(target_os = "windows") {
+        const cap: usize = 256;
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(cap); }
+        if (buf == 0) { ret String.new(); }
+        unsafe { core.memset(buf, 0, cap); }
+        // GetUserNameA(lpBuffer, pcbBuffer) -> BOOL
+        var size: u32 = cap as u32;
+        unsafe {
+            win32_core.get_username(buf, &size);
+            if (size > 1) {
+                const result: String = String.from(core.str_from_ptr(buf));
+                core.free(buf);
+                ret result;
+            }
+            core.free(buf);
+        }
+        ret String.new();
+    }
+    ret String.new();
+}
+

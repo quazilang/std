@@ -1,0 +1,691 @@
+// std.process — spawn and manage child processes.
+//
+// Command builder pattern:
+//
+//   import std.process;
+//
+//   const out = process.Command.new("git")
+//       .arg("--version")
+//       .run()?;
+//   println("{}", out.stdout());
+//
+// run()   — spawn, wait, capture stdout + stderr → ProcessOutput
+// status()— spawn, wait, return exit code (no capture)
+// spawn() — return Child immediately (non-blocking)
+//
+// Platform:
+//   Linux   — fork(2) + execvp(3) with optional anonymous-pipe capture
+//   Windows — CreateProcessA with STARTUPINFOA pipe redirection
+//
+// Environment inheritance:
+//   By default the child inherits the parent's environment. Additional
+//   overrides are appended (Linux getenv returns the first match, so
+//   user entries placed first effectively override inherited ones).
+
+import std.core;
+import std.unix;
+import std.win32_core;
+
+// ── Error type ────────────────────────────────────────────────────────────────
+
+pub enum ProcessError {
+    AllocationFailed,
+    PipeFailed,
+    SpawnFailed(i32),
+    WaitFailed,
+    NotFound,
+    PermissionDenied,
+    IoError,
+    Unsupported,
+    Native(i32),
+}
+
+impl ProcessError {
+    pub fn message(self: ProcessError) str {
+        ret match self {
+            ProcessError.AllocationFailed => "process memory allocation failed",
+            ProcessError.PipeFailed       => "failed to create I/O pipe",
+            ProcessError.SpawnFailed(_)   => "failed to spawn child process",
+            ProcessError.WaitFailed       => "failed to wait for child process",
+            ProcessError.NotFound         => "program not found",
+            ProcessError.PermissionDenied => "permission denied executing program",
+            ProcessError.IoError          => "I/O error communicating with child",
+            ProcessError.Unsupported      => "process operation unsupported on this platform",
+            ProcessError.Native(_)        => "unclassified OS process error",
+        };
+    }
+
+    // The raw OS error code, if any.
+    pub fn code(self: ProcessError) i32 {
+        ret match self {
+            ProcessError.SpawnFailed(c) => c,
+            ProcessError.Native(c)      => c,
+            _                           => 0,
+        };
+    }
+}
+
+// ── ProcessOutput ─────────────────────────────────────────────────────────────
+
+// Captured output from a completed child process.
+pub struct ProcessOutput {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+impl ProcessOutput {
+    pub fn exit_code(self: ProcessOutput) i32 { ret self.exit_code; }
+    pub fn stdout(self: ProcessOutput) str { ret self.stdout.as_str(); }
+    pub fn stderr(self: ProcessOutput) str { ret self.stderr.as_str(); }
+    pub fn success(self: ProcessOutput) bool { ret self.exit_code == 0; }
+
+    pub fn free(self: ProcessOutput) void {
+        self.stdout.free();
+        self.stderr.free();
+    }
+}
+
+// ── Child ─────────────────────────────────────────────────────────────────────
+
+// A running child process returned by Command::spawn().
+pub struct Child {
+    pid: i32,         // Linux pid or Windows HANDLE (cast to i32)
+    handle: usize,    // Windows HANDLE (always 0 on Linux)
+}
+
+impl Child {
+    pub fn pid(self: Child) i32 { ret self.pid; }
+
+    // Block until the process exits. Returns its exit code.
+    pub fn wait(self: Child) Result[i32, ProcessError] {
+        @cfg(target_os = "linux") {
+            var status: u32 = 0;
+            var r: i32 = 0;
+            unsafe { r = unix.wait4(self.pid, &status, 0, 0); }
+            if (r < 0) { ret Err(ProcessError.WaitFailed); }
+            if ((status & 127) == 0) { ret Ok(((status >> 8) & 255) as i32); }
+            ret Ok(-1); // killed by signal
+        }
+        @cfg(target_os = "windows") {
+            var result: u32 = 0;
+            unsafe { result = win32_core.wait_single_object(self.handle, 4294967295 as u32); }
+            if (result != 0) { ret Err(ProcessError.WaitFailed); }
+            var code: u32 = 0;
+            unsafe { win32_core.get_exit_code_process(self.handle, &code); win32_core.close_handle(self.handle as usize); }
+            ret Ok(code as i32);
+        }
+        ret Err(ProcessError.Unsupported);
+    }
+
+    // Send SIGKILL (Linux) or TerminateProcess (Windows).
+    pub fn kill(self: Child) Result[bool, ProcessError] {
+        @cfg(target_os = "linux") {
+            var r: i32 = 0;
+            unsafe { r = unix.kill(self.pid, 9); } // SIGKILL
+            if (r < 0) { ret Err(ProcessError.Native(r)); }
+            ret Ok(true);
+        }
+        @cfg(target_os = "windows") {
+            var r: i32 = 0;
+            unsafe { r = win32_core.terminate_process(self.handle, 1) as i32; }
+            if (r == 0) { ret Err(ProcessError.Native(0)); }
+            ret Ok(true);
+        }
+        ret Err(ProcessError.Unsupported);
+    }
+}
+
+// ── Command ───────────────────────────────────────────────────────────────────
+
+// Builder for constructing and launching a child process.
+pub struct Command {
+    program: String,
+    args_list: Array[String],
+    env_list: Array[String],  // "KEY=VALUE" entries prepended to the inherited env
+    working_dir: String,      // empty string = inherit cwd
+    capture_stdout: bool,
+    capture_stderr: bool,
+    inherit_env: bool,
+}
+
+impl Command {
+    // Start building a command for `program`. PATH is searched on both platforms.
+    pub fn new(program: str) Command {
+        ret Command {
+            program: String.from(program),
+            args_list: Array.new(),
+            env_list: Array.new(),
+            working_dir: String.new(),
+            capture_stdout: true,
+            capture_stderr: true,
+            inherit_env: true,
+        };
+    }
+
+    // Append one argument.
+    pub fn arg(self: Command, argument: str) Command {
+        self.args_list.push(String.from(argument));
+        ret self;
+    }
+
+    // Add or override one environment variable for the child.
+    pub fn env(self: Command, key: str, value: str) Command {
+        var entry: String = String.from(key);
+        entry = entry.push_str("=");
+        entry = entry.push_str(value);
+        self.env_list.push(entry);
+        ret self;
+    }
+
+    // Set the child's working directory (default: inherit).
+    pub fn cwd(self: Command, dir: str) Command {
+        self.working_dir = String.from(dir);
+        ret self;
+    }
+
+    // Control whether the child inherits the parent's environment variables.
+    pub fn inherit_env(self: Command, inherit: bool) Command {
+        self.inherit_env = inherit;
+        ret self;
+    }
+
+    // Run the command, capture stdout+stderr, wait for exit → ProcessOutput.
+    pub fn run(self: Command) Result[ProcessOutput, ProcessError] {
+        ret __run_impl(self);
+    }
+
+    // Run without capturing; redirect to parent streams. Returns exit code.
+    pub fn status(self: Command) Result[i32, ProcessError] {
+        var cmd: Command = self;
+        cmd.capture_stdout = false;
+        cmd.capture_stderr = false;
+        const r: Result[ProcessOutput, ProcessError] = __run_impl(cmd);
+        if (r.is_err()) { ret Err(r.unwrap_err()); }
+        const out: ProcessOutput = r.unwrap();
+        const code: i32 = out.exit_code;
+        out.free();
+        ret Ok(code);
+    }
+
+    // Launch the process without waiting. stdout/stderr not captured.
+    pub fn spawn(self: Command) Result[Child, ProcessError] {
+        ret __spawn_impl(self);
+    }
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+// Build a null-terminated C argv array: [program, arg1, ..., argN, NULL].
+// Caller owns the returned memory; free with __free_cstr_array().
+unsafe fn __build_argv(program: str, args: Array[String]) *u8 {
+    const count: usize = args.len() + 1;
+    const arr: *u8 = core.malloc((count + 1) * 8);
+    if (arr == 0) { ret 0; }
+    core.memset(arr, 0, (count + 1) * 8);
+
+    // args[0] = program name
+    const prog_len: usize = core.strlen(program);
+    const prog_buf: *u8 = core.malloc(prog_len + 1);
+    if (prog_buf == 0) { core.free(arr); ret 0; }
+    core.memcpy(prog_buf, core.str_as_ptr(program), prog_len);
+    *(prog_buf + prog_len) = 0;
+    *((arr) as **u8) = prog_buf;
+
+    var i: usize = 0;
+    for (i < args.len()) {
+        const item: String = args[i];
+        const s: str = item.as_str();
+        const s_len: usize = core.strlen(s);
+        const s_buf: *u8 = core.malloc(s_len + 1);
+        if (s_buf == 0) { __free_cstr_array(arr); ret 0; }
+        core.memcpy(s_buf, core.str_as_ptr(s), s_len);
+        *(s_buf + s_len) = 0;
+        *((arr + (i + 1) * 8) as **u8) = s_buf;
+        i++;
+    }
+    // Slot count+1 is already 0 (null terminator) from memset.
+    ret arr;
+}
+
+// Free a null-terminated pointer array produced by __build_argv / __build_envp.
+unsafe fn __free_cstr_array(arr: *u8) void {
+    if (arr == 0) { ret; }
+    var i: usize = 0;
+    for (true) {
+        const ptr: *u8 = *((arr + i * 8) as **u8);
+        if (ptr == 0) { break; }
+        core.free(ptr);
+        i++;
+    }
+    core.free(arr);
+}
+
+// Read the current process environment from /proc/self/environ on Linux.
+// Returns an Array of "KEY=VALUE" Strings.
+@cfg(target_os = "linux")
+unsafe fn __read_parent_env() Array[String] {
+    var result: Array[String] = Array.new();
+    const cap: usize = 65536;
+    const buf: *u8 = core.malloc(cap);
+    if (buf == 0) { ret result; }
+    const fd: i32 = unix.open("/proc/self/environ", 0, 0);
+    if (fd < 0) { core.free(buf); ret result; }
+    var total: usize = 0;
+    for (total < cap - 1) {
+        const n: isize = unix.read(fd, buf + total, cap - 1 - total);
+        if (n <= 0) { break; }
+        total = total + n as usize;
+    }
+    unix.close(fd);
+    // Split by NUL bytes; each segment is a "KEY=VALUE" string.
+    var start: usize = 0;
+    var i: usize = 0;
+    for (i < total) {
+        if (*(buf + i) == 0 && i > start) {
+            *(buf + i) = 0; // ensure NUL (may already be)
+            const entry: str = core.str_from_ptr(buf + start);
+            result.push(String.from(entry));
+            start = i + 1;
+        }
+        i++;
+    }
+    core.free(buf);
+    ret result;
+}
+
+// Build a null-terminated C envp array.
+// User env_list entries come first (first-wins for duplicate keys on Linux).
+// Inherited parent env follows when inherit=true.
+unsafe fn __build_envp(env_list: Array[String], inherit: bool) *u8 {
+    var entries: Array[String] = Array.new();
+
+    // Add user-specified overrides first.
+    for i : 0..env_list.len() {
+        entries.push(env_list[i]);
+    }
+
+    // Append inherited env entries whose key is not already in user list.
+    @cfg(target_os = "linux") {
+        if (inherit) {
+            const parent_env: Array[String] = __read_parent_env();
+            for i : 0..parent_env.len() {
+                entries.push(parent_env[i]);
+            }
+        }
+    }
+
+    const count: usize = entries.len();
+    const arr: *u8 = core.malloc((count + 1) * 8);
+    if (arr == 0) { ret 0; }
+    core.memset(arr, 0, (count + 1) * 8);
+
+    for i : 0..count {
+        const item: String = entries[i];
+        const s: str = item.as_str();
+        const s_len: usize = core.strlen(s);
+        const s_buf: *u8 = core.malloc(s_len + 1);
+        if (s_buf == 0) { __free_cstr_array(arr); ret 0; }
+        core.memcpy(s_buf, core.str_as_ptr(s), s_len);
+        *(s_buf + s_len) = 0;
+        *((arr + i * 8) as **u8) = s_buf;
+    }
+    ret arr;
+}
+
+// Drain a file descriptor into a heap-owned String.
+@cfg(target_os = "linux")
+unsafe fn __drain_fd(fd: i32) String {
+    var cap: usize = 4096;
+    var len: usize = 0;
+    var buf: *u8 = core.malloc(cap);
+    if (buf == 0) { ret String.new(); }
+    for (true) {
+        if (len + 512 >= cap) {
+            cap = cap * 2;
+            var new_buf: *u8 = core.realloc(buf, cap);
+            if (new_buf == 0) { core.free(buf); ret String.new(); }
+            buf = new_buf;
+        }
+        const n: isize = unix.read(fd, buf + len, cap - len - 1);
+        if (n <= 0) { break; }
+        len = len + n as usize;
+    }
+    *(buf + len) = 0;
+    ret String.from_raw(buf, len, cap);
+}
+
+// ── Linux implementation ───────────────────────────────────────────────────────
+
+@cfg(target_os = "linux")
+fn __run_impl(cmd: Command) Result[ProcessOutput, ProcessError] {
+    // Allocate pipe buffers (each pipe = [read_fd: i32, write_fd: i32] = 8 bytes).
+    var stdout_pipe: *u8 = 0;
+    var stderr_pipe: *u8 = 0;
+
+    unsafe {
+        if (cmd.capture_stdout) {
+            stdout_pipe = core.malloc(8);
+            if (stdout_pipe == 0) { ret Err(ProcessError.AllocationFailed); }
+            if (unix.pipe(stdout_pipe) < 0) {
+                core.free(stdout_pipe);
+                ret Err(ProcessError.PipeFailed);
+            }
+        }
+        if (cmd.capture_stderr) {
+            stderr_pipe = core.malloc(8);
+            if (stderr_pipe == 0) {
+                if (stdout_pipe != 0) { unix.close(*(stdout_pipe as *i32)); unix.close(*((stdout_pipe+4) as *i32)); core.free(stdout_pipe); }
+                ret Err(ProcessError.AllocationFailed);
+            }
+            if (unix.pipe(stderr_pipe) < 0) {
+                core.free(stderr_pipe);
+                if (stdout_pipe != 0) { unix.close(*(stdout_pipe as *i32)); unix.close(*((stdout_pipe+4) as *i32)); core.free(stdout_pipe); }
+                ret Err(ProcessError.PipeFailed);
+            }
+        }
+    }
+
+    var argv: *u8 = 0;
+    var envp: *u8 = 0;
+    unsafe {
+        argv = __build_argv(cmd.program.as_str(), cmd.args_list);
+        envp = __build_envp(cmd.env_list, cmd.inherit_env);
+    }
+    if (argv == 0) {
+        unsafe {
+            if (stdout_pipe != 0) { core.free(stdout_pipe); }
+            if (stderr_pipe != 0) { core.free(stderr_pipe); }
+        }
+        ret Err(ProcessError.AllocationFailed);
+    }
+
+    var child_pid: i32 = 0;
+    unsafe { child_pid = unix.fork(); }
+
+    if (child_pid < 0) {
+        unsafe {
+            __free_cstr_array(argv);
+            if (envp != 0) { __free_cstr_array(envp); }
+            if (stdout_pipe != 0) { core.free(stdout_pipe); }
+            if (stderr_pipe != 0) { core.free(stderr_pipe); }
+        }
+        ret Err(ProcessError.SpawnFailed(child_pid));
+    }
+
+    if (child_pid == 0) {
+        // ── Child process ────────────────────────────────────────────────────
+        unsafe {
+            if (stdout_pipe != 0) {
+                unix.close(*(stdout_pipe as *i32));
+                unix.dup2(*((stdout_pipe + 4) as *i32), 1); // STDOUT_FILENO
+                unix.close(*((stdout_pipe + 4) as *i32));
+            }
+            if (stderr_pipe != 0) {
+                unix.close(*(stderr_pipe as *i32));
+                unix.dup2(*((stderr_pipe + 4) as *i32), 2); // STDERR_FILENO
+                unix.close(*((stderr_pipe + 4) as *i32));
+            }
+            if (!cmd.working_dir.is_empty()) {
+                unix.chdir(cmd.working_dir.as_str());
+            }
+            // Try as-is
+            unix.execve(cmd.program.as_str(), argv, envp);
+            // Try /bin/
+            var bin_prog: String = String.from("/bin/");
+            bin_prog = bin_prog.push_str(cmd.program.as_str());
+            unix.execve(bin_prog.as_str(), argv, envp);
+            // Try /usr/bin/
+            var usr_prog: String = String.from("/usr/bin/");
+            usr_prog = usr_prog.push_str(cmd.program.as_str());
+            unix.execve(usr_prog.as_str(), argv, envp);
+            unix.exit_group(127); // execve failed
+        }
+        // Unreachable after exec.
+        ret Err(ProcessError.SpawnFailed(0));
+    }
+
+    // ── Parent process ────────────────────────────────────────────────────────
+    var stdout_out: String = String.new();
+    var stderr_out: String = String.new();
+
+    unsafe {
+        if (stdout_pipe != 0) {
+            const r_fd: i32 = *(stdout_pipe as *i32);
+            const w_fd: i32 = *((stdout_pipe + 4) as *i32);
+            unix.close(w_fd);
+            stdout_out = __drain_fd(r_fd);
+            unix.close(r_fd);
+            core.free(stdout_pipe);
+        }
+        if (stderr_pipe != 0) {
+            const r_fd: i32 = *(stderr_pipe as *i32);
+            const w_fd: i32 = *((stderr_pipe + 4) as *i32);
+            unix.close(w_fd);
+            stderr_out = __drain_fd(r_fd);
+            unix.close(r_fd);
+            core.free(stderr_pipe);
+        }
+    }
+
+    var status: u32 = 0;
+    unsafe { unix.wait4(child_pid, &status, 0, 0); }
+    unsafe { __free_cstr_array(argv); if (envp != 0) { __free_cstr_array(envp); } }
+
+    var exit_code: i32 = -1;
+    if ((status & 127) == 0) { exit_code = ((status >> 8) & 255) as i32; }
+
+    ret Ok(ProcessOutput { exit_code: exit_code, stdout: stdout_out, stderr: stderr_out });
+}
+
+@cfg(target_os = "linux")
+fn __spawn_impl(cmd: Command) Result[Child, ProcessError] {
+    var argv: *u8 = 0;
+    unsafe { argv = __build_argv(cmd.program.as_str(), cmd.args_list); }
+    if (argv == 0) { ret Err(ProcessError.AllocationFailed); }
+
+    var envp: *u8 = 0;
+    unsafe { envp = __build_envp(cmd.env_list, cmd.inherit_env); }
+
+    var child_pid: i32 = 0;
+    unsafe { child_pid = unix.fork(); }
+
+    if (child_pid < 0) {
+        unsafe { __free_cstr_array(argv); if (envp != 0) { __free_cstr_array(envp); } }
+        ret Err(ProcessError.SpawnFailed(child_pid));
+    }
+
+    if (child_pid == 0) {
+        unsafe {
+            if (!cmd.working_dir.is_empty()) { unix.chdir(cmd.working_dir.as_str()); }
+            // Try as-is
+            unix.execve(cmd.program.as_str(), argv, envp);
+            // Try /bin/
+            var bin_prog: String = String.from("/bin/");
+            bin_prog = bin_prog.push_str(cmd.program.as_str());
+            unix.execve(bin_prog.as_str(), argv, envp);
+            // Try /usr/bin/
+            var usr_prog: String = String.from("/usr/bin/");
+            usr_prog = usr_prog.push_str(cmd.program.as_str());
+            unix.execve(usr_prog.as_str(), argv, envp);
+            unix.exit_group(127);
+        }
+        ret Err(ProcessError.SpawnFailed(0));
+    }
+
+    unsafe { __free_cstr_array(argv); if (envp != 0) { __free_cstr_array(envp); } }
+    ret Ok(Child { pid: child_pid, handle: 0 });
+}
+
+// ── Windows implementation ────────────────────────────────────────────────────
+
+@cfg(target_os = "windows")
+fn __run_impl(cmd: Command) Result[ProcessOutput, ProcessError] {
+    // STARTUPINFOA = 68 bytes, PROCESS_INFORMATION = 24 bytes.
+    var si: *u8 = 0;
+    var pi: *u8 = 0;
+    unsafe { si = core.malloc(68); pi = core.malloc(24); }
+    if (si == 0 || pi == 0) {
+        unsafe { if (si != 0) { core.free(si); } if (pi != 0) { core.free(pi); } }
+        ret Err(ProcessError.AllocationFailed);
+    }
+    unsafe { core.memset(si, 0, 68); core.memset(pi, 0, 24); }
+    // si.cb (offset 0) = 68
+    unsafe { *((si) as *u32) = 68; }
+
+    // Build command-line string: "program arg1 arg2 ..."
+    var cmd_line: String = String.from(cmd.program.as_str());
+    for i : 0..cmd.args_list.len() {
+        cmd_line = cmd_line.push_str(" ");
+        cmd_line = cmd_line.push_str(cmd.args_list[i].as_str());
+    }
+
+    // Capture pipes if requested.
+    var stdout_read: usize = 0; var stdout_write: usize = 0;
+    var stderr_read: usize = 0; var stderr_write: usize = 0;
+    var use_pipes: bool = cmd.capture_stdout || cmd.capture_stderr;
+
+    if (use_pipes) {
+        unsafe {
+            if (cmd.capture_stdout) {
+                if (win32_core.create_pipe(&stdout_read, &stdout_write, 0, 0) == 0) {
+                    core.free(si); core.free(pi);
+                    ret Err(ProcessError.PipeFailed);
+                }
+                win32_core.set_handle_info(stdout_read, 1, 0); // clear INHERIT on read end
+            }
+            if (cmd.capture_stderr) {
+                if (win32_core.create_pipe(&stderr_read, &stderr_write, 0, 0) == 0) {
+                    core.free(si); core.free(pi);
+                    ret Err(ProcessError.PipeFailed);
+                }
+                win32_core.set_handle_info(stderr_read, 1, 0);
+            }
+            // STARTF_USESTDHANDLES = 0x100; set si.dwFlags and std handles.
+            *((si + 44) as *u32) = 256; // dwFlags offset 44
+            if (cmd.capture_stdout) { *((si + 56) as *usize) = stdout_write; } // hStdOutput at 56
+            if (cmd.capture_stderr) { *((si + 64) as *usize) = stderr_write; } // hStdError at 64 (adjusted for usize)
+        }
+    }
+
+    // Build NUL-terminated command-line C string.
+    var cl_len: usize = cmd_line.bytes_len();
+    var cl_buf: *u8 = 0;
+    unsafe {
+        cl_buf = core.malloc(cl_len + 1);
+        if (cl_buf == 0) { core.free(si); core.free(pi); ret Err(ProcessError.AllocationFailed); }
+        core.memcpy(cl_buf, core.str_as_ptr(cmd_line.as_str()), cl_len);
+        *(cl_buf + cl_len) = 0;
+    }
+
+    // Build working directory string if set.
+    var dir_buf: *u8 = 0;
+    if (!cmd.working_dir.is_empty()) {
+        unsafe {
+            const d_len: usize = cmd.working_dir.bytes_len();
+            dir_buf = core.malloc(d_len + 1);
+            if (dir_buf != 0) {
+                core.memcpy(dir_buf, core.str_as_ptr(cmd.working_dir.as_str()), d_len);
+                *(dir_buf + d_len) = 0;
+            }
+        }
+    }
+
+    var ok: i32 = 0;
+    unsafe {
+        ok = win32_core.create_process(0, cl_buf, 0, 0, 1, 0, 0, dir_buf, si, pi);
+    }
+    unsafe { core.free(cl_buf); if (dir_buf != 0) { core.free(dir_buf); } }
+
+    if (ok == 0) {
+        unsafe { core.free(si); core.free(pi); }
+        ret Err(ProcessError.SpawnFailed(0));
+    }
+
+    // Close write ends in parent.
+    unsafe {
+        if (stdout_write != 0) { win32_core.close_handle(stdout_write); }
+        if (stderr_write != 0) { win32_core.close_handle(stderr_write); }
+    }
+
+    // Read stdout/stderr.
+    var stdout_out: String = String.new();
+    var stderr_out: String = String.new();
+    unsafe {
+        if (stdout_read != 0) { stdout_out = __drain_win_handle(stdout_read); win32_core.close_handle(stdout_read); }
+        if (stderr_read != 0) { stderr_out = __drain_win_handle(stderr_read); win32_core.close_handle(stderr_read); }
+    }
+
+    // Wait for process.
+    var proc_handle: usize = 0;
+    unsafe { proc_handle = *((pi + 0) as *usize); } // hProcess at offset 0
+    var exit_code: u32 = 0;
+    unsafe {
+        win32_core.wait_single_object(proc_handle, 4294967295 as u32);
+        win32_core.get_exit_code_process(proc_handle, &exit_code);
+        win32_core.close_handle(proc_handle);
+        core.free(si); core.free(pi);
+    }
+
+    ret Ok(ProcessOutput { exit_code: exit_code as i32, stdout: stdout_out, stderr: stderr_out });
+}
+
+@cfg(target_os = "windows")
+fn __spawn_impl(cmd: Command) Result[Child, ProcessError] {
+    var si: *u8 = 0;
+    var pi: *u8 = 0;
+    unsafe { si = core.malloc(68); pi = core.malloc(24); }
+    if (si == 0 || pi == 0) {
+        unsafe { if (si != 0) { core.free(si); } if (pi != 0) { core.free(pi); } }
+        ret Err(ProcessError.AllocationFailed);
+    }
+    unsafe { core.memset(si, 0, 68); core.memset(pi, 0, 24); *((si) as *u32) = 68; }
+
+    var cmd_line: String = String.from(cmd.program.as_str());
+    for i : 0..cmd.args_list.len() {
+        cmd_line = cmd_line.push_str(" ");
+        cmd_line = cmd_line.push_str(cmd.args_list[i].as_str());
+    }
+    var cl_len: usize = cmd_line.bytes_len();
+    var cl_buf: *u8 = 0;
+    unsafe {
+        cl_buf = core.malloc(cl_len + 1);
+        if (cl_buf == 0) { core.free(si); core.free(pi); ret Err(ProcessError.AllocationFailed); }
+        core.memcpy(cl_buf, core.str_as_ptr(cmd_line.as_str()), cl_len);
+        *(cl_buf + cl_len) = 0;
+    }
+
+    var ok: i32 = 0;
+    unsafe { ok = win32_core.create_process(0, cl_buf, 0, 0, 0, 0, 0, 0, si, pi); }
+    unsafe { core.free(cl_buf); }
+    if (ok == 0) {
+        unsafe { core.free(si); core.free(pi); }
+        ret Err(ProcessError.SpawnFailed(0));
+    }
+    var proc_handle: usize = 0;
+    unsafe { proc_handle = *((pi + 0) as *usize); core.free(si); core.free(pi); }
+    ret Ok(Child { pid: 0, handle: proc_handle });
+}
+
+// Read all bytes from a Windows HANDLE into a String.
+@cfg(target_os = "windows")
+unsafe fn __drain_win_handle(handle: usize) String {
+    var cap: usize = 4096;
+    var len: usize = 0;
+    var buf: *u8 = core.malloc(cap);
+    if (buf == 0) { ret String.new(); }
+    for (true) {
+        if (len + 512 >= cap) {
+            cap = cap * 2;
+            var new_buf: *u8 = core.realloc(buf, cap);
+            if (new_buf == 0) { core.free(buf); ret String.new(); }
+            buf = new_buf;
+        }
+        var n: u32 = 0;
+        const ok: i32 = win32_core.read_pipe(handle, buf + len, (cap - len - 1) as u32, &n, 0);
+        if (ok == 0 || n == 0) { break; }
+        len = len + n as usize;
+    }
+    *(buf + len) = 0;
+    ret String.from_raw(buf, len, cap);
+}

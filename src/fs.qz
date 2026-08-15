@@ -577,3 +577,309 @@ pub fn chmod(path: str, mode: u32) Result[bool, FsError] {
     }
     ret Err(FsError.Unsupported);
 }
+
+// ── BufReader ─────────────────────────────────────────────────────────────────
+
+// A buffered reader wrapping a File. Accumulates kernel I/O into an internal
+// buffer so that small reads (e.g. one line at a time) are cheap.
+//
+//   const r = BufReader.open("log.txt")?;
+//   for (true) {
+//       const line = r.read_line()?;
+//       if (line.is_none()) { break; }
+//       println("{}", line.unwrap().as_str());
+//   }
+pub struct BufReader {
+    file: File,
+    buf: *u8,
+    buf_cap: usize,
+    buf_len: usize,
+    buf_pos: usize,
+}
+
+impl BufReader {
+
+
+    // Open a file for buffered reading.
+    pub fn open(path: str) Result[BufReader, FsError] {
+        const file_result: Result[File, FsError] = File.open(path);
+        if (file_result.is_err()) { ret Err(file_result.unwrap_err()); }
+        const file: File = file_result.unwrap();
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(8192); }
+        if (buf == 0) { ret Err(FsError.AllocationFailed); }
+        ret Ok(BufReader { file: file, buf: buf, buf_cap: 8192, buf_len: 0, buf_pos: 0 });
+    }
+
+    // Wrap an already-open File.
+    pub fn from_file(file: File) Result[BufReader, FsError] {
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(8192); }
+        if (buf == 0) { ret Err(FsError.AllocationFailed); }
+        ret Ok(BufReader { file: file, buf: buf, buf_cap: 8192, buf_len: 0, buf_pos: 0 });
+    }
+
+    // Fill the internal buffer from the file. Returns false on EOF.
+    fn __fill(self: BufReader) bool {
+        if (self.buf_pos < self.buf_len) { ret true; }
+        var n: isize = -1;
+        unsafe { n = self.file.read(self.buf, self.buf_cap); }
+        if (n <= 0) { self.buf_len = 0; self.buf_pos = 0; ret false; }
+        self.buf_len = n as usize;
+        self.buf_pos = 0;
+        ret true;
+    }
+
+    // Read one line (including the trailing newline if present).
+    // Returns None on EOF, Err on read failure.
+    pub fn read_line(self: BufReader) Result[Option[String], FsError] {
+        var line: String = String.new();
+        var found_newline: bool = false;
+        for (!found_newline) {
+            if (!self.__fill()) {
+                if (line.is_empty()) { ret Ok(None); }
+                ret Ok(Some(line));
+            }
+            for (self.buf_pos < self.buf_len) {
+                var b: u8 = 0;
+                unsafe { b = *(self.buf + self.buf_pos); }
+                self.buf_pos++;
+                // Append byte to line.
+                unsafe {
+                    var ch: *u8 = core.malloc(2);
+                    if (ch != 0) {
+                        *ch = b;
+                        *(ch + 1) = 0;
+                        line = line.push_str(core.str_from_ptr(ch));
+                        core.free(ch);
+                    }
+                }
+                if (b == 10) { found_newline = true; break; } // '\n'
+            }
+        }
+        ret Ok(Some(line));
+    }
+
+    // Read all remaining content into a single String.
+    pub fn read_to_string(self: BufReader) Result[String, FsError] {
+        var result: String = String.new();
+        for (true) {
+            if (!self.__fill()) { break; }
+            // Append remaining buffered bytes.
+            for (self.buf_pos < self.buf_len) {
+                var b: u8 = 0;
+                unsafe { b = *(self.buf + self.buf_pos); }
+                self.buf_pos++;
+                unsafe {
+                    var ch: *u8 = core.malloc(2);
+                    if (ch != 0) {
+                        *ch = b;
+                        *(ch + 1) = 0;
+                        result = result.push_str(core.str_from_ptr(ch));
+                        core.free(ch);
+                    }
+                }
+            }
+        }
+        ret Ok(result);
+    }
+
+    // Read exactly n bytes into the returned Array. May return fewer at EOF.
+    pub fn read_bytes(self: BufReader, n: usize) Result[Array[u8], FsError] {
+        var out: Array[u8] = Array.new();
+        var remaining: usize = n;
+        for (remaining > 0) {
+            if (!self.__fill()) { break; }
+            for (self.buf_pos < self.buf_len && remaining > 0) {
+                var b: u8 = 0;
+                unsafe { b = *(self.buf + self.buf_pos); }
+                self.buf_pos++;
+                out.push(b);
+                remaining--;
+            }
+        }
+        ret Ok(out);
+    }
+
+    // Explicitly close the reader and free the buffer.
+    pub fn close(self: BufReader) void {
+        self.file.close();
+        unsafe { if (self.buf != 0) { core.free(self.buf); self.buf = 0; } }
+    }
+
+    pub fn free(self: BufReader) void {
+        self.close();
+    }
+}
+
+// ── BufWriter ─────────────────────────────────────────────────────────────────
+
+// A buffered writer wrapping a File. Accumulates small writes in memory and
+// flushes to the kernel when the buffer is full or flush() / free() is called.
+//
+//   const w = BufWriter.create("out.txt")?;
+//   w.write_str("hello\n")?;
+//   w.flush()?;
+pub struct BufWriter {
+    file: File,
+    buf: *u8,
+    buf_cap: usize,
+    buf_len: usize,
+}
+
+impl BufWriter {
+
+
+    pub fn create(path: str) Result[BufWriter, FsError] {
+        const file_result: Result[File, FsError] = File.create(path);
+        if (file_result.is_err()) { ret Err(file_result.unwrap_err()); }
+        ret BufWriter.__from_file(file_result.unwrap());
+    }
+
+    pub fn open_append(path: str) Result[BufWriter, FsError] {
+        const file_result: Result[File, FsError] = File.open_append(path);
+        if (file_result.is_err()) { ret Err(file_result.unwrap_err()); }
+        ret BufWriter.__from_file(file_result.unwrap());
+    }
+
+    pub fn from_file(file: File) Result[BufWriter, FsError] {
+        ret BufWriter.__from_file(file);
+    }
+
+    fn __from_file(file: File) Result[BufWriter, FsError] {
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(8192); }
+        if (buf == 0) { ret Err(FsError.AllocationFailed); }
+        ret Ok(BufWriter { file: file, buf: buf, buf_cap: 8192, buf_len: 0 });
+    }
+
+    // Flush internal buffer to disk.
+    pub fn flush(self: BufWriter) Result[bool, FsError] {
+        if (self.buf_len == 0) { ret Ok(true); }
+        var written: usize = 0;
+        for (written < self.buf_len) {
+            var n: isize = -1;
+            unsafe { n = self.file.write_raw(self.buf + written, self.buf_len - written); }
+            if (n <= 0) { ret Err(FsError.Native(-1)); }
+            written = written + n as usize;
+        }
+        self.buf_len = 0;
+        ret Ok(true);
+    }
+
+    // Buffer a str for writing. Flushes automatically when the buffer is full.
+    pub fn write_str(self: BufWriter, text: str) Result[usize, FsError] {
+        var src: *u8 = 0;
+        unsafe { src = core.str_as_ptr(text); }
+        const len: usize = text.len();
+        var written: usize = 0;
+        for (written < len) {
+            const space: usize = self.buf_cap - self.buf_len;
+            const chunk: usize = len - written;
+            var copy: usize = chunk;
+            if (copy > space) { copy = space; }
+            unsafe { core.memcpy(self.buf + self.buf_len, src + written, copy); }
+            self.buf_len = self.buf_len + copy;
+            written = written + copy;
+            if (self.buf_len == self.buf_cap) {
+                const flush_result: Result[bool, FsError] = self.flush();
+                if (flush_result.is_err()) { ret Err(flush_result.unwrap_err()); }
+            }
+        }
+        ret Ok(len);
+    }
+
+    // Buffer a line (appends '\n' automatically).
+    pub fn write_line(self: BufWriter, text: str) Result[usize, FsError] {
+        const a: Result[usize, FsError] = self.write_str(text);
+        if (a.is_err()) { ret Err(a.unwrap_err()); }
+        const b: Result[usize, FsError] = self.write_str("\n");
+        if (b.is_err()) { ret Err(b.unwrap_err()); }
+        ret Ok(a.unwrap() + b.unwrap());
+    }
+
+    // Flush and close.
+    pub fn close(self: BufWriter) Result[bool, FsError] {
+        const f: Result[bool, FsError] = self.flush();
+        if (f.is_err()) { ret Err(f.unwrap_err()); }
+        self.file.close();
+        unsafe { if (self.buf != 0) { core.free(self.buf); self.buf = 0; } }
+        ret Ok(true);
+    }
+
+    pub fn free(self: BufWriter) void {
+        self.close();
+        unsafe { if (self.buf != 0) { core.free(self.buf); self.buf = 0; } }
+    }
+}
+
+// ── FileMetadata ──────────────────────────────────────────────────────────────
+
+// File attributes returned by stat().
+pub struct FileMetadata {
+    size: u64,         // byte length of a regular file (0 for directories)
+    is_file: bool,
+    is_dir: bool,
+    is_symlink: bool,
+    modified_secs: i64,  // Unix timestamp of last modification (0 = unknown)
+    mode: u32,           // POSIX permission bits (0 = unknown on Windows)
+}
+
+impl FileMetadata {
+    pub fn size(self: FileMetadata) u64 { ret self.size; }
+    pub fn is_file(self: FileMetadata) bool { ret self.is_file; }
+    pub fn is_dir(self: FileMetadata) bool { ret self.is_dir; }
+    pub fn is_symlink(self: FileMetadata) bool { ret self.is_symlink; }
+    // Seconds since Unix epoch of the last write. 0 when unavailable.
+    pub fn modified_secs(self: FileMetadata) i64 { ret self.modified_secs; }
+    pub fn mode(self: FileMetadata) u32 { ret self.mode; }
+}
+
+// Query attributes for a path.
+pub fn stat(path: str) Result[FileMetadata, FsError] {
+    @cfg(target_os = "linux") {
+        // struct stat on x86-64 Linux: 144 bytes.
+        // Relevant fields (offsets):
+        //   st_mode  u32 at byte 24
+        //   st_size  i64 at byte 48
+        //   st_mtime i64 at byte 88
+        var buf: *u8 = 0;
+        unsafe { buf = core.malloc(144); core.memset(buf, 0, 144); }
+        if (buf == 0) { ret Err(FsError.AllocationFailed); }
+        var r: i32 = -1;
+        unsafe { r = unix.stat(path, buf); }
+        if (r < 0) { unsafe { core.free(buf); } ret Err(fs_error(r)); }
+        var mode: u32 = 0;
+        var size: i64 = 0;
+        var mtime: i64 = 0;
+        unsafe {
+            mode  = *((buf + 24) as *u32);
+            size  = *((buf + 48) as *i64);
+            mtime = *((buf + 88) as *i64);
+            core.free(buf);
+        }
+        const file_type: u32 = mode & 61440; // S_IFMT = 0xF000
+        const is_file: bool    = file_type == 32768;  // S_IFREG = 0x8000
+        const is_dir: bool     = file_type == 16384;  // S_IFDIR = 0x4000
+        const is_symlink: bool = file_type == 40960;  // S_IFLNK = 0xA000
+        var final_size: u64 = 0;
+        if (is_file) { final_size = size as u64; }
+        ret Ok(FileMetadata {
+            size: final_size,
+            is_file: is_file, is_dir: is_dir, is_symlink: is_symlink,
+            modified_secs: mtime, mode: mode & 4095,
+        });
+    }
+    @cfg(target_os = "windows") {
+        var attr: u32 = 0;
+        unsafe { attr = win32_core.file_attributes(core.str_as_ptr(path)); }
+        if (attr == 4294967295 as u32) { ret Err(last_fs_error()); }
+        const is_dir: bool = (attr & 16) != 0;
+        ret Ok(FileMetadata {
+            size: 0,        // would need GetFileAttributesExA for size
+            is_file: !is_dir, is_dir: is_dir, is_symlink: (attr & 1024) != 0,
+            modified_secs: 0, mode: 0,
+        });
+    }
+    ret Err(FsError.Unsupported);
+}

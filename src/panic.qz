@@ -1,0 +1,33 @@
+// std.panic — panic handling and reporting
+//
+// The compiler routes language-level errors (division by zero, unwrap on None)
+// and explicit `panic("msg")` calls to the panic runtime.
+// The default handler `__quazi_panic_handler` prints the message and exits 101.
+// A custom handler can be provided with `@panic_handler`.
+
+import std.core;
+import std.io;
+
+pub struct PanicInfo {
+    message: str,
+    file: str,
+    line: u32,
+}
+
+@no_mangle
+pub fn __quazi_panic_handler(info: PanicInfo) void {
+    io.eprintln("PANIC: {} at {}:{}", info.message, info.file, info.line.to_string());
+    core.exit(101);
+}
+
+// Abort execution with a message.
+// The compiler intercepts direct calls to `panic` and injects `file` and `line`
+// at the call site before invoking the active panic handler.
+pub fn panic(msg: str) void {
+    const info: PanicInfo = PanicInfo {
+        message: msg,
+        file: "<explicit panic>",
+        line: 0,
+    };
+    __quazi_panic_handler(info);
+}
