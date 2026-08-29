@@ -83,6 +83,10 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   probabilities, unbiased integer ranges, collection choice/shuffling, and
   random bytes. It uses the compiler's system-random intrinsic and returns
   `RandomError.Unavailable` when secure system entropy is unavailable.
+- `std.random.choose` currently consumes its `Array[T]`. Shared aggregate
+  references cannot be materialized safely until Quazi has immutable aggregate
+  receivers or lifetime-aware views; do not restore the former `*items` shallow
+  alias workaround.
 - `std.net` owns cross-platform Linux/Winsock socket handles and exposes IPv4
   TCP streams/listeners, UDP datagrams, DNS resolution, structured HTTP/1.1
   request/response/header parsing, chunked responses, response limits, and
@@ -90,6 +94,11 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.
+- `std.thread.Thread.spawn` accepts the target-specific `ThreadCallback`
+  `@repr(C)` alias. Callbacks must be compatible exported functions; ordinary
+  Quazi closures and arbitrary values cannot cross the native thread ABI. The
+  low-level spawn contract returns zero on allocation or OS thread-creation
+  failure; joining a zero handle is a no-op.
 - Safe `std.net` operations return `NetError`; safe fallible `std.fs` operations
   return `FsError`. Stable variants normalize Linux/Windows errors, `message()`
   provides display text, and `Native(code)` preserves unknown platform failures.

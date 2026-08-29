@@ -1,10 +1,18 @@
 // std.thread — threading primitives
 // Cross-platform: Linux uses pthread_create/pthread_join,
 // Windows uses CreateThread/WaitForSingleObject.
-// Thread functions must have signature compatible with fn(*u8) *u8 (Linux)
-// or fn(*u8) u32 (Windows). Pass as `any` to spawn.
+// Thread callbacks use the platform C ABI. They must be exported functions;
+// captured Quazi closures cannot cross this native boundary.
 import std.core;
 import std.unix;
+
+@cfg(target_os = "linux")
+@repr(C)
+pub type ThreadCallback = fn(*u8) *u8;
+
+@cfg(target_os = "windows")
+@repr(C)
+pub type ThreadCallback = fn(*u8) u32;
 
 // ── Intrinsics ────────────────────────────────────────────────────────────────
 
@@ -13,11 +21,12 @@ import std.unix;
 // Windows: f is called as LPTHREAD_START_ROUTINE (fn(*u8) u32).
 // Returns a thread handle (opaque usize) or 0 on failure.
 @intrinsic("quazi.thread.spawn")
-pub unsafe fn thread_spawn(f: any) usize;
+pub unsafe fn thread_spawn(f: ThreadCallback) usize;
 
 // Wait for the thread identified by handle to finish.
 // On Linux also frees the pthread_t storage allocated by thread_spawn.
 // On Windows closes the thread handle after waiting.
+// A zero handle (failed spawn) is a no-op.
 @intrinsic("quazi.thread.join")
 pub unsafe fn thread_join(handle: usize) void;
 
@@ -28,16 +37,15 @@ pub struct Thread {
 }
 
 impl Thread {
-    // Spawn a new thread running f.
-    // f must be a zero-parameter-capturing function pointer (no captures).
-    pub unsafe fn spawn(f: any) Thread {
-        var h: usize = thread_spawn(f);
+    // Spawn a new thread running an exported C-ABI-compatible callback.
+    pub unsafe fn spawn(f: ThreadCallback) Thread {
+        var h: usize = thread.thread_spawn(f);
         ret Thread { handle: h };
     }
 
     // Wait for the thread to finish. Consumes the handle.
     pub unsafe fn join(self: Thread) void {
-        thread_join(self.handle);
+        thread.thread_join(self.handle);
     }
 
     // Returns the opaque thread handle.

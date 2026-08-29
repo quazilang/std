@@ -97,11 +97,10 @@ pub fn range(bounds: Range) Result[i64, RandomError] {
     ret Ok((selected ^ sign_bit) as i64);
 }
 
-pub fn choose[T](items: &Array[T]) Result[T, RandomError] {
-    const collection: Array[T] = *items;
-    if (collection.is_empty()) { ret Err(RandomError.EmptyCollection); }
-    const index: usize = range(0..(collection.len() as i64))? as usize;
-    ret Ok(collection[index]);
+pub fn choose[T](items: Array[T]) Result[T, RandomError] {
+    if (items.is_empty()) { ret Err(RandomError.EmptyCollection); }
+    const index: usize = range(0..(items.len() as i64))? as usize;
+    ret Ok(items[index]);
 }
 
 // Fisher-Yates shuffle. Array storage is shared, so this mutates the supplied
@@ -119,7 +118,7 @@ pub fn shuffle[T](items: Array[T]) Result[Array[T], RandomError] {
 }
 
 pub fn random_bytes(count: usize) Result[Array[u8], RandomError] {
-    var output: Array[u8] = Array.new();
+    var output: Array[u8] = Array.new() as Array[u8];
     var index: usize = 0;
     var word: u64 = 0;
     var available: usize = 0;
