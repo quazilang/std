@@ -608,7 +608,14 @@ impl Header {
 pub struct Headers { items: Array[Header], }
 
 impl Headers {
-    pub fn new() Headers { ret Headers { items: Array.new() }; }
+    // Zero-argument generic associated constructors do not yet infer their
+    // struct type from the surrounding field position, so the element type is
+    // pinned by an explicit annotated binding (same workaround as
+    // `std.random.random_bytes`).
+    pub fn new() Headers {
+        const items: Array[Header] = Array.new();
+        ret Headers { items: items };
+    }
     pub fn append(self: Headers, name: str, value: str) void { self.items.push(Header.new(name, value)); }
     pub fn set(self: Headers, name: str, value: str) void {
         const needle: String = name.to_lowercase();
