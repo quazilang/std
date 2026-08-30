@@ -737,7 +737,7 @@ impl Url {
         if (separator.is_none()) { ret Err(NetError.InvalidUrl); }
         const scheme_end: usize = separator.unwrap();
         const scheme: String = text[0:scheme_end as isize];
-        if (scheme != "http" && scheme != "https") { ret Err(NetError.InvalidUrl); }
+        if (scheme.as_str() != "http" && scheme.as_str() != "https") { ret Err(NetError.InvalidUrl); }
         const authority_start: usize = scheme_end + 3;
         const rest: String = text[authority_start as isize:];
         const slash: Option[usize] = rest.find("/");
@@ -752,7 +752,7 @@ impl Url {
         const colon: Option[usize] = authority.find(":");
         var host: String = String.from(authority.as_str());
         var port: i32 = 80;
-        if (scheme == "https") { port = 443; }
+        if (scheme.as_str() == "https") { port = 443; }
         if (colon.is_some()) {
             const split: usize = colon.unwrap();
             host = authority[0:split as isize];
@@ -850,7 +850,7 @@ impl HttpRequest {
         const target_end: usize = second_space.unwrap();
         const target: String = rest[0:target_end as isize];
         const version: String = rest[(target_end + 1) as isize:];
-        if (version != "HTTP/1.1" && version != "HTTP/1.0") { ret Err(NetError.InvalidHttp); }
+        if (version.as_str() != "HTTP/1.1" && version.as_str() != "HTTP/1.0") { ret Err(NetError.InvalidHttp); }
         const header_block: String = head[(line_index + 2) as isize:];
         const parsed_headers: Result[Headers, NetError] = __parse_headers(header_block.as_str());
         if (parsed_headers.is_err()) { ret Err(parsed_headers.unwrap_err()); }
