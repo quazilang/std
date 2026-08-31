@@ -32,15 +32,18 @@ pub unsafe fn thread_join(handle: usize) void;
 
 // ── Thread struct ─────────────────────────────────────────────────────────────
 
+pub enum ThreadError { CreationFailed, }
+
 pub struct Thread {
     handle: usize,
 }
 
 impl Thread {
     // Spawn a new thread running an exported C-ABI-compatible callback.
-    pub unsafe fn spawn(f: ThreadCallback) Thread {
+    pub unsafe fn spawn(f: ThreadCallback) Result[Thread, ThreadError] {
         var h: usize = thread.thread_spawn(f);
-        ret Thread { handle: h };
+        if h == 0 { ret Err(ThreadError.CreationFailed); }
+        ret Ok(Thread { handle: h });
     }
 
     // Wait for the thread to finish. Consumes the handle.
