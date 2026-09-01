@@ -368,6 +368,9 @@ pub fn read_to_string(path: str) Result[String, FsError] {
         if (count == 0) { break; }
         length = length + count as usize;
     }
+    var valid: bool = false;
+    unsafe { valid = core.is_valid_utf8(buffer.data, length); }
+    if (!valid) { ret Err(FsError.InvalidData); }
     unsafe { *(buffer.data + length) = 0; }
     var result: String = String.new();
     unsafe { result = String.from_raw(buffer.take(), length, capacity + 1); }

@@ -33,6 +33,7 @@ pub enum NetError {
     MessageTooLarge,
     LimitExceeded,
     AllocationFailed,
+    InvalidUtf8,
     TlsUnavailable,
     Unsupported,
     Native(i32),
@@ -60,6 +61,7 @@ impl NetError {
             NetError.MessageTooLarge => "network message is too large",
             NetError.LimitExceeded => "network response exceeded configured limit",
             NetError.AllocationFailed => "network buffer allocation failed",
+            NetError.InvalidUtf8 => "network text was not valid UTF-8",
             NetError.TlsUnavailable => "HTTPS requires a TLS transport",
             NetError.Unsupported => "network operation is unsupported",
             NetError.Native(_) => "unclassified operating-system network error",
@@ -403,6 +405,34 @@ impl TcpStream {
             unsafe { core.free(data); }
             ret Err(__net_error(__error(count as i32)));
         }
+        var missing: usize = 0;
+        unsafe { missing = core.utf8_incomplete_tail(data, count as usize); }
+        for (missing > 0) {
+            const remaining: usize = limit - count as usize;
+            if (missing > remaining) {
+                unsafe { core.free(data); }
+                ret Err(NetError.LimitExceeded);
+            }
+            var received: isize = 0;
+            unsafe { received = __recv(self.socket, data + count as usize, missing); }
+            if (received < 0) {
+                unsafe { core.free(data); }
+                ret Err(__net_error(__error(received as i32)));
+            }
+            if (received == 0) {
+                unsafe { core.free(data); }
+                ret Err(NetError.InvalidUtf8);
+            }
+            count = count + received;
+            unsafe { missing = core.utf8_incomplete_tail(data, count as usize); }
+        }
+        var valid: bool = false;
+        unsafe { valid = core.is_valid_utf8(data, count as usize); }
+        if (!valid) {
+            unsafe { core.free(data); }
+            ret Err(NetError.InvalidUtf8);
+        }
+
         unsafe { *(data + count as usize) = 0; }
         var text: String = String.new();
         unsafe { text = String.from_raw(data, count as usize, limit + 1); }
@@ -410,18 +440,35 @@ impl TcpStream {
     }
 
     pub fn receive_all(self: TcpStream, limit: usize) Result[String, NetError] {
-        var output: String = String.new();
-        for (true) {
-            if (output.bytes_len() >= limit) { ret Err(NetError.LimitExceeded); }
-            var size: usize = 8192;
-            if (limit - output.bytes_len() < size) { size = limit - output.bytes_len(); }
-            const chunk: Result[String, NetError] = self.receive(size);
-            if (chunk.is_err()) { ret Err(chunk.unwrap_err()); }
-            const text: String = chunk.unwrap();
-            if (text.bytes_len() == 0) { ret Ok(output); }
-            output = output.push_str(text.as_str());
+        if (limit == 0) { ret Ok(String.new()); }
+        var data: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); }
+        if (data == 0) { ret Err(NetError.AllocationFailed); }
+        var length: usize = 0;
+        for (length < limit) {
+            var count: isize = 0;
+            unsafe { count = __recv(self.socket, data + length, limit - length); }
+            if (count < 0) {
+                unsafe { core.free(data); }
+                ret Err(__net_error(__error(count as i32)));
+            }
+            if (count == 0) { break; }
+            length = length + count as usize;
         }
-        ret Ok(output);
+        if (length == limit) {
+            unsafe { core.free(data); }
+            ret Err(NetError.LimitExceeded);
+        }
+        var valid: bool = false;
+        unsafe { valid = core.is_valid_utf8(data, length); }
+        if (!valid) {
+            unsafe { core.free(data); }
+            ret Err(NetError.InvalidUtf8);
+        }
+        unsafe { *(data + length) = 0; }
+        var text: String = String.new();
+        unsafe { text = String.from_raw(data, length, limit + 1); }
+        ret Ok(text);
     }
 
     pub fn shutdown(self: TcpStream, how: Shutdown) Result[bool, NetError] {
@@ -544,6 +591,13 @@ impl UdpSocket {
         var count: isize = 0;
         unsafe { count = __recv(self.socket, data, limit); }
         if (count < 0) { unsafe { core.free(data); } ret Err(__net_error(__error(count as i32))); }
+        var valid: bool = false;
+        unsafe { valid = core.is_valid_utf8(data, count as usize); }
+        if (!valid) {
+            unsafe { core.free(data); }
+            ret Err(NetError.InvalidUtf8);
+        }
+
         unsafe { *(data + count as usize) = 0; }
         var text: String = String.new();
         unsafe { text = String.from_raw(data, count as usize, limit + 1); }
@@ -584,6 +638,13 @@ impl UdpSocket {
         host = host.push_str("."); host = host.push_str(((raw_ip >> 8) & 255).to_string());
         host = host.push_str("."); host = host.push_str(((raw_ip >> 16) & 255).to_string());
         host = host.push_str("."); host = host.push_str(((raw_ip >> 24) & 255).to_string());
+        var valid: bool = false;
+        unsafe { valid = core.is_valid_utf8(data, count as usize); }
+        if (!valid) {
+            unsafe { core.free(data); core.free(raw_address); core.free(raw_length); }
+            ret Err(NetError.InvalidUtf8);
+        }
+
         unsafe { *(data + count as usize) = 0; core.free(raw_address); core.free(raw_length); }
         var text: String = String.new();
         unsafe { text = String.from_raw(data, count as usize, limit + 1); }
