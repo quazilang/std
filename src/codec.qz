@@ -56,6 +56,7 @@ impl Serialize for bool {
 }
 
 fn whitespace(byte: u8) bool { ret byte == 32 || byte == 9 || byte == 10 || byte == 13; }
+fn digit(byte: u8) bool { ret byte >= 48 && byte <= 57; }
 
 fn literal_at(source: str, start: usize, end: usize, value: str) bool {
     if (end - start != value.bytes_len()) { ret false; }
@@ -98,6 +99,21 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
 pub fn decode_string(source: str) Result[String, DecodeError] {
     ret decode_string_with_limits(source, 1048576, 64);
 }
+
+pub fn decode_i64_with_limits(source: str, max_input: usize, max_depth: usize) Result[i64, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (start == end || (core.str_byte_at(source, start) != 45 && !digit(core.str_byte_at(source, start)))) { ret Err(DecodeError.TypeMismatch); }
+    const raw: String = source[start as isize:end as isize];
+    const parsed: Result[i64, ParseError] = raw.parse_i64();
+    if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
+    ret Ok(parsed.unwrap());
+}
+
+pub fn decode_i64(source: str) Result[i64, DecodeError] { ret decode_i64_with_limits(source, 1048576, 64); }
 
 impl Serialize for str {
     pub fn to_json(self: str) Result[String, EncodeError] { ret Ok(json.quote(self)); }
