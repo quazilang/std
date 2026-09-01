@@ -89,6 +89,16 @@ pub fn decode_bool(source: str) Result[bool, DecodeError] {
     ret decode_bool_with_limits(source, 1048576, 64);
 }
 
+pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, DecodeError] {
+    const decoded: Result[String, JsonError] = json.decode_string_with_limits(source, max_input, max_depth);
+    if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
+    ret Ok(decoded.unwrap());
+}
+
+pub fn decode_string(source: str) Result[String, DecodeError] {
+    ret decode_string_with_limits(source, 1048576, 64);
+}
+
 impl Serialize for str {
     pub fn to_json(self: str) Result[String, EncodeError] { ret Ok(json.quote(self)); }
 }
