@@ -1,0 +1,156 @@
+// std.json — bounded validation primitives for JSON text.
+// This initial module deliberately validates syntax without constructing a
+// dynamic value tree; typed decoding is supplied by derived codecs later.
+import std.core;
+
+pub enum JsonError {
+    InputLimit,
+    DepthLimit,
+    UnexpectedEnd,
+    InvalidToken,
+    InvalidString,
+    InvalidEscape,
+    InvalidNumber,
+    TrailingData,
+}
+
+impl JsonError {
+    pub fn message(self: JsonError) str {
+        ret match self {
+            InputLimit => "JSON input exceeds the configured byte limit",
+            DepthLimit => "JSON nesting exceeds the configured depth limit",
+            UnexpectedEnd => "JSON input ended unexpectedly",
+            InvalidToken => "invalid JSON token",
+            InvalidString => "invalid JSON string",
+            InvalidEscape => "invalid JSON string escape",
+            InvalidNumber => "invalid JSON number",
+            TrailingData => "unexpected data after a JSON value",
+        };
+    }
+}
+
+struct Parser { source: str, offset: usize, max_depth: usize, }
+
+fn whitespace(byte: u8) bool { ret byte == 32 || byte == 9 || byte == 10 || byte == 13; }
+fn digit(byte: u8) bool { ret byte >= 48 && byte <= 57; }
+fn hex(byte: u8) bool {
+    ret digit(byte) || (byte >= 65 && byte <= 70) || (byte >= 97 && byte <= 102);
+}
+
+impl Parser {
+    fn at_end(self: Parser) bool { ret self.offset >= self.source.bytes_len(); }
+    fn byte(self: Parser) u8 { ret core.str_byte_at(self.source, self.offset); }
+    fn skip_whitespace(self: Parser) void {
+        for (!self.at_end() && whitespace(self.byte())) { self.offset = self.offset + 1; }
+    }
+    fn literal(self: Parser, value: str) bool {
+        if (self.source.bytes_len() - self.offset < value.bytes_len()) { ret false; }
+        for i : 0..value.bytes_len() {
+            if (core.str_byte_at(self.source, self.offset + i) != core.str_byte_at(value, i)) { ret false; }
+        }
+        self.offset = self.offset + value.bytes_len();
+        ret true;
+    }
+    fn string(self: Parser) Result[bool, JsonError] {
+        self.offset = self.offset + 1;
+        for (!self.at_end()) {
+            const byte: u8 = self.byte();
+            self.offset = self.offset + 1;
+            if (byte == 34) { ret Ok(true); }
+            if (byte < 32) { ret Err(JsonError.InvalidString); }
+            if (byte != 92) { continue; }
+            if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+            const escaped: u8 = self.byte();
+            self.offset = self.offset + 1;
+            if (escaped == 34 || escaped == 92 || escaped == 47 || escaped == 98 || escaped == 102 || escaped == 110 || escaped == 114 || escaped == 116) { continue; }
+            if (escaped != 117) { ret Err(JsonError.InvalidEscape); }
+            for i : 0..4 {
+                if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+                if (!hex(self.byte())) { ret Err(JsonError.InvalidEscape); }
+                self.offset = self.offset + 1;
+            }
+        }
+        ret Err(JsonError.UnexpectedEnd);
+    }
+    fn number(self: Parser) Result[bool, JsonError] {
+        if (self.byte() == 45) { self.offset = self.offset + 1; if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); } }
+        if (self.byte() == 48) { self.offset = self.offset + 1; }
+        else {
+            if (!digit(self.byte()) || self.byte() == 48) { ret Err(JsonError.InvalidNumber); }
+            for (!self.at_end() && digit(self.byte())) { self.offset = self.offset + 1; }
+        }
+        if (!self.at_end() && self.byte() == 46) {
+            self.offset = self.offset + 1;
+            if (self.at_end() || !digit(self.byte())) { ret Err(JsonError.InvalidNumber); }
+            for (!self.at_end() && digit(self.byte())) { self.offset = self.offset + 1; }
+        }
+        if (!self.at_end() && (self.byte() == 101 || self.byte() == 69)) {
+            self.offset = self.offset + 1;
+            if (!self.at_end() && (self.byte() == 43 || self.byte() == 45)) { self.offset = self.offset + 1; }
+            if (self.at_end() || !digit(self.byte())) { ret Err(JsonError.InvalidNumber); }
+            for (!self.at_end() && digit(self.byte())) { self.offset = self.offset + 1; }
+        }
+        ret Ok(true);
+    }
+    fn array(self: Parser, depth: usize) Result[bool, JsonError] {
+        self.offset = self.offset + 1; self.skip_whitespace();
+        if (!self.at_end() && self.byte() == 93) { self.offset = self.offset + 1; ret Ok(true); }
+        for (true) {
+            const parsed: Result[bool, JsonError] = self.value(depth + 1);
+            if (parsed.is_err()) { ret Err(parsed.unwrap_err()); }
+            self.skip_whitespace();
+            if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+            if (self.byte() == 93) { self.offset = self.offset + 1; ret Ok(true); }
+            if (self.byte() != 44) { ret Err(JsonError.InvalidToken); }
+            self.offset = self.offset + 1; self.skip_whitespace();
+        }
+        ret Err(JsonError.UnexpectedEnd);
+    }
+    fn object(self: Parser, depth: usize) Result[bool, JsonError] {
+        self.offset = self.offset + 1; self.skip_whitespace();
+        if (!self.at_end() && self.byte() == 125) { self.offset = self.offset + 1; ret Ok(true); }
+        for (true) {
+            if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+            if (self.byte() != 34) { ret Err(JsonError.InvalidToken); }
+            const key: Result[bool, JsonError] = self.string();
+            if (key.is_err()) { ret Err(key.unwrap_err()); }
+            self.skip_whitespace();
+            if (self.at_end() || self.byte() != 58) { ret Err(JsonError.InvalidToken); }
+            self.offset = self.offset + 1;
+            const parsed: Result[bool, JsonError] = self.value(depth + 1);
+            if (parsed.is_err()) { ret Err(parsed.unwrap_err()); }
+            self.skip_whitespace();
+            if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+            if (self.byte() == 125) { self.offset = self.offset + 1; ret Ok(true); }
+            if (self.byte() != 44) { ret Err(JsonError.InvalidToken); }
+            self.offset = self.offset + 1; self.skip_whitespace();
+        }
+        ret Err(JsonError.UnexpectedEnd);
+    }
+    fn value(self: Parser, depth: usize) Result[bool, JsonError] {
+        if (depth > self.max_depth) { ret Err(JsonError.DepthLimit); }
+        self.skip_whitespace();
+        if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+        const byte: u8 = self.byte();
+        if (byte == 34) { ret self.string(); }
+        if (byte == 123) { ret self.object(depth); }
+        if (byte == 91) { ret self.array(depth); }
+        if (byte == 116 && self.literal("true")) { ret Ok(true); }
+        if (byte == 102 && self.literal("false")) { ret Ok(true); }
+        if (byte == 110 && self.literal("null")) { ret Ok(true); }
+        if (byte == 45 || digit(byte)) { ret self.number(); }
+        ret Err(JsonError.InvalidToken);
+    }
+}
+
+pub fn validate_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, JsonError] {
+    if (source.bytes_len() > max_input) { ret Err(JsonError.InputLimit); }
+    var parser: Parser = Parser { source: source, offset: 0, max_depth: max_depth };
+    const parsed: Result[bool, JsonError] = parser.value(0);
+    if (parsed.is_err()) { ret Err(parsed.unwrap_err()); }
+    parser.skip_whitespace();
+    if (!parser.at_end()) { ret Err(JsonError.TrailingData); }
+    ret Ok(true);
+}
+
+pub fn validate(source: str) Result[bool, JsonError] { ret validate_with_limits(source, 1048576, 64); }
