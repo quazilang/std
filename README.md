@@ -10,6 +10,7 @@ This repository contains the core modules, abstractions, and platform-specific b
 - `collections`: Fallible, non-panicking `usize` map and set types.
 - `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
+- `json`: Bounded JSON syntax validation and safe JSON string-token encoding.
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
@@ -144,3 +145,28 @@ fn example() Result[usize, MapError] {
 
 The deliberately concrete element types avoid unsound generic raw storage until
 Quazi can express hash/equality bounds and drop-aware slots.
+
+## JSON
+
+`std.json` currently provides a bounded syntax gate for untrusted JSON and
+helpers for emitting scalar JSON tokens. It does not yet construct a dynamic
+JSON tree or deserialize typed values; those capabilities will ship with the
+compiler-backed serialization derives.
+
+```quazi
+import std.json;
+
+fn main() i32 {
+    const name: String = json.quote("Ada\\nLovelace");
+    if (json.validate_with_limits(name.as_str(), 1024, 8).is_err()) {
+        ret 1;
+    }
+    ret 0;
+}
+```
+
+`validate_with_limits(source, max_input, max_depth)` rejects oversized input,
+excessive array/object nesting, malformed strings/numbers, and trailing data.
+`quote` accepts valid Quazi UTF-8 text and returns exactly one JSON string
+token, escaping quotes, backslashes, and control characters. `boolean` emits
+`true` or `false`; `null` emits `null`.

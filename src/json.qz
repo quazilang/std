@@ -159,3 +159,42 @@ pub fn validate_with_limits(source: str, max_input: usize, max_depth: usize) Res
 }
 
 pub fn validate(source: str) Result[bool, JsonError] { ret validate_with_limits(source, 1048576, 64); }
+
+// Encode a valid UTF-8 string as one JSON string token. Non-ASCII scalars are
+// emitted directly; JSON is defined over Unicode and the input str invariant
+// ensures their byte boundaries are safe to preserve.
+pub fn quote(value: str) String {
+    var output: String = String.from("\"");
+    var offset: usize = 0;
+    for (offset < value.bytes_len()) {
+        const byte: u8 = core.str_byte_at(value, offset);
+        if (byte == 34) { output = output.push_str("\\\""); offset = offset + 1; continue; }
+        if (byte == 92) { output = output.push_str("\\\\"); offset = offset + 1; continue; }
+        if (byte == 8) { output = output.push_str("\\b"); offset = offset + 1; continue; }
+        if (byte == 12) { output = output.push_str("\\f"); offset = offset + 1; continue; }
+        if (byte == 10) { output = output.push_str("\\n"); offset = offset + 1; continue; }
+        if (byte == 13) { output = output.push_str("\\r"); offset = offset + 1; continue; }
+        if (byte == 9) { output = output.push_str("\\t"); offset = offset + 1; continue; }
+        if (byte < 32) {
+            const digits: str = "0123456789abcdef";
+            output = output.push_str("\\u00");
+            const high: String = digits[(byte / 16) as isize:(byte / 16 + 1) as isize];
+            const low: String = digits[(byte % 16) as isize:(byte % 16 + 1) as isize];
+            output = output.push_str(high.as_str());
+            output = output.push_str(low.as_str());
+            offset = offset + 1;
+            continue;
+        }
+        var width: usize = 1;
+        if (byte >= 240) { width = 4; }
+        else if (byte >= 224) { width = 3; }
+        else if (byte >= 192) { width = 2; }
+        const scalar: String = value[offset as isize:(offset + width) as isize];
+        output = output.push_str(scalar.as_str());
+        offset = offset + width;
+    }
+    output = output.push_str("\"");
+    ret output;
+}
+
+pub fn boolean(value: bool) str { if (value) { ret "true"; } ret "false"; }
