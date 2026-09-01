@@ -16,3 +16,4 @@ pub import ffi;
 pub import math;
 pub import random;
 pub import dylib;
+pub import time;

@@ -1,0 +1,148 @@
+// std.time — monotonic durations and instants.
+//
+// This first layer intentionally excludes civil time, time zones, and wall
+// clocks. `Instant` is suitable for elapsed-time measurements and deadlines;
+// its epoch is opaque and values from separate system boots are incomparable.
+
+import std.core;
+@cfg(target_os="linux")
+import std.unix;
+@cfg(target_os="windows")
+import std.win32_core;
+
+pub enum TimeError { ClockUnavailable, ClockWentBackwards, }
+
+impl TimeError {
+    pub fn message(self: TimeError) str {
+        ret match self {
+            ClockUnavailable => "monotonic clock is unavailable",
+            ClockWentBackwards => "monotonic clock moved backwards",
+        };
+    }
+}
+
+pub struct Duration {
+    seconds: u64,
+    nanoseconds: u32,
+}
+
+impl Duration {
+    pub fn zero() Duration { ret Duration { seconds: 0, nanoseconds: 0 }; }
+
+    pub fn from_nanoseconds(nanoseconds: u64) Duration {
+        ret Duration {
+            seconds: nanoseconds / 1000000000,
+            nanoseconds: (nanoseconds % 1000000000) as u32,
+        };
+    }
+
+    pub fn from_microseconds(microseconds: u64) Duration {
+        ret Duration {
+            seconds: microseconds / 1000000,
+            nanoseconds: ((microseconds % 1000000) * 1000) as u32,
+        };
+    }
+
+    pub fn from_milliseconds(milliseconds: u64) Duration {
+        ret Duration {
+            seconds: milliseconds / 1000,
+            nanoseconds: ((milliseconds % 1000) * 1000000) as u32,
+        };
+    }
+
+    pub fn from_seconds(seconds: u64) Duration {
+        ret Duration { seconds: seconds, nanoseconds: 0 };
+    }
+
+    pub fn seconds(self: Duration) u64 { ret self.seconds; }
+    pub fn subsec_nanoseconds(self: Duration) u32 { ret self.nanoseconds; }
+
+    pub fn checked_add(self: Duration, other: Duration) Option[Duration] {
+        var seconds: u64 = self.seconds + other.seconds;
+        if seconds < self.seconds { ret None; }
+        var nanoseconds: u32 = self.nanoseconds + other.nanoseconds;
+        if nanoseconds >= 1000000000 {
+            nanoseconds = nanoseconds - 1000000000;
+            seconds = seconds + 1;
+            if seconds == 0 { ret None; }
+        }
+        ret Some(Duration { seconds: seconds, nanoseconds: nanoseconds });
+    }
+
+    pub fn checked_sub(self: Duration, other: Duration) Option[Duration] {
+        if self.seconds < other.seconds { ret None; }
+        if self.seconds == other.seconds && self.nanoseconds < other.nanoseconds { ret None; }
+        var seconds: u64 = self.seconds - other.seconds;
+        var nanoseconds: u32 = self.nanoseconds;
+        if nanoseconds < other.nanoseconds {
+            seconds = seconds - 1;
+            nanoseconds = nanoseconds + 1000000000;
+        }
+        ret Some(Duration { seconds: seconds, nanoseconds: nanoseconds - other.nanoseconds });
+    }
+}
+
+pub struct Instant {
+    seconds: u64,
+    nanoseconds: u32,
+}
+
+impl Instant {
+    @cfg(target_os="linux")
+    pub fn now() Result[Instant, TimeError] {
+        var raw: *u8 = 0;
+        unsafe { raw = core.malloc(16); }
+        if raw == 0 { ret Err(TimeError.ClockUnavailable); }
+        var status: i32 = 0;
+        unsafe { status = unix.clock_gettime(1, raw); }
+        if status != 0 {
+            unsafe { core.free(raw); }
+            ret Err(TimeError.ClockUnavailable);
+        }
+        var seconds: i64 = 0;
+        var nanoseconds: i64 = 0;
+        unsafe {
+            seconds = *(raw as *i64);
+            nanoseconds = *((raw + 8) as *i64);
+            core.free(raw);
+        }
+        if seconds < 0 || nanoseconds < 0 || nanoseconds >= 1000000000 {
+            ret Err(TimeError.ClockUnavailable);
+        }
+        ret Ok(Instant {
+            seconds: seconds as u64,
+            nanoseconds: nanoseconds as u32,
+        });
+    }
+
+    @cfg(target_os="windows")
+    pub fn now() Result[Instant, TimeError] {
+        var milliseconds: u64 = 0;
+        unsafe { milliseconds = win32_core.get_tick_count64(); }
+        ret Ok(Instant {
+            seconds: milliseconds / 1000,
+            nanoseconds: ((milliseconds % 1000) * 1000000) as u32,
+        });
+    }
+
+    pub fn duration_since(self: Instant, earlier: Instant) Result[Duration, TimeError] {
+        if self.seconds < earlier.seconds {
+            ret Err(TimeError.ClockWentBackwards);
+        }
+        if self.seconds == earlier.seconds && self.nanoseconds < earlier.nanoseconds {
+            ret Err(TimeError.ClockWentBackwards);
+        }
+        var seconds: u64 = self.seconds - earlier.seconds;
+        var nanoseconds: u32 = self.nanoseconds;
+        if nanoseconds < earlier.nanoseconds {
+            seconds = seconds - 1;
+            nanoseconds = nanoseconds + 1000000000;
+        }
+        ret Ok(Duration { seconds: seconds, nanoseconds: nanoseconds - earlier.nanoseconds });
+    }
+
+    pub fn elapsed(self: Instant) Result[Duration, TimeError] {
+        var current: Instant = Instant.now()?;
+        ret current.duration_since(self);
+    }
+}

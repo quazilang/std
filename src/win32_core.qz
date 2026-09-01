@@ -36,6 +36,9 @@ pub unsafe fn close_handle(handle: usize) i32;
 @api("SetFilePointerEx")
 pub unsafe fn seek(file: usize, distance: i64, position: *i64, method: u32) i32;
 
+@api("GetTickCount64")
+pub unsafe fn get_tick_count64() u64;
+
 @api("FlushFileBuffers")
 pub unsafe fn sync(file: usize) i32;
 
