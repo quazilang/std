@@ -79,6 +79,9 @@ impl Parser {
             if (!digit(self.byte()) || self.byte() == 48) { ret Err(JsonError.InvalidNumber); }
             for (!self.at_end() && digit(self.byte())) { self.offset = self.offset + 1; }
         }
+        if (!self.at_end() && digit(self.byte())) {
+            ret Err(JsonError.InvalidNumber);
+        }
         if (!self.at_end() && self.byte() == 46) {
             self.offset = self.offset + 1;
             if (self.at_end() || !digit(self.byte())) { ret Err(JsonError.InvalidNumber); }
@@ -128,13 +131,15 @@ impl Parser {
         ret Err(JsonError.UnexpectedEnd);
     }
     fn value(self: Parser, depth: usize) Result[bool, JsonError] {
-        if (depth > self.max_depth) { ret Err(JsonError.DepthLimit); }
         self.skip_whitespace();
         if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
         const byte: u8 = self.byte();
         if (byte == 34) { ret self.string(); }
-        if (byte == 123) { ret self.object(depth); }
-        if (byte == 91) { ret self.array(depth); }
+        if (byte == 123 || byte == 91) {
+            if (depth > self.max_depth) { ret Err(JsonError.DepthLimit); }
+            if (byte == 123) { ret self.object(depth); }
+            ret self.array(depth);
+        }
         if (byte == 116 && self.literal("true")) { ret Ok(true); }
         if (byte == 102 && self.literal("false")) { ret Ok(true); }
         if (byte == 110 && self.literal("null")) { ret Ok(true); }
