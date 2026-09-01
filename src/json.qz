@@ -12,6 +12,7 @@ pub enum JsonError {
     InvalidEscape,
     InvalidNumber,
     TrailingData,
+    DuplicateKey,
 }
 
 impl JsonError {
@@ -25,6 +26,7 @@ impl JsonError {
             InvalidEscape => "invalid JSON string escape",
             InvalidNumber => "invalid JSON number",
             TrailingData => "unexpected data after a JSON value",
+            DuplicateKey => "JSON object contains a duplicate key",
         };
     }
 }
@@ -69,6 +71,20 @@ impl Parser {
                 if (!hex(self.byte())) { ret Err(JsonError.InvalidEscape); }
                 self.offset = self.offset + 1;
             }
+            const scalar: u32 = unicode_escape(self.source, self.offset - 4);
+            if (scalar >= 55296 && scalar <= 56319) {
+                if (self.source.bytes_len() - self.offset < 6
+                    || core.str_byte_at(self.source, self.offset) != 92
+                    || core.str_byte_at(self.source, self.offset + 1) != 117) {
+                    ret Err(JsonError.InvalidString);
+                }
+                for i : 0..4 {
+                    if (!hex(core.str_byte_at(self.source, self.offset + 2 + i))) { ret Err(JsonError.InvalidEscape); }
+                }
+                const low: u32 = unicode_escape(self.source, self.offset + 2);
+                if (low < 56320 || low > 57343) { ret Err(JsonError.InvalidString); }
+                self.offset = self.offset + 6;
+            } else if (scalar >= 56320 && scalar <= 57343) { ret Err(JsonError.InvalidString); }
         }
         ret Err(JsonError.UnexpectedEnd);
     }
@@ -271,3 +287,50 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
 }
 
 pub fn decode_string(source: str) Result[String, JsonError] { ret decode_string_with_limits(source, 1048576, 64); }
+
+// Return the raw JSON value for one object key. The returned token is validated
+// JSON and can be passed to a typed scalar decoder. Duplicate matching keys are
+// rejected instead of selecting an implementation-defined winner.
+pub fn object_field_with_limits(source: str, key: str, max_input: usize, max_depth: usize) Result[Option[String], JsonError] {
+    const valid: Result[bool, JsonError] = validate_with_limits(source, max_input, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (end - start < 2 || core.str_byte_at(source, start) != 123 || core.str_byte_at(source, end - 1) != 125) { ret Err(JsonError.InvalidToken); }
+    var parser: Parser = Parser { source: source, offset: start + 1, max_depth: max_depth };
+    parser.skip_whitespace();
+    var found: Option[String] = None;
+    if (!parser.at_end() && parser.byte() == 125) { ret Ok(found); }
+    for (true) {
+        if (parser.at_end() || parser.byte() != 34) { ret Err(JsonError.InvalidToken); }
+        const key_start: usize = parser.offset;
+        const scanned_key: Result[bool, JsonError] = parser.string();
+        if (scanned_key.is_err()) { ret Err(scanned_key.unwrap_err()); }
+        const key_end: usize = parser.offset;
+        const raw_key: String = source[key_start as isize:key_end as isize];
+        const decoded_key: Result[String, JsonError] = decode_string_with_limits(raw_key.as_str(), max_input, max_depth);
+        if (decoded_key.is_err()) { ret Err(decoded_key.unwrap_err()); }
+        parser.skip_whitespace();
+        if (parser.at_end() || parser.byte() != 58) { ret Err(JsonError.InvalidToken); }
+        parser.offset = parser.offset + 1; parser.skip_whitespace();
+        const value_start: usize = parser.offset;
+        const scanned_value: Result[bool, JsonError] = parser.value(1);
+        if (scanned_value.is_err()) { ret Err(scanned_value.unwrap_err()); }
+        const value_end: usize = parser.offset;
+        if (decoded_key.unwrap().as_str() == key) {
+            if (found.is_some()) { ret Err(JsonError.DuplicateKey); }
+            found = Some(source[value_start as isize:value_end as isize]);
+        }
+        parser.skip_whitespace();
+        if (parser.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+        if (parser.byte() == 125) { ret Ok(found); }
+        if (parser.byte() != 44) { ret Err(JsonError.InvalidToken); }
+        parser.offset = parser.offset + 1; parser.skip_whitespace();
+    }
+    ret Ok(found);
+}
+
+pub fn object_field(source: str, key: str) Result[Option[String], JsonError] {
+    ret object_field_with_limits(source, key, 1048576, 64);
+}
