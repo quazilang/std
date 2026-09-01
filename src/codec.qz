@@ -1,0 +1,100 @@
+// std.codec — typed serialization contracts built on JSON wire codecs.
+import std.core;
+import std.json;
+import std.json.JsonError;
+
+pub enum EncodeError {
+    UnsupportedType,
+}
+
+impl EncodeError {
+    pub fn message(self: EncodeError) str {
+        ret match self {
+            UnsupportedType => "this value has no supported wire encoding",
+        };
+    }
+}
+
+pub enum DecodeError {
+    InputLimit,
+    DepthLimit,
+    InvalidJson,
+    TypeMismatch,
+    MissingField,
+    DuplicateField,
+    UnknownField,
+    InvalidValue,
+}
+
+impl DecodeError {
+    pub fn message(self: DecodeError) str {
+        ret match self {
+            InputLimit => "serialized input exceeds the configured byte limit",
+            DepthLimit => "serialized input exceeds the configured nesting limit",
+            InvalidJson => "input is not valid JSON",
+            TypeMismatch => "JSON value has an incompatible type",
+            MissingField => "JSON object is missing a required field",
+            DuplicateField => "JSON object contains a duplicate field",
+            UnknownField => "JSON object contains an unknown field",
+            InvalidValue => "JSON value is not valid for the destination type",
+        };
+    }
+}
+
+// Implementations must produce exactly one JSON value. Future compiler derives
+// implement this trait for supported non-generic structs.
+pub trait Serialize {
+    fn to_json(self: Self) Result[String, EncodeError];
+}
+
+// Quazi traits currently require a receiver, so typed decode starts as explicit
+// free functions. A static Deserialize trait needs receiverless trait methods.
+impl Serialize for bool {
+    pub fn to_json(self: bool) Result[String, EncodeError] {
+        ret Ok(String.from(json.boolean(self)));
+    }
+}
+
+fn whitespace(byte: u8) bool { ret byte == 32 || byte == 9 || byte == 10 || byte == 13; }
+
+fn literal_at(source: str, start: usize, end: usize, value: str) bool {
+    if (end - start != value.bytes_len()) { ret false; }
+    for i : 0..value.bytes_len() {
+        if (core.str_byte_at(source, start + i) != core.str_byte_at(value, i)) { ret false; }
+    }
+    ret true;
+}
+
+fn decode_validation_error(error: JsonError) DecodeError {
+    ret match error {
+        InputLimit => DecodeError.InputLimit,
+        DepthLimit => DecodeError.DepthLimit,
+        _ => DecodeError.InvalidJson,
+    };
+}
+
+pub fn decode_bool_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0;
+    var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (literal_at(source, start, end, "true")) { ret Ok(true); }
+    if (literal_at(source, start, end, "false")) { ret Ok(false); }
+    ret Err(DecodeError.TypeMismatch);
+}
+
+pub fn decode_bool(source: str) Result[bool, DecodeError] {
+    ret decode_bool_with_limits(source, 1048576, 64);
+}
+
+impl Serialize for str {
+    pub fn to_json(self: str) Result[String, EncodeError] { ret Ok(json.quote(self)); }
+}
+
+impl Serialize for String {
+    pub fn to_json(self: String) Result[String, EncodeError] {
+        ret Ok(json.quote(self.as_str()));
+    }
+}
