@@ -198,3 +198,76 @@ pub fn quote(value: str) String {
 }
 
 pub fn boolean(value: bool) str { if (value) { ret "true"; } ret "false"; }
+
+fn hex_value(byte: u8) u32 {
+    if (byte >= 48 && byte <= 57) { ret (byte - 48) as u32; }
+    if (byte >= 65 && byte <= 70) { ret (byte - 55) as u32; }
+    ret (byte - 87) as u32;
+}
+
+fn unicode_escape(source: str, offset: usize) u32 {
+    ret (hex_value(core.str_byte_at(source, offset)) << 12)
+        | (hex_value(core.str_byte_at(source, offset + 1)) << 8)
+        | (hex_value(core.str_byte_at(source, offset + 2)) << 4)
+        | hex_value(core.str_byte_at(source, offset + 3));
+}
+
+unsafe fn write_scalar(buffer: *u8, offset: usize, scalar: u32) usize {
+    unsafe {
+        if (scalar <= 127) { *(buffer + offset) = scalar as u8; ret 1; }
+        if (scalar <= 2047) {
+            *(buffer + offset) = (192 | (scalar >> 6)) as u8;
+            *(buffer + offset + 1) = (128 | (scalar & 63)) as u8;
+            ret 2;
+        }
+        if (scalar <= 65535) {
+            *(buffer + offset) = (224 | (scalar >> 12)) as u8;
+            *(buffer + offset + 1) = (128 | ((scalar >> 6) & 63)) as u8;
+            *(buffer + offset + 2) = (128 | (scalar & 63)) as u8;
+            ret 3;
+        }
+        *(buffer + offset) = (240 | (scalar >> 18)) as u8;
+        *(buffer + offset + 1) = (128 | ((scalar >> 12) & 63)) as u8;
+        *(buffer + offset + 2) = (128 | ((scalar >> 6) & 63)) as u8;
+        *(buffer + offset + 3) = (128 | (scalar & 63)) as u8;
+    }
+    ret 4;
+}
+
+// Decode exactly one JSON string token after validating its syntax and limits.
+pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, JsonError] {
+    const valid: Result[bool, JsonError] = validate_with_limits(source, max_input, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (end - start < 2 || core.str_byte_at(source, start) != 34 || core.str_byte_at(source, end - 1) != 34) { ret Err(JsonError.InvalidToken); }
+    var buffer: *u8 = 0;
+    unsafe { buffer = core.malloc(source.bytes_len() + 1); }
+    if (buffer == 0) { ret Err(JsonError.InvalidString); }
+    var read: usize = start + 1; var written: usize = 0;
+    for (read < end - 1) {
+        var byte: u8 = core.str_byte_at(source, read); read = read + 1;
+        if (byte != 92) { unsafe { *(buffer + written) = byte; } written = written + 1; continue; }
+        byte = core.str_byte_at(source, read); read = read + 1;
+        if (byte == 34 || byte == 92 || byte == 47) { unsafe { *(buffer + written) = byte; } written = written + 1; continue; }
+        if (byte == 98) { unsafe { written = written + write_scalar(buffer, written, 8); } continue; }
+        if (byte == 102) { unsafe { written = written + write_scalar(buffer, written, 12); } continue; }
+        if (byte == 110) { unsafe { written = written + write_scalar(buffer, written, 10); } continue; }
+        if (byte == 114) { unsafe { written = written + write_scalar(buffer, written, 13); } continue; }
+        if (byte == 116) { unsafe { written = written + write_scalar(buffer, written, 9); } continue; }
+        var scalar: u32 = unicode_escape(source, read); read = read + 4;
+        if (scalar >= 55296 && scalar <= 56319) {
+            if (read + 6 > end - 1 || core.str_byte_at(source, read) != 92 || core.str_byte_at(source, read + 1) != 117) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
+            const low: u32 = unicode_escape(source, read + 2);
+            if (low < 56320 || low > 57343) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
+            scalar = 65536 + ((scalar - 55296) << 10) + (low - 56320); read = read + 6;
+        } else if (scalar >= 56320 && scalar <= 57343) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
+        unsafe { written = written + write_scalar(buffer, written, scalar); }
+    }
+    unsafe { *(buffer + written) = 0; }
+    var result: String = String.new(); unsafe { result = String.from_raw(buffer, written, source.bytes_len() + 1); }
+    ret Ok(result);
+}
+
+pub fn decode_string(source: str) Result[String, JsonError] { ret decode_string_with_limits(source, 1048576, 64); }
