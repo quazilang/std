@@ -10,21 +10,23 @@ import std.collections.Set;
 
 ## Map
 
-`Map` stores `usize -> usize`. `Map.new()` and `insert()` return
-`Result[Map, MapError]`; `get()` returns `Option[usize]`. `contains`, `remove`,
-`len`, and `free` are non-panicking. Reassign the returned value after an insert:
+`Map` stores `usize -> usize`. `Map.new()` returns `Result[Map, MapError]`;
+`insert()` returns `Result[bool, MapError]`, where `true` means a new key was
+inserted and `false` means an existing value was replaced. `get()` returns
+`Option[usize]`. `contains`, `remove`, `len`, and `free` are non-panicking.
+`insert` mutates its single owning map in place:
 
 ```quazi
 var counts: Map = Map.new()?;
-counts = counts.insert(7, 42)?;
+counts.insert(7, 42)?;
 var answer: usize = counts.get(7).unwrap();
 ```
 
 ## Set
 
-`Set` stores `usize`. `Set.new()` and `insert()` return
-`Result[Set, SetError]`; `contains`, `remove`, `len`, and `free` are
-non-panicking.
+`Set` stores `usize`. `Set.new()` returns `Result[Set, SetError]`; `insert()`
+returns `Result[bool, SetError]`, where `true` means a new key was added.
+`contains`, `remove`, `len`, and `free` are non-panicking.
 
 ## Invariants
 

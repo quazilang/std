@@ -64,12 +64,20 @@ pub fn sleep(ms: u64) void {
 
 // Yield the processor to other threads.
 pub fn yield_now() void {
-    unsafe { unix.sched_yield(); }
+    @cfg(target_os = "linux") { unsafe { unix.sched_yield(); } }
+    // Sleep(0) is the Win32 scheduler-yield operation. Keep this aligned with
+    // std.os.yield_cpu rather than lowering a Linux syscall on Windows.
+    @cfg(target_os = "windows") { core.sleep_ms(0); }
 }
 
 // Returns the kernel thread ID of the calling thread (Linux only).
 pub fn current_tid() i32 {
-    var r: i32 = 0;
-    unsafe { r = unix.gettid(); }
-    ret r;
+    @cfg(target_os = "linux") {
+        var r: i32 = 0;
+        unsafe { r = unix.gettid(); }
+        ret r;
+    }
+    // Windows has no Linux kernel thread ID. Keep the existing signature while
+    // making unsupported-target behavior explicit instead of issuing gettid.
+    ret -1;
 }

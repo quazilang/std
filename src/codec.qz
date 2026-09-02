@@ -5,12 +5,18 @@ import std.json.JsonError;
 
 pub enum EncodeError {
     UnsupportedType,
+    OutputLimit,
+    DepthLimit,
+    InvalidValue,
 }
 
 impl EncodeError {
     pub fn message(self: EncodeError) str {
         ret match self {
             UnsupportedType => "this value has no supported wire encoding",
+            OutputLimit => "serialized output exceeds the configured byte limit",
+            DepthLimit => "serialized output exceeds the configured nesting limit",
+            InvalidValue => "serialized value is not a valid JSON value",
         };
     }
 }
@@ -53,6 +59,36 @@ impl Serialize for bool {
     pub fn to_json(self: bool) Result[String, EncodeError] {
         ret Ok(String.from(json.boolean(self)));
     }
+}
+
+// JSON numbers use their ordinary base-10 spelling. Keeping the first signed
+// integer contract at i64 matches decode_i64 and avoids silently promising
+// lossy float or platform-width integer behavior to generated derives.
+impl Serialize for i64 {
+    pub fn to_json(self: i64) Result[String, EncodeError] {
+        ret Ok(String.from(self.to_string()));
+    }
+}
+
+// Normalize the lower-level JSON composition errors at the typed codec
+// boundary. A caller of Serialize never has to depend on JSON parser internals,
+// while resource-policy failures remain distinguishable for retry or reporting.
+fn encode_json_error(error: JsonError) EncodeError {
+    ret match error {
+        InputLimit => EncodeError.OutputLimit,
+        OutputLimit => EncodeError.OutputLimit,
+        DepthLimit => EncodeError.DepthLimit,
+        _ => EncodeError.InvalidValue,
+    };
+}
+
+// Compose a typed JSON object from ordered, already-encoded field values.
+// Compiler-generated Serialize implementations use this instead of exposing a
+// JsonError in their public Result type.
+pub fn object(keys: Array[str], values: Array[String]) Result[String, EncodeError] {
+    const encoded: Result[String, JsonError] = json.object(keys, values);
+    if (encoded.is_err()) { ret Err(encode_json_error(encoded.unwrap_err())); }
+    ret Ok(encoded.unwrap());
 }
 
 fn whitespace(byte: u8) bool { ret byte == 32 || byte == 9 || byte == 10 || byte == 13; }

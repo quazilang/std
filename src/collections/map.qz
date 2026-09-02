@@ -53,9 +53,11 @@ impl Map {
         ret (key * 2654435761) % self.cap;
     }
 
-    pub fn insert(self: Map, key: usize, val: usize) Result[Map, MapError] {
+    // Methods borrow `self`; returning a second Map would duplicate this
+    // allocation owner. Mutate the one owner in place instead.
+    pub fn insert(self: Map, key: usize, val: usize) Result[bool, MapError] {
         if (self.len * 4 >= self.cap * 3) {
-            ret self.__grow()?.insert(key, val);
+            self.__grow()?;
         }
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
@@ -92,12 +94,13 @@ impl Map {
         }
         if (target < self.cap) {
             __map_store(self.vals, target, val);
-            if (replacing) { ret Ok(self); }
+            if (replacing) { ret Ok(false); }
             __map_store(self.flags, target, 1);
             __map_store(self.keys, target, key);
-            ret Ok(Map { keys: self.keys, vals: self.vals, flags: self.flags, len: self.len + 1, cap: self.cap });
+            self.len = self.len + 1;
+            ret Ok(true);
         }
-        ret Ok(self);
+        ret Ok(false);
     }
 
     pub fn get(self: Map, key: usize) Option[usize] {
@@ -136,23 +139,24 @@ impl Map {
         ret false;
     }
 
-    pub fn remove(self: Map, key: usize) Map {
+    pub fn remove(self: Map, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
             var f: usize = __map_load(self.flags, idx);
-            if (f == 0) { ret self; }
+            if (f == 0) { ret false; }
             if (f == 1) {
                 var k: usize = __map_load(self.keys, idx);
                 if (k == key) {
                     __map_store(self.flags, idx, 2);
-                    ret Map { keys: self.keys, vals: self.vals, flags: self.flags, len: self.len - 1, cap: self.cap };
+                    self.len = self.len - 1;
+                    ret true;
                 }
             }
             idx = (idx + 1) % self.cap;
             probe = probe + 1;
         }
-        ret self;
+        ret false;
     }
 
     pub fn len(self: Map) usize {
@@ -168,7 +172,7 @@ impl Map {
     }
 
     @ignore
-    fn __grow(self: Map) Result[Map, MapError] {
+    fn __grow(self: Map) Result[bool, MapError] {
         // Doubling and converting slots to bytes must both fit in usize.
         if (self.cap > 1152921504606846975) {
             ret Err(MapError.CapacityOverflow);
@@ -193,14 +197,19 @@ impl Map {
             }
             core.memset(new_flags, 0, new_cap * 8);
         }
-        var new_map: Map = Map { keys: new_keys, vals: new_vals, flags: new_flags, len: 0, cap: new_cap };
         var i: usize = 0;
         for (i < self.cap) {
             var f: usize = __map_load(self.flags, i);
             if (f == 1) {
                 var k: usize = __map_load(self.keys, i);
                 var v: usize = __map_load(self.vals, i);
-                new_map = new_map.insert(k, v)?;
+                var idx: usize = (k * 2654435761) % new_cap;
+                for (__map_load(new_flags, idx) == 1) {
+                    idx = (idx + 1) % new_cap;
+                }
+                __map_store(new_keys, idx, k);
+                __map_store(new_vals, idx, v);
+                __map_store(new_flags, idx, 1);
             }
             i = i + 1;
         }
@@ -209,6 +218,10 @@ impl Map {
             core.free(self.vals);
             core.free(self.flags);
         }
-        ret Ok(new_map);
+        self.keys = new_keys;
+        self.vals = new_vals;
+        self.flags = new_flags;
+        self.cap = new_cap;
+        ret Ok(true);
     }
 }

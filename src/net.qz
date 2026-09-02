@@ -188,7 +188,12 @@ fn __accept(socket: isize) isize {
 }
 
 unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
-    @cfg(target_os = "linux") { ret unix.write(socket as i32, data, length); }
+    // MSG_NOSIGNAL turns a closed TCP peer into EPIPE instead of delivering
+    // process-terminating SIGPIPE. sendto with no destination is the Linux
+    // connected-socket send operation and also works for connected UDP.
+    @cfg(target_os = "linux") {
+        ret unix.sendto(socket as i32, data, length, 16384, 0, 0);
+    }
     @cfg(target_os = "windows") {
         ret win32_core.send_socket(socket as usize, data, length as i32, 0) as isize;
     }

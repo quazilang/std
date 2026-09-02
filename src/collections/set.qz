@@ -44,9 +44,11 @@ impl Set {
         ret (key * 2654435761) % self.cap;
     }
 
-    pub fn insert(self: Set, key: usize) Result[Set, SetError] {
+    // Methods borrow `self`; returning a second Set would duplicate this
+    // allocation owner. Mutate the one owner in place instead.
+    pub fn insert(self: Set, key: usize) Result[bool, SetError] {
         if (self.len * 4 >= self.cap * 3) {
-            ret self.__grow()?.insert(key);
+            self.__grow()?;
         }
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
@@ -60,12 +62,13 @@ impl Set {
                 }
                 __set_store(self.flags, target, 1);
                 __set_store(self.keys, target, key);
-                ret Ok(Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap });
+                self.len = self.len + 1;
+                ret Ok(true);
             }
             if (f == 1) {
                 var k: usize = __set_load(self.keys, idx);
                 if (k == key) {
-                    ret Ok(self);
+                    ret Ok(false);
                 }
             }
             if (f == 2) {
@@ -79,9 +82,10 @@ impl Set {
         if (first_tomb < self.cap) {
             __set_store(self.flags, first_tomb, 1);
             __set_store(self.keys, first_tomb, key);
-            ret Ok(Set { keys: self.keys, flags: self.flags, len: self.len + 1, cap: self.cap });
+            self.len = self.len + 1;
+            ret Ok(true);
         }
-        ret Ok(self);
+        ret Ok(false);
     }
 
     pub fn contains(self: Set, key: usize) bool {
@@ -100,23 +104,24 @@ impl Set {
         ret false;
     }
 
-    pub fn remove(self: Set, key: usize) Set {
+    pub fn remove(self: Set, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
             var f: usize = __set_load(self.flags, idx);
-            if (f == 0) { ret self; }
+            if (f == 0) { ret false; }
             if (f == 1) {
                 var k: usize = __set_load(self.keys, idx);
                 if (k == key) {
                     __set_store(self.flags, idx, 2);
-                    ret Set { keys: self.keys, flags: self.flags, len: self.len - 1, cap: self.cap };
+                    self.len = self.len - 1;
+                    ret true;
                 }
             }
             idx = (idx + 1) % self.cap;
             probe = probe + 1;
         }
-        ret self;
+        ret false;
     }
 
     pub fn len(self: Set) usize {
@@ -131,7 +136,7 @@ impl Set {
     }
 
     @ignore
-    fn __grow(self: Set) Result[Set, SetError] {
+    fn __grow(self: Set) Result[bool, SetError] {
         // Doubling and converting slots to bytes must both fit in usize.
         if (self.cap > 1152921504606846975) {
             ret Err(SetError.CapacityOverflow);
@@ -149,13 +154,17 @@ impl Set {
             }
             core.memset(new_flags, 0, new_cap * 8);
         }
-        var new_set: Set = Set { keys: new_keys, flags: new_flags, len: 0, cap: new_cap };
         var i: usize = 0;
         for (i < self.cap) {
             var f: usize = __set_load(self.flags, i);
             if (f == 1) {
                 var k: usize = __set_load(self.keys, i);
-                new_set = new_set.insert(k)?;
+                var idx: usize = (k * 2654435761) % new_cap;
+                for (__set_load(new_flags, idx) == 1) {
+                    idx = (idx + 1) % new_cap;
+                }
+                __set_store(new_keys, idx, k);
+                __set_store(new_flags, idx, 1);
             }
             i = i + 1;
         }
@@ -163,6 +172,9 @@ impl Set {
             core.free(self.keys);
             core.free(self.flags);
         }
-        ret Ok(new_set);
+        self.keys = new_keys;
+        self.flags = new_flags;
+        self.cap = new_cap;
+        ret Ok(true);
     }
 }

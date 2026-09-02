@@ -13,6 +13,8 @@ pub enum JsonError {
     InvalidNumber,
     TrailingData,
     DuplicateKey,
+    ObjectLengthMismatch,
+    OutputLimit,
 }
 
 impl JsonError {
@@ -27,6 +29,8 @@ impl JsonError {
             InvalidNumber => "invalid JSON number",
             TrailingData => "unexpected data after a JSON value",
             DuplicateKey => "JSON object contains a duplicate key",
+            ObjectLengthMismatch => "JSON object keys and values have different lengths",
+            OutputLimit => "JSON object output exceeds the configured byte limit",
         };
     }
 }
@@ -214,6 +218,43 @@ pub fn quote(value: str) String {
 }
 
 pub fn boolean(value: bool) str { if (value) { ret "true"; } ret "false"; }
+
+// Return the JSON null literal without allocating an owned string.
+pub fn null() str { ret "null"; }
+
+// Compose a JSON object from ordered keys and already-encoded JSON values.
+// Keys are always escaped as JSON strings; values must each contain exactly one
+// valid JSON value. The output preserves the supplied order, so callers can
+// use it for deterministic wire formats.
+pub fn object(keys: Array[str], values: Array[String]) Result[String, JsonError] {
+    ret object_with_limits(keys, values, 1048576, 64);
+}
+
+// Compose a JSON object with an explicit total-output and nesting policy.
+// It rejects mismatched or duplicate keys and validates each raw value before
+// appending it. The output cap includes punctuation and escaped keys.
+pub fn object_with_limits(keys: Array[str], values: Array[String], max_output: usize, max_depth: usize) Result[String, JsonError] {
+    if (keys.len() != values.len()) { ret Err(JsonError.ObjectLengthMismatch); }
+    if (max_output < 2) { ret Err(JsonError.OutputLimit); }
+    var output: String = String.from("{");
+    for i : 0..keys.len() {
+        for previous : 0..i {
+            if (keys[previous] == keys[i]) { ret Err(JsonError.DuplicateKey); }
+        }
+        if (i > 0) { output = output.push_str(","); }
+        const key: String = quote(keys[i]);
+        const value: String = values[i];
+        const next_size: usize = output.bytes_len() + key.bytes_len() + value.bytes_len() + 2;
+        if (next_size > max_output) { ret Err(JsonError.OutputLimit); }
+        const valid: Result[bool, JsonError] = validate_with_limits(value.as_str(), max_output, max_depth);
+        if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+        output = output.push_str(key.as_str());
+        output = output.push_str(":");
+        output = output.push_str(value.as_str());
+    }
+    output = output.push_str("}");
+    ret Ok(output);
+}
 
 fn hex_value(byte: u8) u32 {
     if (byte >= 48 && byte <= 57) { ret (byte - 48) as u32; }

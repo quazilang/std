@@ -138,7 +138,7 @@ import std.collections.MapError;
 
 fn example() Result[usize, MapError] {
     var map: Map = Map.new()?;
-    map = map.insert(7, 42)?;
+    map.insert(7, 42)?;
     ret Ok(map.get(7).unwrap());
 }
 ```
