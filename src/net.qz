@@ -874,7 +874,14 @@ impl HttpRequest {
         ret HttpRequest.new(method.name(), target, host);
     }
     pub fn from_url(method: HttpMethod, url: Url) HttpRequest {
-        ret HttpRequest.with_method(method, url.path(), url.host());
+        var request: HttpRequest = HttpRequest.with_method(method, url.path(), url.host());
+        if (url.port() != 80 && url.scheme() == "http") {
+            var authority: String = String.from(url.host());
+            authority = authority.push_str(":");
+            authority = authority.push_str(url.port().to_string());
+            request.headers.append("Host", authority.as_str());
+        }
+        ret request;
     }
     pub fn header(self: HttpRequest, name: str, value: str) HttpRequest {
         self.headers.set(name, value); ret self;
