@@ -294,6 +294,33 @@ pub struct SocketAddress {
     port: i32,
 }
 
+// Parse only unambiguous dotted-decimal IPv4 literals. The returned word is in
+// the byte order expected by sockaddr_in when stored on a little-endian host.
+// Both name-resolution bypass and sockaddr construction use this one parser so
+// their acceptance and address encoding cannot drift apart.
+fn __parse_ipv4_literal(host: str) Option[u32] {
+    var octet: usize = 0;
+    var digits: usize = 0;
+    var value: u32 = 0;
+    var raw: u32 = 0;
+    for i : 0..host.bytes_len() {
+        const byte: u8 = core.str_byte_at(host, i);
+        if (byte == 46) {
+            if (octet >= 3 || digits == 0 || value > 255) { ret None; }
+            raw = raw | (value << (octet * 8));
+            octet = octet + 1;
+            digits = 0;
+            value = 0;
+            continue;
+        }
+        if (byte < 48 || byte > 57 || digits >= 3) { ret None; }
+        value = value * 10 + (byte - 48) as u32;
+        digits = digits + 1;
+    }
+    if (octet != 3 || digits == 0 || value > 255) { ret None; }
+    ret Some(raw | (value << 24));
+}
+
 impl SocketAddress {
     pub fn new(host: str, port: i32) Result[SocketAddress, NetError] {
         if (host.is_empty()) { ret Err(NetError.InvalidAddress); }
@@ -303,6 +330,9 @@ impl SocketAddress {
     pub fn host(self: SocketAddress) str { ret self.host.as_str(); }
     pub fn port(self: SocketAddress) i32 { ret self.port; }
     pub fn resolve(self: SocketAddress) Result[SocketAddress, NetError] {
+        if (__parse_ipv4_literal(self.host.as_str()).is_some()) {
+            ret Ok(SocketAddress { host: String.from(self.host.as_str()), port: self.port });
+        }
         const resolved: Result[String, NetError] = __resolve_ipv4(self.host.as_str());
         if (resolved.is_err()) { ret Err(resolved.unwrap_err()); }
         ret Ok(SocketAddress { host: resolved.unwrap(), port: self.port });
@@ -313,29 +343,15 @@ fn __sockaddr(address: SocketAddress) Result[*u8, NetError] {
     const resolved: Result[SocketAddress, NetError] = address.resolve();
     if (resolved.is_err()) { ret Err(resolved.unwrap_err()); }
     const numeric: SocketAddress = resolved.unwrap();
-    var parts: Array[u32] = Array.new();
-    var value: u32 = 0;
-    var digits: i32 = 0;
     const text: str = numeric.host();
-    for i : 0..text.bytes_len() {
-        const byte: u8 = core.str_byte_at(text, i);
-        if (byte == 46) {
-            if (digits == 0 || value > 255) { ret Err(NetError.InvalidAddress); }
-            parts.push(value); value = 0; digits = 0;
-        } else {
-            if (byte < 48 || byte > 57) { ret Err(NetError.InvalidAddress); }
-            value = value * 10 + (byte - 48) as u32; digits++;
-        }
-    }
-    if (digits == 0 || value > 255) { ret Err(NetError.InvalidAddress); }
-    parts.push(value);
-    if (parts.len() != 4) { ret Err(NetError.InvalidAddress); }
+    const encoded: Option[u32] = __parse_ipv4_literal(text);
+    if (encoded.is_none()) { ret Err(NetError.InvalidAddress); }
     var raw: *u8 = 0;
     unsafe { raw = core.malloc(16); }
     if (raw == 0) { ret Err(NetError.AllocationFailed); }
     const port: u16 = numeric.port() as u16;
     const network_port: u16 = (port << 8) | (port >> 8);
-    const network_ip: u32 = parts[0] | (parts[1] << 8) | (parts[2] << 16) | (parts[3] << 24);
+    const network_ip: u32 = encoded.unwrap();
     unsafe {
         core.memset(raw, 0, 16);
         *(raw as *u16) = 2;
@@ -895,6 +911,20 @@ impl HttpRequest {
     }
     pub fn send_url(self: HttpRequest, url: Url) Result[HttpResponse, NetError] {
         if (url.scheme() == "https") { ret Err(NetError.TlsUnavailable); }
+        // `send_url` is the URL-targeted convenience operation. Preserve the
+        // caller's method, body, headers, and response limit, but route and
+        // encode the request target from this URL rather than from whichever
+        // constructor originally created the request.
+        self.target = String.from(url.path());
+        self.host = String.from(url.host());
+        if (!self.headers.contains("Host")) {
+            var authority: String = String.from(url.host());
+            if (url.port() != 80) {
+                authority = authority.push_str(":");
+                authority = authority.push_str(url.port().to_string());
+            }
+            self.headers.append("Host", authority.as_str());
+        }
         ret self.send(url.port());
     }
     pub fn parse(raw: String) Result[HttpRequest, NetError] {
