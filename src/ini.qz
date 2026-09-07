@@ -177,6 +177,15 @@ impl IniDocument {
         if parsed.is_err() { ret Err(IniDecodeError.InvalidValue(String.from(section), String.from(key))); }
         ret Ok(parsed.unwrap());
     }
+
+    pub fn require_bool(self: IniDocument, section: str, key: str) Result[bool, IniDecodeError] {
+        const value = self.get(section, key);
+        if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
+        const text = value.unwrap();
+        if text.as_str() == "true" { ret Ok(true); }
+        if text.as_str() == "false" { ret Ok(false); }
+        ret Err(IniDecodeError.InvalidValue(String.from(section), String.from(key)));
+    }
 }
 
 @test
@@ -236,7 +245,8 @@ fn typed_lookup_reports_missing_invalid_and_syntax_errors() void {
     var config = IniDocument.parse("port = not-a-number\n").unwrap();
     const missing = config.require_string("server", "host");
     const invalid = config.require_i32("", "port");
-    if missing.is_ok() || invalid.is_ok() { panic("invalid typed input decoded"); }
+    const invalid_bool = config.require_bool("", "port");
+    if missing.is_ok() || invalid.is_ok() || invalid_bool.is_ok() { panic("invalid typed input decoded"); }
     const missing_names = match missing.unwrap_err() { IniDecodeError.MissingValue(section, key) => section.as_str() == "server" && key.as_str() == "host", _ => false, };
     const invalid_names = match invalid.unwrap_err() { IniDecodeError.InvalidValue(section, key) => section.as_str() == "" && key.as_str() == "port", _ => false, };
     if !missing_names || !invalid_names { panic("typed error did not retain its section/key"); }
