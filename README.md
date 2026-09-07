@@ -148,10 +148,12 @@ Quazi can express hash/equality bounds and drop-aware slots.
 
 ## JSON
 
-`std.json` currently provides a bounded syntax gate for untrusted JSON and
-helpers for emitting scalar JSON tokens. It does not yet construct a dynamic
-JSON tree or deserialize typed values; those capabilities will ship with the
-compiler-backed serialization derives.
+`std.json` currently provides a bounded syntax gate for untrusted JSON, helpers
+for emitting scalar JSON tokens, bounded JSON-string decoding, and top-level
+object-field extraction. `std.codec` provides explicit bounded scalar decoders
+for `bool`, `i64`, and owned `String`. Neither module constructs a dynamic JSON
+tree or supports compiler-derived/struct `Deserialize`; those remain future
+serialization work.
 
 ```quazi
 import std.json;
@@ -170,3 +172,17 @@ excessive array/object nesting, malformed strings/numbers, and trailing data.
 `quote` accepts valid Quazi UTF-8 text and returns exactly one JSON string
 token, escaping quotes, backslashes, and control characters. `boolean` emits
 `true` or `false`; `null` emits `null`.
+
+Use `std.codec` when decoding the supported scalar surface:
+
+```quazi
+import std.codec;
+
+fn main() i32 {
+    const enabled: bool = codec.decode_bool("true").unwrap();
+    const count: i64 = codec.decode_i64("42").unwrap();
+    const name: String = codec.decode_string("\"Ada\"").unwrap();
+    if (!enabled || count != 42 || name.as_str() != "Ada") { ret 1; }
+    ret 0;
+}
+```
