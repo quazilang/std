@@ -237,8 +237,10 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     unsafe {
         core.memset(hints, 0, 48);
         core.memset(result_slot, 0, 8);
-        *(hints as *i32 + 1) = 2;
-        *(hints as *i32 + 2) = 1;
+        // Raw-pointer arithmetic is byte-addressed in Quazi, so use the C
+        // addrinfo field offsets explicitly: ai_family at 4, ai_socktype at 8.
+        *((hints + 4) as *i32) = 2;
+        *((hints + 8) as *i32) = 1;
     }
     var code: i32 = 0;
     @cfg(target_os = "windows") {
