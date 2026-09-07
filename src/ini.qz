@@ -18,8 +18,8 @@ pub enum IniError {
 // text itself: it only composes these stable operations.
 pub enum IniDecodeError {
     Syntax(IniError),
-    MissingValue,
-    InvalidValue,
+    MissingValue(String, String),
+    InvalidValue(String, String),
 }
 
 fn section_name(line: str) String {
@@ -156,21 +156,25 @@ impl IniDocument {
 
     pub fn require_string(self: IniDocument, section: str, key: str) Result[String, IniDecodeError] {
         const value = self.get(section, key);
-        if value.is_none() { ret Err(IniDecodeError.MissingValue); }
+        if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         ret Ok(value.unwrap());
     }
 
     pub fn require_i32(self: IniDocument, section: str, key: str) Result[i32, IniDecodeError] {
-        const value = self.require_string(section, key)?;
-        const parsed = value.parse_i32();
-        if parsed.is_err() { ret Err(IniDecodeError.InvalidValue); }
+        const value = self.get(section, key);
+        if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
+        const text = value.unwrap();
+        const parsed = text.parse_i32();
+        if parsed.is_err() { ret Err(IniDecodeError.InvalidValue(String.from(section), String.from(key))); }
         ret Ok(parsed.unwrap());
     }
 
     pub fn require_u64(self: IniDocument, section: str, key: str) Result[u64, IniDecodeError] {
-        const value = self.require_string(section, key)?;
-        const parsed = value.parse_u64();
-        if parsed.is_err() { ret Err(IniDecodeError.InvalidValue); }
+        const value = self.get(section, key);
+        if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
+        const text = value.unwrap();
+        const parsed = text.parse_u64();
+        if parsed.is_err() { ret Err(IniDecodeError.InvalidValue(String.from(section), String.from(key))); }
         ret Ok(parsed.unwrap());
     }
 }
@@ -230,7 +234,11 @@ fn typed_lookup_reports_missing_invalid_and_syntax_errors() void {
     const syntax = IniDocument.parse("[broken\n");
     if syntax.is_ok() { panic("malformed source decoded"); }
     var config = IniDocument.parse("port = not-a-number\n").unwrap();
-    if config.require_string("", "host").is_ok() { panic("missing value decoded"); }
-    if config.require_i32("", "port").is_ok() { panic("invalid integer decoded"); }
+    const missing = config.require_string("server", "host");
+    const invalid = config.require_i32("", "port");
+    if missing.is_ok() || invalid.is_ok() { panic("invalid typed input decoded"); }
+    const missing_names = match missing.unwrap_err() { IniDecodeError.MissingValue(section, key) => section.as_str() == "server" && key.as_str() == "host", _ => false, };
+    const invalid_names = match invalid.unwrap_err() { IniDecodeError.InvalidValue(section, key) => section.as_str() == "" && key.as_str() == "port", _ => false, };
+    if !missing_names || !invalid_names { panic("typed error did not retain its section/key"); }
     config.free();
 }
