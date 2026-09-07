@@ -825,9 +825,14 @@ impl Url {
         const authority_start: usize = scheme_end + 3;
         const rest: String = text[authority_start as isize:];
         const slash: Option[usize] = rest.find("/");
+        const query: Option[usize] = rest.find("?");
         var authority_end: usize = text.bytes_len();
         var path: String = String.from("/");
-        if (slash.is_some()) {
+        if (query.is_some() && (slash.is_none() || query.unwrap() < slash.unwrap())) {
+            authority_end = authority_start + query.unwrap();
+            const raw_query: String = text[authority_end as isize:];
+            path = path.push_str(raw_query.as_str());
+        } else if (slash.is_some()) {
             authority_end = authority_start + slash.unwrap();
             path = text[authority_end as isize:];
         }
