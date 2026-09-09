@@ -146,3 +146,45 @@ impl Instant {
         ret current.duration_since(self);
     }
 }
+
+@test
+fn duration_construction_normalizes_subsecond_units() void {
+    const nanos = Duration.from_nanoseconds(1000000001);
+    if nanos.seconds() != 1 || nanos.subsec_nanoseconds() != 1 {
+        panic("nanosecond duration was not normalized");
+    }
+    const micros = Duration.from_microseconds(1000001);
+    if micros.seconds() != 1 || micros.subsec_nanoseconds() != 1000 {
+        panic("microsecond duration was not normalized");
+    }
+    const millis = Duration.from_milliseconds(1501);
+    if millis.seconds() != 1 || millis.subsec_nanoseconds() != 501000000 {
+        panic("millisecond duration was not normalized");
+    }
+    ret;
+}
+
+@test
+fn duration_checked_arithmetic_carries_and_rejects_negative_results() void {
+    const carried = Duration.from_nanoseconds(999999999).checked_add(Duration.from_nanoseconds(1));
+    if carried.is_none() {
+        panic("valid duration addition failed");
+    }
+    const value = carried.unwrap();
+    if value.seconds() != 1 || value.subsec_nanoseconds() != 0 {
+        panic("duration addition did not carry into seconds");
+    }
+    const borrowed = Duration.from_seconds(1).checked_sub(Duration.from_nanoseconds(1));
+    if borrowed.is_none() {
+        panic("valid duration subtraction failed");
+    }
+    const borrowed_value = borrowed.unwrap();
+    if borrowed_value.seconds() != 0 || borrowed_value.subsec_nanoseconds() != 999999999 {
+        panic("duration subtraction did not borrow from seconds");
+    }
+    const negative = Duration.from_seconds(1).checked_sub(Duration.from_seconds(2));
+    if negative.is_some() {
+        panic("negative duration subtraction must fail");
+    }
+    ret;
+}
