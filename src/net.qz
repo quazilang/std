@@ -505,7 +505,12 @@ impl TcpStream {
         ret Ok(true);
     }
 
-    pub fn close(self: TcpStream) void { __close(self.socket); self.socket = -1; }
+    pub fn close(self: TcpStream) void {
+        if (self.socket < 0) { ret; }
+        const socket: isize = self.socket;
+        self.socket = -1;
+        __close(socket);
+    }
     pub fn free(self: TcpStream) void { self.close(); }
     pub fn handle(self: TcpStream) isize { ret self.socket; }
 }
@@ -537,7 +542,12 @@ impl TcpListener {
         ret Ok(TcpStream { socket: socket });
     }
 
-    pub fn close(self: TcpListener) void { __close(self.socket); self.socket = -1; }
+    pub fn close(self: TcpListener) void {
+        if (self.socket < 0) { ret; }
+        const socket: isize = self.socket;
+        self.socket = -1;
+        __close(socket);
+    }
     pub fn free(self: TcpListener) void { self.close(); }
     pub fn handle(self: TcpListener) isize { ret self.socket; }
 }
@@ -674,9 +684,25 @@ impl UdpSocket {
         ret Ok(UdpDatagram { data: text, address: SocketAddress { host: host, port: port } });
     }
 
-    pub fn close(self: UdpSocket) void { __close(self.socket); self.socket = -1; }
+    pub fn close(self: UdpSocket) void {
+        if (self.socket < 0) { ret; }
+        const socket: isize = self.socket;
+        self.socket = -1;
+        __close(socket);
+    }
     pub fn free(self: UdpSocket) void { self.close(); }
     pub fn handle(self: UdpSocket) isize { ret self.socket; }
+}
+
+@test
+fn udp_close_invalidates_once_and_free_is_safe_afterward() void {
+    var socket = UdpSocket.bind(0).unwrap();
+    if socket.handle() < 0 { panic("bound UDP socket had an invalid handle"); }
+    socket.close();
+    if socket.handle() != -1 { panic("UDP close did not invalidate the socket"); }
+    socket.close();
+    socket.free();
+    if socket.handle() != -1 { panic("repeated UDP release changed the invalid handle"); }
 }
 
 pub struct Header { name: String, value: String, }
