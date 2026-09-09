@@ -48,7 +48,12 @@ impl Thread {
 
     // Wait for the thread to finish. Consumes the handle.
     pub unsafe fn join(self: Thread) void {
-        thread.thread_join(self.handle);
+        const handle: usize = self.handle;
+        // Method receivers are aliases in the current compiler. Invalidate
+        // before the native join releases its storage/handle so this wrapper
+        // retains its documented consuming, repeat-safe behavior.
+        self.handle = 0;
+        thread.thread_join(handle);
     }
 
     // Returns the opaque thread handle.
