@@ -188,3 +188,23 @@ fn duration_checked_arithmetic_carries_and_rejects_negative_results() void {
     }
     ret;
 }
+
+@test
+fn instant_duration_since_borrows_and_rejects_backwards_time() void {
+    const earlier = Instant { seconds: 7, nanoseconds: 900000000 };
+    const later = Instant { seconds: 8, nanoseconds: 100000000 };
+    const elapsed = later.duration_since(earlier);
+    if elapsed.is_err() {
+        panic("valid instant comparison failed");
+    }
+    const duration = elapsed.unwrap();
+    if duration.seconds() != 0 || duration.subsec_nanoseconds() != 200000000 {
+        panic("instant duration did not borrow from seconds");
+    }
+    const backwards = Instant { seconds: 7, nanoseconds: 900000000 }
+        .duration_since(Instant { seconds: 8, nanoseconds: 100000000 });
+    if backwards.is_ok() {
+        panic("backwards instant comparison must fail");
+    }
+    ret;
+}
