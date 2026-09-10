@@ -29,7 +29,7 @@ struct ProcessSnapshot {
 impl ProcessSnapshot {
     fn free(self: ProcessSnapshot) void {
         @cfg(target_os = "windows") {
-            if (self.handle as isize != -1) {
+            if (self.handle != 0 && self.handle as isize != -1) {
                 unsafe { win32_core.close_handle(self.handle); }
             }
         }
