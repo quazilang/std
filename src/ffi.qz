@@ -150,8 +150,21 @@ impl CString {
     }
 
     pub fn free(self: CString) void {
-        unsafe {
-            core.free(self.ptr);
+        if (self.ptr != 0) {
+            unsafe { core.free(self.ptr); }
+            self.ptr = 0;
+            self.len = 0;
         }
     }
+}
+
+@test
+fn cstring_free_invalidates_and_is_repeat_safe() void {
+    var value: CString = CString.try_from_str("owned C string").unwrap();
+    value.free();
+    unsafe {
+        if (value.as_ptr() != 0) { panic("CString.free did not invalidate the pointer"); }
+    }
+    if (value.len() != 0) { panic("CString.free did not clear the byte length"); }
+    value.free();
 }
