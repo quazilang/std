@@ -258,7 +258,7 @@ impl File {
     // Explicit close is available for scarce-resource handoff. It invalidates
     // this File, so the later automatic destructor is a harmless no-op.
     pub fn close(self: File) Result[bool, FsError] {
-        if (self.handle < 0) { ret Ok(false); }
+        if (self.handle == -1) { ret Ok(false); }
         var result: i32 = 0;
         @cfg(target_os = "linux") {
             unsafe { result = unix.close(self.handle as i32); }
