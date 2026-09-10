@@ -114,32 +114,33 @@ fn __winsock_start() i32 {
     ret 0;
 }
 
-fn __socket(kind: i32, protocol: i32) isize {
+fn __socket(kind: i32, protocol: i32) Result[isize, NetError] {
     @cfg(target_os = "linux") {
         var socket: i32 = 0;
         unsafe { socket = unix.socket(2, kind, protocol); }
-        ret socket as isize;
+        if (socket < 0) { ret Err(__net_error(socket)); }
+        ret Ok(socket as isize);
     }
     @cfg(target_os = "windows") {
         const started: i32 = __winsock_start();
-        if (started < 0) { ret started as isize; }
+        if (started < 0) { ret Err(__net_error(started)); }
         var socket: usize = 0;
         unsafe { socket = win32_core.socket(2, kind, protocol); }
-        if (socket as isize < 0) {
+        if (socket as isize == -1) {
             var error: i32 = 0;
             unsafe {
                 error = win32_core.winsock_last_error();
                 win32_core.winsock_cleanup();
             }
-            ret -(error as isize);
+            ret Err(__net_error(-error));
         }
-        ret socket as isize;
+        ret Ok(socket as isize);
     }
-    ret -1;
+    ret Err(NetError.Unsupported);
 }
 
 fn __close(socket: isize) void {
-    if (socket < 0) { ret; }
+    if (socket == -1) { ret; }
     @cfg(target_os = "linux") { unsafe { unix.close(socket as i32); } }
     @cfg(target_os = "windows") {
         unsafe {
@@ -163,28 +164,29 @@ fn __listen(socket: isize, backlog: i32) i32 {
     ret -1;
 }
 
-fn __accept(socket: isize) isize {
+fn __accept(socket: isize) Result[isize, NetError] {
     @cfg(target_os = "linux") {
         var accepted: i32 = 0;
         unsafe { accepted = unix.accept(socket as i32, 0, 0); }
-        ret accepted as isize;
+        if (accepted < 0) { ret Err(__net_error(accepted)); }
+        ret Ok(accepted as isize);
     }
     @cfg(target_os = "windows") {
         const started: i32 = __winsock_start();
-        if (started < 0) { ret started as isize; }
+        if (started < 0) { ret Err(__net_error(started)); }
         var accepted: usize = 0;
         unsafe { accepted = win32_core.accept_socket(socket as usize, 0, 0); }
-        if (accepted as isize < 0) {
+        if (accepted as isize == -1) {
             var error: i32 = 0;
             unsafe {
                 error = win32_core.winsock_last_error();
                 win32_core.winsock_cleanup();
             }
-            ret -(error as isize);
+            ret Err(__net_error(-error));
         }
-        ret accepted as isize;
+        ret Ok(accepted as isize);
     }
-    ret -1;
+    ret Err(NetError.Unsupported);
 }
 
 unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
@@ -375,8 +377,9 @@ impl TcpStream {
         const address: Result[SocketAddress, NetError] = unresolved.resolve();
         if (address.is_err()) { ret Err(address.unwrap_err()); }
         const numeric: SocketAddress = address.unwrap();
-        const socket: isize = __socket(1, 6);
-        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        const created: Result[isize, NetError] = __socket(1, 6);
+        if (created.is_err()) { ret Err(created.unwrap_err()); }
+        const socket: isize = created.unwrap();
         var result: i32 = 0;
         unsafe { result = __net_connect(socket, numeric.host(), port); }
         if (result < 0) {
@@ -506,7 +509,7 @@ impl TcpStream {
     }
 
     pub fn close(self: TcpStream) void {
-        if (self.socket < 0) { ret; }
+        if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
@@ -522,8 +525,9 @@ impl TcpListener {
 
     pub fn bind_with_backlog(port: i32, backlog: i32) Result[TcpListener, NetError] {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
-        const socket: isize = __socket(1, 6);
-        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        const created: Result[isize, NetError] = __socket(1, 6);
+        if (created.is_err()) { ret Err(created.unwrap_err()); }
+        const socket: isize = created.unwrap();
         var result: i32 = 0;
         unsafe { result = __net_bind(socket, port); }
         if (result < 0) {
@@ -537,13 +541,14 @@ impl TcpListener {
     }
 
     pub fn accept(self: TcpListener) Result[TcpStream, NetError] {
-        const socket: isize = __accept(self.socket);
-        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        const accepted: Result[isize, NetError] = __accept(self.socket);
+        if (accepted.is_err()) { ret Err(accepted.unwrap_err()); }
+        const socket: isize = accepted.unwrap();
         ret Ok(TcpStream { socket: socket });
     }
 
     pub fn close(self: TcpListener) void {
-        if (self.socket < 0) { ret; }
+        if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
@@ -564,8 +569,9 @@ pub struct UdpSocket { socket: isize, }
 impl UdpSocket {
     pub fn bind(port: i32) Result[UdpSocket, NetError] {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
-        const socket: isize = __socket(2, 17);
-        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        const created: Result[isize, NetError] = __socket(2, 17);
+        if (created.is_err()) { ret Err(created.unwrap_err()); }
+        const socket: isize = created.unwrap();
         var result: i32 = 0;
         unsafe { result = __net_bind(socket, port); }
         if (result < 0) {
@@ -581,8 +587,9 @@ impl UdpSocket {
         const address: Result[SocketAddress, NetError] = unresolved.resolve();
         if (address.is_err()) { ret Err(address.unwrap_err()); }
         const numeric: SocketAddress = address.unwrap();
-        const socket: isize = __socket(2, 17);
-        if (socket < 0) { ret Err(__net_error(socket as i32)); }
+        const created: Result[isize, NetError] = __socket(2, 17);
+        if (created.is_err()) { ret Err(created.unwrap_err()); }
+        const socket: isize = created.unwrap();
         var result: i32 = 0;
         unsafe { result = __net_connect(socket, numeric.host(), port); }
         if (result < 0) {
@@ -685,7 +692,7 @@ impl UdpSocket {
     }
 
     pub fn close(self: UdpSocket) void {
-        if (self.socket < 0) { ret; }
+        if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
@@ -697,7 +704,7 @@ impl UdpSocket {
 @test
 fn udp_close_invalidates_once_and_free_is_safe_afterward() void {
     var socket = UdpSocket.bind(0).unwrap();
-    if socket.handle() < 0 { panic("bound UDP socket had an invalid handle"); }
+    if socket.handle() == -1 { panic("bound UDP socket had an invalid handle"); }
     socket.close();
     if socket.handle() != -1 { panic("UDP close did not invalidate the socket"); }
     socket.close();
