@@ -19,3 +19,19 @@ fn set_free_invalidates_and_is_repeat_safe() void {
     if (values.len() != 0) { panic("Set.free did not invalidate the owner"); }
     values.free();
 }
+
+@test
+fn array_free_invalidates_and_is_repeat_safe() void {
+    var values: Array[i32] = Array.new();
+    values.push(1);
+    values.free();
+    if (values.len() != 0) { panic("Array.free did not invalidate the owner"); }
+    values.free();
+}
+
+@test
+fn box_free_invalidates_and_is_repeat_safe() void {
+    var value = Box.new(7);
+    value.free();
+    value.free();
+}
