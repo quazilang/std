@@ -29,3 +29,24 @@ fn process_spawn_reports_execve_failure_before_returning_a_child() void {
     const launched = process.spawn("/definitely-not-a-quazi-executable", args);
     if (!launched.is_err()) { panic("process.spawn returned a child for a missing program"); }
 }
+
+@test
+fn process_try_wait_and_close_consume_a_child_once() void {
+    var args: Array[str] = Array.new();
+    args.push("-i");
+    const launched = process.spawn("/usr/bin/env", args);
+    if (launched.is_err()) { panic("process.spawn failed for try_wait"); }
+    var child = launched.unwrap();
+    const polled = child.try_wait();
+    if (polled.is_err()) { panic("process.try_wait failed"); }
+    const waited = child.wait();
+    if (waited.is_err()) { panic("process.wait after try_wait failed"); }
+
+    var close_args: Array[str] = Array.new();
+    close_args.push("-i");
+    const close_launch = process.spawn("/usr/bin/env", close_args);
+    if (close_launch.is_err()) { panic("process.spawn failed for close"); }
+    var closable = close_launch.unwrap();
+    const closed = closable.close();
+    if (closed.is_err() || !closed.unwrap()) { panic("process.close did not consume its child"); }
+}
