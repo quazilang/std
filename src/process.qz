@@ -7,7 +7,6 @@
 import std.core;
 
 pub enum ProcessError {
-    InteriorNul,
     SpawnFailed(i32),
     WaitFailed(i32),
     TerminateFailed(i32),
@@ -17,7 +16,6 @@ pub enum ProcessError {
 impl ProcessError {
     pub fn native_code(self: ProcessError) i32 {
         ret match self {
-            InteriorNul => 0,
             SpawnFailed(code) => code,
             WaitFailed(code) => code,
             TerminateFailed(code) => code,
@@ -27,7 +25,6 @@ impl ProcessError {
 
     pub fn message(self: ProcessError) str {
         ret match self {
-            InteriorNul => "process paths and arguments cannot contain NUL",
             SpawnFailed(_) => "could not start child process",
             WaitFailed(_) => "could not wait for child process",
             TerminateFailed(_) => "could not terminate child process",
@@ -39,15 +36,6 @@ impl ProcessError {
 pub enum ExitStatus {
     Code(i32),
     Signal(i32),
-}
-
-fn has_nul(value: str) bool {
-    var index: usize = 0;
-    for (index < value.bytes_len()) {
-        if (core.str_byte_at(value, index) == 0) { ret true; }
-        index = index + 1;
-    }
-    ret false;
 }
 
 fn status(kind: i32, value: i32) ExitStatus {
@@ -65,12 +53,6 @@ impl Child {
     // Launch an exact executable path without a shell or PATH lookup. `args`
     // excludes argv[0]; the runtime supplies `program` as the first argument.
     pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
-        if (has_nul(program)) { ret Err(ProcessError.InteriorNul); }
-        var index: usize = 0;
-        for (index < args.len()) {
-            if (has_nul(args[index])) { ret Err(ProcessError.InteriorNul); }
-            index = index + 1;
-        }
         var handle: usize = 0;
         var error: i32 = 0;
         var result: i32 = -1;
