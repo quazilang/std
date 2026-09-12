@@ -156,7 +156,7 @@ impl Parser {
         const byte: u8 = self.byte();
         if (byte == 34) { ret self.string(); }
         if (byte == 123 || byte == 91) {
-            if (depth > self.max_depth) { ret Err(JsonError.DepthLimit); }
+            if (depth >= self.max_depth) { ret Err(JsonError.DepthLimit); }
             if (byte == 123) { ret self.object(depth); }
             ret self.array(depth);
         }
@@ -253,6 +253,8 @@ pub fn object_with_limits(keys: Array[str], values: Array[String], max_output: u
         output = output.push_str(value.as_str());
     }
     output = output.push_str("}");
+    const valid: Result[bool, JsonError] = validate_with_limits(output.as_str(), max_output, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
     ret Ok(output);
 }
 
@@ -374,4 +376,42 @@ pub fn object_field_with_limits(source: str, key: str, max_input: usize, max_dep
 
 pub fn object_field(source: str, key: str) Result[Option[String], JsonError] {
     ret object_field_with_limits(source, key, 1048576, 64);
+}
+
+@test
+fn validation_depth_counts_each_array_or_object() void {
+    if (json.validate_with_limits("0", 1024, 0).is_err()) {
+        panic("a scalar should not consume container depth");
+    }
+    if (json.validate_with_limits("[]", 1024, 0).is_ok()) {
+        panic("a container must exceed a depth limit of zero");
+    }
+    if (json.validate_with_limits("[]", 1024, 1).is_err()) {
+        panic("a single container should fit a depth limit of one");
+    }
+    const nested = json.validate_with_limits("[[]]", 1024, 1);
+    if (nested.is_ok() || match nested.unwrap_err() { JsonError.DepthLimit => false, _ => true, }) {
+        panic("nested containers must exceed a depth limit of one");
+    }
+    ret;
+}
+
+@test
+fn object_composition_counts_the_enclosing_object_depth() void {
+    var keys: Array[str] = Array.new();
+    keys.push("items");
+    var values: Array[String] = Array.new();
+    values.push(String.from("[]"));
+    const composed = json.object_with_limits(keys, values, 1024, 1);
+    if (composed.is_ok() || match composed.unwrap_err() { JsonError.DepthLimit => false, _ => true, }) {
+        panic("a nested value must include its enclosing composed object depth");
+    }
+    var scalar_keys: Array[str] = Array.new();
+    scalar_keys.push("value");
+    var scalar_values: Array[String] = Array.new();
+    scalar_values.push(String.from("1"));
+    if (json.object_with_limits(scalar_keys, scalar_values, 1024, 1).is_err()) {
+        panic("a scalar-valued object should fit a depth limit of one");
+    }
+    ret;
 }
