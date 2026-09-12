@@ -1,0 +1,146 @@
+// std.process — shell-free child-process management.
+//
+// The compiler runtime owns platform creation, command-line marshalling,
+// waiting, and native handles. This module keeps the public lifetime contract
+// independent of those platform details. Linux is currently implemented;
+// Windows support remains pending its UTF-16 CreateProcessW lowerer.
+import std.core;
+
+pub enum ProcessError {
+    InteriorNul,
+    SpawnFailed(i32),
+    WaitFailed(i32),
+    TerminateFailed(i32),
+    CloseFailed(i32),
+}
+
+impl ProcessError {
+    pub fn native_code(self: ProcessError) i32 {
+        ret match self {
+            InteriorNul => 0,
+            SpawnFailed(code) => code,
+            WaitFailed(code) => code,
+            TerminateFailed(code) => code,
+            CloseFailed(code) => code,
+        };
+    }
+
+    pub fn message(self: ProcessError) str {
+        ret match self {
+            InteriorNul => "process paths and arguments cannot contain NUL",
+            SpawnFailed(_) => "could not start child process",
+            WaitFailed(_) => "could not wait for child process",
+            TerminateFailed(_) => "could not terminate child process",
+            CloseFailed(_) => "could not close child process",
+        };
+    }
+}
+
+pub enum ExitStatus {
+    Code(i32),
+    Signal(i32),
+}
+
+fn has_nul(value: str) bool {
+    var index: usize = 0;
+    for (index < value.bytes_len()) {
+        if (core.str_byte_at(value, index) == 0) { ret true; }
+        index = index + 1;
+    }
+    ret false;
+}
+
+fn status(kind: i32, value: i32) ExitStatus {
+    if (kind == 0) { ret ExitStatus.Code(value); }
+    ret ExitStatus.Signal(value);
+}
+
+// An owned child-process handle. A handle is consumed by wait, by an exited
+// try_wait, and by close. A cleared handle makes later operations harmless.
+pub struct Child {
+    handle: usize,
+}
+
+impl Child {
+    // Launch an exact executable path without a shell or PATH lookup. `args`
+    // excludes argv[0]; the runtime supplies `program` as the first argument.
+    pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
+        if (has_nul(program)) { ret Err(ProcessError.InteriorNul); }
+        var index: usize = 0;
+        for (index < args.len()) {
+            if (has_nul(args[index])) { ret Err(ProcessError.InteriorNul); }
+            index = index + 1;
+        }
+        var handle: usize = 0;
+        var error: i32 = 0;
+        var result: i32 = -1;
+        unsafe {
+            result = core.process_spawn(program, args.as_ptr(), args.len(), &handle, &error);
+        }
+        if (result != 0) { ret Err(ProcessError.SpawnFailed(error)); }
+        ret Ok(Child { handle: handle });
+    }
+
+    // Wait for completion and consume this child. A previously consumed child
+    // returns Ok(None), preserving the repeat-safe handle contract.
+    pub fn wait(self: Child) Result[Option[ExitStatus], ProcessError] {
+        const handle: usize = self.handle;
+        if (handle == 0) { ret Ok(None); }
+        self.handle = 0;
+        var kind: i32 = 0;
+        var value: i32 = 0;
+        var error: i32 = 0;
+        var result: i32 = -1;
+        unsafe { result = core.process_wait(handle, &kind, &value, &error); }
+        if (result != 0) { ret Err(ProcessError.WaitFailed(error)); }
+        ret Ok(Some(status(kind, value)));
+    }
+
+    // Observe a child without blocking. An exited child is consumed; a live
+    // child returns Ok(None) and remains available for later operations.
+    pub fn try_wait(self: Child) Result[Option[ExitStatus], ProcessError] {
+        const handle: usize = self.handle;
+        if (handle == 0) { ret Ok(None); }
+        var exited: i32 = 0;
+        var kind: i32 = 0;
+        var value: i32 = 0;
+        var error: i32 = 0;
+        var result: i32 = -1;
+        unsafe { result = core.process_try_wait(handle, &exited, &kind, &value, &error); }
+        if (result != 0) { ret Err(ProcessError.WaitFailed(error)); }
+        if (exited == 0) { ret Ok(None); }
+        self.handle = 0;
+        ret Ok(Some(status(kind, value)));
+    }
+
+    // Forcefully request termination without consuming the child. A cleared
+    // handle is a no-op and returns false.
+    pub fn terminate(self: Child) Result[bool, ProcessError] {
+        if (self.handle == 0) { ret Ok(false); }
+        var error: i32 = 0;
+        var result: i32 = -1;
+        unsafe { result = core.process_terminate(self.handle, &error); }
+        if (result != 0) { ret Err(ProcessError.TerminateFailed(error)); }
+        ret Ok(true);
+    }
+
+    // Consume this child. The runtime terminates a live child and reaps it,
+    // so closing cannot leave a Linux zombie behind.
+    pub fn close(self: Child) Result[bool, ProcessError] {
+        const handle: usize = self.handle;
+        if (handle == 0) { ret Ok(false); }
+        self.handle = 0;
+        var error: i32 = 0;
+        var result: i32 = -1;
+        unsafe { result = core.process_close(handle, &error); }
+        if (result != 0) { ret Err(ProcessError.CloseFailed(error)); }
+        ret Ok(true);
+    }
+
+    pub fn handle(self: Child) usize { ret self.handle; }
+}
+
+// Convenience entry point for one borrowed program path and argument vector.
+pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
+    ret Child.spawn(program, args);
+}

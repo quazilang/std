@@ -99,6 +99,13 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   Quazi closures and arbitrary values cannot cross the native thread ABI. The
   low-level spawn contract returns zero on allocation or OS thread-creation
   failure; joining a zero handle is a no-op.
+- `std.process` is a runtime-backed, shell-free child-process API. `program`
+  is an exact executable path and `args` excludes `argv[0]`; children inherit
+  standard streams. A `Child` is consumed by `wait`, an exited `try_wait`, or
+  `close`; closing a live Linux child kills and reaps it. The current runtime
+  implementation is Linux-only until the required Win32 UTF-16 command-line
+  and inherited-handle lowering is complete, so do not describe it as a
+  cross-platform facility yet.
 - Safe `std.net` operations return `NetError`; safe fallible `std.fs` operations
   return `FsError`. Stable variants normalize Linux/Windows errors, `message()`
   provides display text, and `Native(code)` preserves unknown platform failures.

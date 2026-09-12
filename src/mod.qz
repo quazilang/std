@@ -11,6 +11,7 @@ pub import win32_core;
 pub import fs;
 pub import net;
 pub import os;
+pub import process;
 pub import thread;
 pub import ffi;
 pub import math;

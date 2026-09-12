@@ -1,0 +1,31 @@
+// Regression coverage for the compiler-backed child-process contract.
+
+import std.process;
+import std.process.ExitStatus;
+
+@test
+fn process_spawn_waits_for_an_exact_program_path() void {
+    var args: Array[str] = Array.new();
+    args.push("-i");
+    const launched = process.spawn("/usr/bin/env", args);
+    if (launched.is_err()) {
+        const code = launched.unwrap_err().native_code();
+        const message = code.to_string();
+        panic(message.as_str());
+    }
+    var child = launched.unwrap();
+    const waited = child.wait();
+    if (waited.is_err()) { panic("process.wait failed"); }
+    const succeeded: bool = match waited.unwrap() {
+        Option.Some(ExitStatus.Code(0)) => true,
+        _ => false,
+    };
+    if (!succeeded) { panic("/usr/bin/env -i returned an unexpected status"); }
+}
+
+@test
+fn process_spawn_reports_execve_failure_before_returning_a_child() void {
+    var args: Array[str] = Array.new();
+    const launched = process.spawn("/definitely-not-a-quazi-executable", args);
+    if (!launched.is_err()) { panic("process.spawn returned a child for a missing program"); }
+}

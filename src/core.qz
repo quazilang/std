@@ -32,6 +32,24 @@ pub fn exit(code: i32) i32;
 @intrinsic("quazi.sleep_ms")
 pub fn sleep_ms(ms: u64) void;
 
+// Private child-process runtime ABI. These operations use only scalar
+// out-pointers so the compiler runtime never depends on an Array layout.
+// A zero return is success; -1 leaves the platform error in `error_out`.
+@intrinsic("quazi.process.spawn")
+pub unsafe fn process_spawn(program: str, args: *str, args_len: usize, handle_out: *usize, error_out: *i32) i32;
+
+@intrinsic("quazi.process.wait")
+pub unsafe fn process_wait(handle: usize, kind_out: *i32, value_out: *i32, error_out: *i32) i32;
+
+@intrinsic("quazi.process.try_wait")
+pub unsafe fn process_try_wait(handle: usize, exited_out: *i32, kind_out: *i32, value_out: *i32, error_out: *i32) i32;
+
+@intrinsic("quazi.process.terminate")
+pub unsafe fn process_terminate(handle: usize, error_out: *i32) i32;
+
+@intrinsic("quazi.process.close")
+pub unsafe fn process_close(handle: usize, error_out: *i32) i32;
+
 // Returns pointer to null-terminated C string, or null on not found.
 @intrinsic("quazi.getenv")
 pub unsafe fn getenv(name: str) *u8;
