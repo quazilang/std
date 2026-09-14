@@ -195,7 +195,7 @@ impl File {
         @cfg(target_os = "windows") {
             const opened: Result[File, FsError] = File.open_rw(path);
             if (opened.is_err()) { ret Err(opened.unwrap_err()); }
-            const file: File = opened.unwrap();
+            var file: File = opened.unwrap();
             const position: Result[i64, FsError] = file.seek(0, 2);
             if (position.is_err()) { ret Err(position.unwrap_err()); }
             ret Ok(file);
@@ -204,7 +204,7 @@ impl File {
     }
 
     // Raw buffer read. The caller guarantees `buf` is writable for `n` bytes.
-    pub unsafe fn read(self: File, buf: *u8, n: usize) isize {
+    pub unsafe fn read(self: &File!, buf: *u8, n: usize) isize {
         @cfg(target_os = "linux") {
             ret core.read(self.handle as i32, buf, n);
         }
@@ -219,7 +219,7 @@ impl File {
         ret -1;
     }
 
-    pub fn write(self: File, buf: bytes) Result[usize, FsError] {
+    pub fn write(self: &File!, buf: bytes) Result[usize, FsError] {
         var result: isize = -1;
         unsafe { result = self.write_raw(buf.as_ptr(), buf.len()); }
         if (result < 0) {
@@ -230,7 +230,7 @@ impl File {
     }
 
     // Raw buffer write. The caller guarantees `buf` is readable for `n` bytes.
-    pub unsafe fn write_raw(self: File, buf: *u8, n: usize) isize {
+    pub unsafe fn write_raw(self: &File!, buf: *u8, n: usize) isize {
         @cfg(target_os = "linux") {
             ret core.write_bytes(self.handle as i32, buf, n);
         }
@@ -245,7 +245,7 @@ impl File {
         ret -1;
     }
 
-    pub fn write_str(self: File, text: str) Result[usize, FsError] {
+    pub fn write_str(self: &File!, text: str) Result[usize, FsError] {
         var result: isize = -1;
         unsafe { result = self.write_raw(core.str_as_ptr(text), core.strlen(text)); }
         if (result < 0) {
@@ -282,7 +282,7 @@ impl File {
         self.close();
     }
 
-    pub fn seek(self: File, offset: i64, whence: i32) Result[i64, FsError] {
+    pub fn seek(self: &File!, offset: i64, whence: i32) Result[i64, FsError] {
         @cfg(target_os = "linux") {
             var position: i64 = -1;
             unsafe { position = unix.lseek(self.handle as i32, offset, whence); }
@@ -303,10 +303,10 @@ impl File {
     }
 
     // Linux descriptor, or a truncated Windows HANDLE for compatibility.
-    pub fn fd(self: File) i32 { ret self.handle as i32; }
-    pub fn raw_handle(self: File) usize { ret self.handle as usize; }
+    pub fn fd(self: &File) i32 { ret self.handle as i32; }
+    pub fn raw_handle(self: &File) usize { ret self.handle as usize; }
 
-    pub fn sync(self: File) Result[bool, FsError] {
+    pub fn sync(self: &File!) Result[bool, FsError] {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
             unsafe { result = unix.fsync(self.handle as i32); }
@@ -323,7 +323,7 @@ impl File {
     }
 
     // File truncation is currently implemented by the Linux backend.
-    pub fn truncate(self: File, len: i64) Result[bool, FsError] {
+    pub fn truncate(self: &File!, len: i64) Result[bool, FsError] {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
             unsafe { result = unix.ftruncate(self.handle as i32, len); }
@@ -344,7 +344,7 @@ pub fn seek_end() i32 { ret 2; }
 pub fn read_to_string(path: str) Result[String, FsError] {
     const opened: Result[File, FsError] = File.open(path);
     if (opened.is_err()) { ret Err(opened.unwrap_err()); }
-    const file: File = opened.unwrap();
+    var file: File = opened.unwrap();
     var capacity: usize = 4096;
     var length: usize = 0;
     var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
