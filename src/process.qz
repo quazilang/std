@@ -97,7 +97,7 @@ impl Child {
 
     // Forcefully request termination without consuming the child. A cleared
     // handle is a no-op and returns false.
-    pub fn terminate(self: Child) Result[bool, ProcessError] {
+    pub fn terminate(self: &Child!) Result[bool, ProcessError] {
         if (self.handle == 0) { ret Ok(false); }
         var error: i32 = 0;
         var result: i32 = -1;
@@ -119,7 +119,7 @@ impl Child {
         ret Ok(true);
     }
 
-    pub fn handle(self: Child) usize { ret self.handle; }
+    pub fn handle(self: &Child) usize { ret self.handle; }
 }
 
 // Convenience entry point for one borrowed program path and argument vector.
