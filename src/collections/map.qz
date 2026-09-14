@@ -49,13 +49,13 @@ impl Map {
     }
 
     @ignore
-    fn __hash(self: Map, key: usize) usize {
+    fn __hash(self: &Map, key: usize) usize {
         ret (key * 2654435761) % self.cap;
     }
 
-    // Methods borrow `self`; returning a second Map would duplicate this
-    // allocation owner. Mutate the one owner in place instead.
-    pub fn insert(self: Map, key: usize, val: usize) Result[bool, MapError] {
+    // Mutating methods require an exclusive loan; returning a second Map
+    // would duplicate this allocation owner.
+    pub fn insert(self: &Map!, key: usize, val: usize) Result[bool, MapError] {
         if (self.len * 4 >= self.cap * 3) {
             self.__grow()?;
         }
@@ -103,7 +103,7 @@ impl Map {
         ret Ok(false);
     }
 
-    pub fn get(self: Map, key: usize) Option[usize] {
+    pub fn get(self: &Map, key: usize) Option[usize] {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -123,7 +123,7 @@ impl Map {
         ret None;
     }
 
-    pub fn contains(self: Map, key: usize) bool {
+    pub fn contains(self: &Map, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -139,7 +139,7 @@ impl Map {
         ret false;
     }
 
-    pub fn remove(self: Map, key: usize) bool {
+    pub fn remove(self: &Map!, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -159,11 +159,11 @@ impl Map {
         ret false;
     }
 
-    pub fn len(self: Map) usize {
+    pub fn len(self: &Map) usize {
         ret self.len;
     }
 
-    pub fn free(self: Map) void {
+    pub fn free(self: &Map!) void {
         if (self.keys != 0) {
             unsafe {
                 core.free(self.keys);
@@ -179,7 +179,7 @@ impl Map {
     }
 
     @ignore
-    fn __grow(self: Map) Result[bool, MapError] {
+    fn __grow(self: &Map!) Result[bool, MapError] {
         // Doubling and converting slots to bytes must both fit in usize.
         if (self.cap > 1152921504606846975) {
             ret Err(MapError.CapacityOverflow);

@@ -40,13 +40,13 @@ impl Set {
     }
 
     @ignore
-    fn __hash(self: Set, key: usize) usize {
+    fn __hash(self: &Set, key: usize) usize {
         ret (key * 2654435761) % self.cap;
     }
 
-    // Methods borrow `self`; returning a second Set would duplicate this
-    // allocation owner. Mutate the one owner in place instead.
-    pub fn insert(self: Set, key: usize) Result[bool, SetError] {
+    // Mutating methods require an exclusive loan; returning a second Set
+    // would duplicate this allocation owner.
+    pub fn insert(self: &Set!, key: usize) Result[bool, SetError] {
         if (self.len * 4 >= self.cap * 3) {
             self.__grow()?;
         }
@@ -88,7 +88,7 @@ impl Set {
         ret Ok(false);
     }
 
-    pub fn contains(self: Set, key: usize) bool {
+    pub fn contains(self: &Set, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -104,7 +104,7 @@ impl Set {
         ret false;
     }
 
-    pub fn remove(self: Set, key: usize) bool {
+    pub fn remove(self: &Set!, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
         for (probe < self.cap) {
@@ -124,11 +124,11 @@ impl Set {
         ret false;
     }
 
-    pub fn len(self: Set) usize {
+    pub fn len(self: &Set) usize {
         ret self.len;
     }
 
-    pub fn free(self: Set) void {
+    pub fn free(self: &Set!) void {
         if (self.keys != 0) {
             unsafe {
                 core.free(self.keys);
@@ -142,7 +142,7 @@ impl Set {
     }
 
     @ignore
-    fn __grow(self: Set) Result[bool, SetError] {
+    fn __grow(self: &Set!) Result[bool, SetError] {
         // Doubling and converting slots to bytes must both fit in usize.
         if (self.cap > 1152921504606846975) {
             ret Err(SetError.CapacityOverflow);

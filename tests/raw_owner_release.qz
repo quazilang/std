@@ -21,6 +21,21 @@ fn set_free_invalidates_and_is_repeat_safe() void {
 }
 
 @test
+fn collection_receivers_preserve_single_owner_access() void {
+    var map: collections.Map = collections.Map.new().unwrap();
+    map.insert(7, 42).unwrap();
+    if (map.get(7).unwrap() != 42) { panic("Map shared lookup lost an inserted value"); }
+    if (!map.remove(7)) { panic("Map exclusive removal did not remove an inserted value"); }
+    if (map.contains(7)) { panic("Map still contains a removed key"); }
+
+    var set: collections.Set = collections.Set.new().unwrap();
+    set.insert(7).unwrap();
+    if (!set.contains(7)) { panic("Set shared lookup lost an inserted value"); }
+    if (!set.remove(7)) { panic("Set exclusive removal did not remove an inserted value"); }
+    if (set.contains(7)) { panic("Set still contains a removed key"); }
+}
+
+@test
 fn array_free_invalidates_and_is_repeat_safe() void {
     var values: Array[i32] = Array.new();
     values.push(1);

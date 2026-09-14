@@ -14,6 +14,9 @@ import std.collections.Set;
 `insert()` returns `Result[bool, MapError]`, where `true` means a new key was
 inserted and `false` means an existing value was replaced. `get()` returns
 `Option[usize]`. `contains`, `remove`, `len`, and `free` are non-panicking.
+`get`, `contains`, and `len` use a shared `self: &Map` receiver. `insert`,
+`remove`, and `free` use an exclusive `self: &Map!` receiver so a call has sole
+access to the raw-table owner while it can rehash, mutate, or release it.
 `insert` mutates its single owning map in place:
 
 ```quazi
@@ -27,6 +30,8 @@ var answer: usize = counts.get(7).unwrap();
 `Set` stores `usize`. `Set.new()` returns `Result[Set, SetError]`; `insert()`
 returns `Result[bool, SetError]`, where `true` means a new key was added.
 `contains`, `remove`, `len`, and `free` are non-panicking.
+`contains` and `len` use `self: &Set`; `insert`, `remove`, and `free` use
+`self: &Set!` for exclusive raw-table access.
 
 ## Invariants
 
