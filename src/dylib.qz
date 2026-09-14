@@ -71,7 +71,7 @@ impl DynamicLibrary {
 
     // Address stays valid only while the library remains open. Cast to an
     // exact @repr(C) callback signature before invoking it.
-    pub unsafe fn symbol(self: DynamicLibrary, name: str) Result[usize, DynamicLibraryError] {
+    pub unsafe fn symbol(self: &DynamicLibrary, name: str) Result[usize, DynamicLibraryError] {
         const encoded: Result[CString, CStringError] = CString.try_from_str(name);
         if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
         const symbol_name: CString = encoded.unwrap();
@@ -112,5 +112,5 @@ impl DynamicLibrary {
         const ignored: Result[bool, DynamicLibraryError] = self.close();
     }
 
-    pub fn raw_handle(self: DynamicLibrary) usize { ret self.handle; }
+    pub fn raw_handle(self: &DynamicLibrary) usize { ret self.handle; }
 }
