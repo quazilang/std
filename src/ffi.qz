@@ -60,7 +60,7 @@ impl CStr {
         ret CStr { ptr: ptr };
     }
 
-    pub unsafe fn as_ptr(self: CStr) *c_char {
+    pub unsafe fn as_ptr(self: &CStr) *c_char {
         ret self.ptr;
     }
 }
@@ -137,15 +137,15 @@ impl CString {
         ret CString { ptr: raw, len: length };
     }
 
-    pub unsafe fn as_ptr(self: CString) *c_char {
+    pub unsafe fn as_ptr(self: &CString) *c_char {
         ret self.ptr;
     }
 
-    pub fn len(self: CString) usize {
+    pub fn len(self: &CString) usize {
         ret self.len;
     }
 
-    pub fn as_c_str(self: CString) CStr {
+    pub fn as_c_str(self: &CString) CStr {
         ret CStr { ptr: self.ptr };
     }
 
