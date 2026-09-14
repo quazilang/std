@@ -44,12 +44,12 @@ fn hex(byte: u8) bool {
 }
 
 impl Parser {
-    fn at_end(self: Parser) bool { ret self.offset >= self.source.bytes_len(); }
-    fn byte(self: Parser) u8 { ret core.str_byte_at(self.source, self.offset); }
-    fn skip_whitespace(self: Parser) void {
+    fn at_end(self: &Parser) bool { ret self.offset >= self.source.bytes_len(); }
+    fn byte(self: &Parser) u8 { ret core.str_byte_at(self.source, self.offset); }
+    fn skip_whitespace(self: &Parser!) void {
         for (!self.at_end() && whitespace(self.byte())) { self.offset = self.offset + 1; }
     }
-    fn literal(self: Parser, value: str) bool {
+    fn literal(self: &Parser!, value: str) bool {
         if (self.source.bytes_len() - self.offset < value.bytes_len()) { ret false; }
         for i : 0..value.bytes_len() {
             if (core.str_byte_at(self.source, self.offset + i) != core.str_byte_at(value, i)) { ret false; }
@@ -57,7 +57,7 @@ impl Parser {
         self.offset = self.offset + value.bytes_len();
         ret true;
     }
-    fn string(self: Parser) Result[bool, JsonError] {
+    fn string(self: &Parser!) Result[bool, JsonError] {
         self.offset = self.offset + 1;
         for (!self.at_end()) {
             const byte: u8 = self.byte();
@@ -92,7 +92,7 @@ impl Parser {
         }
         ret Err(JsonError.UnexpectedEnd);
     }
-    fn number(self: Parser) Result[bool, JsonError] {
+    fn number(self: &Parser!) Result[bool, JsonError] {
         if (self.byte() == 45) { self.offset = self.offset + 1; if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); } }
         if (self.byte() == 48) { self.offset = self.offset + 1; }
         else {
@@ -115,7 +115,7 @@ impl Parser {
         }
         ret Ok(true);
     }
-    fn array(self: Parser, depth: usize) Result[bool, JsonError] {
+    fn array(self: &Parser!, depth: usize) Result[bool, JsonError] {
         self.offset = self.offset + 1; self.skip_whitespace();
         if (!self.at_end() && self.byte() == 93) { self.offset = self.offset + 1; ret Ok(true); }
         for (true) {
@@ -129,7 +129,7 @@ impl Parser {
         }
         ret Err(JsonError.UnexpectedEnd);
     }
-    fn object(self: Parser, depth: usize) Result[bool, JsonError] {
+    fn object(self: &Parser!, depth: usize) Result[bool, JsonError] {
         self.offset = self.offset + 1; self.skip_whitespace();
         if (!self.at_end() && self.byte() == 125) { self.offset = self.offset + 1; ret Ok(true); }
         for (true) {
@@ -150,7 +150,7 @@ impl Parser {
         }
         ret Err(JsonError.UnexpectedEnd);
     }
-    fn value(self: Parser, depth: usize) Result[bool, JsonError] {
+    fn value(self: &Parser!, depth: usize) Result[bool, JsonError] {
         self.skip_whitespace();
         if (self.at_end()) { ret Err(JsonError.UnexpectedEnd); }
         const byte: u8 = self.byte();
