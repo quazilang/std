@@ -130,21 +130,21 @@ impl IniDocument {
         ret Ok(document);
     }
 
-    pub fn get(self: IniDocument, section: str, key: str) Option[String] {
+    pub fn get(self: &IniDocument, section: str, key: str) Option[String] {
         ret lookup(self.content.as_str(), section, key);
     }
 
-    pub fn contains(self: IniDocument, section: str, key: str) bool {
+    pub fn contains(self: &IniDocument, section: str, key: str) bool {
         ret self.get(section, key).is_some();
     }
 
-    pub fn has_section(self: IniDocument, section: str) bool {
+    pub fn has_section(self: &IniDocument, section: str) bool {
         ret has_section_in(self.content.as_str(), section);
     }
 
     pub fn free(self: IniDocument) void { self.content.free(); self.content = String.new(); }
 
-    pub fn parse_string(self: IniDocument, content: str) Result[bool, IniError] {
+    pub fn parse_string(self: &IniDocument!, content: str) Result[bool, IniError] {
         const checked = validate(content);
         if checked.is_err() { ret Err(checked.unwrap_err()); }
         self.content.free();
@@ -152,15 +152,15 @@ impl IniDocument {
         ret Ok(true);
     }
 
-    pub fn stringify(self: IniDocument) String { ret String.from(self.content.as_str()); }
+    pub fn stringify(self: &IniDocument) String { ret String.from(self.content.as_str()); }
 
-    pub fn require_string(self: IniDocument, section: str, key: str) Result[String, IniDecodeError] {
+    pub fn require_string(self: &IniDocument, section: str, key: str) Result[String, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         ret Ok(value.unwrap());
     }
 
-    pub fn require_i32(self: IniDocument, section: str, key: str) Result[i32, IniDecodeError] {
+    pub fn require_i32(self: &IniDocument, section: str, key: str) Result[i32, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         const text = value.unwrap();
@@ -169,7 +169,7 @@ impl IniDocument {
         ret Ok(parsed.unwrap());
     }
 
-    pub fn require_u64(self: IniDocument, section: str, key: str) Result[u64, IniDecodeError] {
+    pub fn require_u64(self: &IniDocument, section: str, key: str) Result[u64, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         const text = value.unwrap();
@@ -178,7 +178,7 @@ impl IniDocument {
         ret Ok(parsed.unwrap());
     }
 
-    pub fn require_bool(self: IniDocument, section: str, key: str) Result[bool, IniDecodeError] {
+    pub fn require_bool(self: &IniDocument, section: str, key: str) Result[bool, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         const text = value.unwrap();
