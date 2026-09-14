@@ -331,9 +331,9 @@ impl SocketAddress {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         ret Ok(SocketAddress { host: String.from(host), port: port });
     }
-    pub fn host(self: SocketAddress) str { ret self.host.as_str(); }
-    pub fn port(self: SocketAddress) i32 { ret self.port; }
-    pub fn resolve(self: SocketAddress) Result[SocketAddress, NetError] {
+    pub fn host(self: &SocketAddress) str { ret self.host.as_str(); }
+    pub fn port(self: &SocketAddress) i32 { ret self.port; }
+    pub fn resolve(self: &SocketAddress) Result[SocketAddress, NetError] {
         if (__parse_ipv4_literal(self.host.as_str()).is_some()) {
             ret Ok(SocketAddress { host: String.from(self.host.as_str()), port: self.port });
         }
@@ -718,8 +718,25 @@ impl Header {
     pub fn new(name: str, value: str) Header {
         ret Header { name: String.from(name), value: String.from(value) };
     }
-    pub fn name(self: Header) str { ret self.name.as_str(); }
-    pub fn value(self: Header) str { ret self.value.as_str(); }
+    pub fn name(self: &Header) str { ret self.name.as_str(); }
+    pub fn value(self: &Header) str { ret self.value.as_str(); }
+}
+
+@test
+fn network_value_accessors_support_shared_owners() void {
+    const address = SocketAddress.new("127.0.0.1", 8080).unwrap();
+    if address.host() != "127.0.0.1" || address.port() != 8080 {
+        panic("socket address accessors lost their values");
+    }
+    const header = Header.new("Accept", "text/plain");
+    if header.name() != "Accept" || header.value() != "text/plain" {
+        panic("header accessors lost their values");
+    }
+    const url = Url.parse("http://example.test:8081/path").unwrap();
+    if url.scheme() != "http" || url.host() != "example.test"
+        || url.port() != 8081 || url.path() != "/path" {
+        panic("URL accessors lost parsed components");
+    }
 }
 
 pub struct Headers { items: Array[Header], }
@@ -886,10 +903,10 @@ impl Url {
         if (host.is_empty() || port < 0 || port > 65535) { ret Err(NetError.InvalidUrl); }
         ret Ok(Url { scheme: scheme, host: host, port: port, path: path });
     }
-    pub fn scheme(self: Url) str { ret self.scheme.as_str(); }
-    pub fn host(self: Url) str { ret self.host.as_str(); }
-    pub fn port(self: Url) i32 { ret self.port; }
-    pub fn path(self: Url) str { ret self.path.as_str(); }
+    pub fn scheme(self: &Url) str { ret self.scheme.as_str(); }
+    pub fn host(self: &Url) str { ret self.host.as_str(); }
+    pub fn port(self: &Url) i32 { ret self.port; }
+    pub fn path(self: &Url) str { ret self.path.as_str(); }
 }
 
 pub struct HttpRequest {
