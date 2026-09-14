@@ -54,10 +54,10 @@ impl Duration {
         ret Duration { seconds: seconds, nanoseconds: 0 };
     }
 
-    pub fn seconds(self: Duration) u64 { ret self.seconds; }
-    pub fn subsec_nanoseconds(self: Duration) u32 { ret self.nanoseconds; }
+    pub fn seconds(self: &Duration) u64 { ret self.seconds; }
+    pub fn subsec_nanoseconds(self: &Duration) u32 { ret self.nanoseconds; }
 
-    pub fn checked_add(self: Duration, other: Duration) Option[Duration] {
+    pub fn checked_add(self: &Duration, other: Duration) Option[Duration] {
         var seconds: u64 = self.seconds + other.seconds;
         if seconds < self.seconds { ret None; }
         var nanoseconds: u32 = self.nanoseconds + other.nanoseconds;
@@ -69,7 +69,7 @@ impl Duration {
         ret Some(Duration { seconds: seconds, nanoseconds: nanoseconds });
     }
 
-    pub fn checked_sub(self: Duration, other: Duration) Option[Duration] {
+    pub fn checked_sub(self: &Duration, other: Duration) Option[Duration] {
         if self.seconds < other.seconds { ret None; }
         if self.seconds == other.seconds && self.nanoseconds < other.nanoseconds { ret None; }
         var seconds: u64 = self.seconds - other.seconds;
