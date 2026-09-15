@@ -1,22 +1,18 @@
-// Regression coverage for repeated explicit release of raw-allocation owners.
+// Regression coverage for consuming cleanup of raw-allocation owners.
 
 import std.collections;
 
 @test
-fn map_free_invalidates_and_is_repeat_safe() void {
+fn map_free_consumes_the_owner() void {
     var values: collections.Map = collections.Map.new().unwrap();
     values.insert(1, 2).unwrap();
-    values.free();
-    if (values.len() != 0) { panic("Map.free did not invalidate the owner"); }
     values.free();
 }
 
 @test
-fn set_free_invalidates_and_is_repeat_safe() void {
+fn set_free_consumes_the_owner() void {
     var values: collections.Set = collections.Set.new().unwrap();
     values.insert(1).unwrap();
-    values.free();
-    if (values.len() != 0) { panic("Set.free did not invalidate the owner"); }
     values.free();
 }
 
@@ -36,17 +32,14 @@ fn collection_receivers_preserve_single_owner_access() void {
 }
 
 @test
-fn array_free_invalidates_and_is_repeat_safe() void {
+fn array_free_consumes_the_owner() void {
     var values: Array[i32] = Array.new();
     values.push(1);
-    values.free();
-    if (values.len() != 0) { panic("Array.free did not invalidate the owner"); }
     values.free();
 }
 
 @test
-fn box_free_invalidates_and_is_repeat_safe() void {
+fn box_free_consumes_the_owner() void {
     var value = Box.new(7);
-    value.free();
     value.free();
 }
