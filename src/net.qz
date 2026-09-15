@@ -223,7 +223,7 @@ fn __error(result: i32) i32 {
 fn __resolve_ipv4(host: str) Result[String, NetError] {
     const encoded: Result[CString, CStringError] = CString.try_from_str(host);
     if (encoded.is_err()) { ret Err(__cstring_error(encoded.unwrap_err())); }
-    const name: CString = encoded.unwrap();
+    var name: CString = encoded.unwrap();
     var hints: *u8 = 0;
     var result_slot: *u8 = 0;
     unsafe {
@@ -233,7 +233,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     if (hints == 0 || result_slot == 0) {
         if (hints != 0) { unsafe { core.free(hints); } }
         if (result_slot != 0) { unsafe { core.free(result_slot); } }
-        name.free();
+        name.clear();
         ret Err(NetError.AllocationFailed);
     }
     unsafe {
@@ -249,7 +249,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
         const started: i32 = __winsock_start();
         if (started < 0) {
             unsafe { core.free(hints); core.free(result_slot); }
-            name.free();
+            name.clear();
             ret Err(__net_error(started));
         }
         unsafe { code = win32_core.get_address_info(name.as_ptr(), 0, hints, result_slot as **u8); }
@@ -257,7 +257,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     @cfg(target_os = "linux") {
         unsafe { code = __linux_getaddrinfo(name.as_ptr(), 0, hints, result_slot as **u8); }
     }
-    name.free();
+    name.clear();
     unsafe { core.free(hints); }
     if (code != 0) {
         @cfg(target_os = "windows") { unsafe { win32_core.winsock_cleanup(); } }
