@@ -50,7 +50,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   the allocation must be writable, NUL-terminated at `len`, and exclusively
   owned by the resulting `String`.
 - Collections report allocation and capacity failures with `Result`; absence is
-  represented with `Option`, never by terminating the process.
+  represented with `Option`, never by terminating the process. `Map` and `Set`
+  use exclusive `clear()` for reusable storage release and consuming `free(self)`
+  for lexical destruction.
 - Until the language has hash/equality/drop trait bounds for raw table slots,
   `Map` and `Set` intentionally store `usize` values rather than pretending to
   be sound generic containers.

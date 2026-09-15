@@ -163,7 +163,7 @@ impl Map {
         ret self.len;
     }
 
-    pub fn free(self: &Map!) void {
+    pub fn clear(self: &Map!) void {
         if (self.keys != 0) {
             unsafe {
                 core.free(self.keys);
@@ -177,6 +177,8 @@ impl Map {
             self.cap = 0;
         }
     }
+
+    pub fn free(self: Map) void { self.clear(); }
 
     @ignore
     fn __grow(self: &Map!) Result[bool, MapError] {
