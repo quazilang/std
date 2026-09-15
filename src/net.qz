@@ -799,8 +799,9 @@ fn __parse_headers(block: str) Result[Headers, NetError] {
     for (offset < block.bytes_len()) {
         const remaining: String = block[offset as isize:];
         const found: Option[usize] = remaining.find("\r\n");
+        const has_found: bool = found.is_some();
         var end: usize = block.bytes_len();
-        if (found.is_some()) { end = offset + found.unwrap(); }
+        if (has_found) { end = offset + found.unwrap(); }
         if (end == offset) { break; }
         const line: String = block[offset as isize:end as isize];
         const colon: Option[usize] = line.find(":");
@@ -810,7 +811,7 @@ fn __parse_headers(block: str) Result[Headers, NetError] {
         const value: String = line[(split + 1) as isize:];
         const trimmed: String = value.trim();
         headers.append(name.as_str(), trimmed.as_str());
-        if (found.is_none()) { break; }
+        if (!has_found) { break; }
         offset = end + 2;
     }
     ret Ok(headers);
@@ -887,14 +888,20 @@ impl Url {
         const rest: String = text[authority_start as isize:];
         const slash: Option[usize] = rest.find("/");
         const query: Option[usize] = rest.find("?");
+        const has_slash: bool = slash.is_some();
+        const has_query: bool = query.is_some();
+        var slash_offset: usize = 0;
+        var query_offset: usize = 0;
+        if (has_slash) { slash_offset = slash.unwrap(); }
+        if (has_query) { query_offset = query.unwrap(); }
         var authority_end: usize = text.bytes_len();
         var path: String = String.from("/");
-        if (query.is_some() && (slash.is_none() || query.unwrap() < slash.unwrap())) {
-            authority_end = authority_start + query.unwrap();
+        if (has_query && (!has_slash || query_offset < slash_offset)) {
+            authority_end = authority_start + query_offset;
             const raw_query: String = text[authority_end as isize:];
             path = path.push_str(raw_query.as_str());
-        } else if (slash.is_some()) {
-            authority_end = authority_start + slash.unwrap();
+        } else if (has_slash) {
+            authority_end = authority_start + slash_offset;
             path = text[authority_end as isize:];
         }
         const authority: String = text[authority_start as isize:authority_end as isize];
