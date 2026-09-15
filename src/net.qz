@@ -390,7 +390,7 @@ impl TcpStream {
         ret Ok(TcpStream { socket: socket });
     }
 
-    pub fn send(self: TcpStream, text: str) Result[usize, NetError] {
+    pub fn send(self: &TcpStream!, text: str) Result[usize, NetError] {
         var data: *u8 = 0;
         var result: Result[usize, NetError] = Err(NetError.Unsupported);
         unsafe {
@@ -400,13 +400,13 @@ impl TcpStream {
         ret result;
     }
 
-    pub fn send_bytes(self: TcpStream, data: bytes) Result[usize, NetError] {
+    pub fn send_bytes(self: &TcpStream!, data: bytes) Result[usize, NetError] {
         var result: Result[usize, NetError] = Err(NetError.Unsupported);
         unsafe { result = self.send_raw(data.as_ptr(), data.len()); }
         ret result;
     }
 
-    pub unsafe fn send_raw(self: TcpStream, data: *u8, length: usize) Result[usize, NetError] {
+    pub unsafe fn send_raw(self: &TcpStream!, data: *u8, length: usize) Result[usize, NetError] {
         var sent: usize = 0;
         for (sent < length) {
             const count: isize = __send(self.socket, data + sent, length - sent);
@@ -416,11 +416,11 @@ impl TcpStream {
         ret Ok(sent);
     }
 
-    pub unsafe fn recv(self: TcpStream, data: *u8, length: usize) isize {
+    pub unsafe fn recv(self: &TcpStream!, data: *u8, length: usize) isize {
         ret __recv(self.socket, data, length);
     }
 
-    pub fn receive(self: TcpStream, limit: usize) Result[String, NetError] {
+    pub fn receive(self: &TcpStream!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
         unsafe { data = core.malloc(limit + 1); }
@@ -465,7 +465,7 @@ impl TcpStream {
         ret Ok(text);
     }
 
-    pub fn receive_all(self: TcpStream, limit: usize) Result[String, NetError] {
+    pub fn receive_all(self: &TcpStream!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
         unsafe { data = core.malloc(limit + 1); }
@@ -497,7 +497,7 @@ impl TcpStream {
         ret Ok(text);
     }
 
-    pub fn shutdown(self: TcpStream, how: Shutdown) Result[bool, NetError] {
+    pub fn shutdown(self: &TcpStream!, how: Shutdown) Result[bool, NetError] {
         var mode: i32 = 2;
         if (how == Shutdown.Read) { mode = 0; }
         else if (how == Shutdown.Write) { mode = 1; }
@@ -508,14 +508,14 @@ impl TcpStream {
         ret Ok(true);
     }
 
-    pub fn close(self: TcpStream) void {
+    pub fn close(self: &TcpStream!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
     pub fn free(self: TcpStream) void { self.close(); }
-    pub fn handle(self: TcpStream) isize { ret self.socket; }
+    pub fn handle(self: &TcpStream) isize { ret self.socket; }
 }
 
 pub struct TcpListener { socket: isize, }
@@ -540,21 +540,21 @@ impl TcpListener {
         ret Ok(TcpListener { socket: socket });
     }
 
-    pub fn accept(self: TcpListener) Result[TcpStream, NetError] {
+    pub fn accept(self: &TcpListener!) Result[TcpStream, NetError] {
         const accepted: Result[isize, NetError] = __accept(self.socket);
         if (accepted.is_err()) { ret Err(accepted.unwrap_err()); }
         const socket: isize = accepted.unwrap();
         ret Ok(TcpStream { socket: socket });
     }
 
-    pub fn close(self: TcpListener) void {
+    pub fn close(self: &TcpListener!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
     pub fn free(self: TcpListener) void { self.close(); }
-    pub fn handle(self: TcpListener) isize { ret self.socket; }
+    pub fn handle(self: &TcpListener) isize { ret self.socket; }
 }
 
 pub struct UdpDatagram { data: String, address: SocketAddress, }
@@ -598,14 +598,14 @@ impl UdpSocket {
         ret Ok(UdpSocket { socket: socket });
     }
 
-    pub fn send(self: UdpSocket, text: str) Result[usize, NetError] {
+    pub fn send(self: &UdpSocket!, text: str) Result[usize, NetError] {
         var result: isize = 0;
         unsafe { result = __send(self.socket, core.str_as_ptr(text), text.bytes_len()); }
         if (result < 0) { ret Err(__net_error(__error(result as i32))); }
         ret Ok(result as usize);
     }
 
-    pub fn send_to(self: UdpSocket, text: str, address: SocketAddress) Result[usize, NetError] {
+    pub fn send_to(self: &UdpSocket!, text: str, address: SocketAddress) Result[usize, NetError] {
         const encoded: Result[*u8, NetError] = __sockaddr(address);
         if (encoded.is_err()) { ret Err(encoded.unwrap_err()); }
         const raw_address: *u8 = encoded.unwrap();
@@ -623,7 +623,7 @@ impl UdpSocket {
         ret Ok(result as usize);
     }
 
-    pub fn receive(self: UdpSocket, limit: usize) Result[String, NetError] {
+    pub fn receive(self: &UdpSocket!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
         unsafe { data = core.malloc(limit + 1); }
@@ -644,7 +644,7 @@ impl UdpSocket {
         ret Ok(text);
     }
 
-    pub fn receive_from(self: UdpSocket, limit: usize) Result[UdpDatagram, NetError] {
+    pub fn receive_from(self: &UdpSocket!, limit: usize) Result[UdpDatagram, NetError] {
         if (limit == 0) { ret Err(NetError.MessageTooLarge); }
         var data: *u8 = 0;
         var raw_address: *u8 = 0;
@@ -691,25 +691,36 @@ impl UdpSocket {
         ret Ok(UdpDatagram { data: text, address: SocketAddress { host: host, port: port } });
     }
 
-    pub fn close(self: UdpSocket) void {
+    pub fn close(self: &UdpSocket!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
     pub fn free(self: UdpSocket) void { self.close(); }
-    pub fn handle(self: UdpSocket) isize { ret self.socket; }
+    pub fn handle(self: &UdpSocket) isize { ret self.socket; }
 }
 
 @test
-fn udp_close_invalidates_once_and_free_is_safe_afterward() void {
+fn udp_close_invalidates_once_then_consumes_on_free() void {
     var socket = UdpSocket.bind(0).unwrap();
     if socket.handle() == -1 { panic("bound UDP socket had an invalid handle"); }
     socket.close();
     if socket.handle() != -1 { panic("UDP close did not invalidate the socket"); }
     socket.close();
+    if socket.handle() != -1 { panic("repeated UDP close changed the invalid handle"); }
     socket.free();
-    if socket.handle() != -1 { panic("repeated UDP release changed the invalid handle"); }
+}
+
+@test
+fn tcp_listener_close_invalidates_once_then_consumes_on_free() void {
+    var listener = TcpListener.bind(0).unwrap();
+    if listener.handle() == -1 { panic("bound TCP listener had an invalid handle"); }
+    listener.close();
+    if listener.handle() != -1 { panic("TCP listener close did not invalidate the handle"); }
+    listener.close();
+    if listener.handle() != -1 { panic("repeated TCP listener close changed the invalid handle"); }
+    listener.free();
 }
 
 pub struct Header { name: String, value: String, }
@@ -964,7 +975,7 @@ impl HttpRequest {
     pub fn send(self: HttpRequest, port: i32) Result[HttpResponse, NetError] {
         const connected: Result[TcpStream, NetError] = TcpStream.connect(self.host.as_str(), port);
         if (connected.is_err()) { ret Err(connected.unwrap_err()); }
-        const stream: TcpStream = connected.unwrap();
+        var stream: TcpStream = connected.unwrap();
         const encoded: String = self.encode();
         const sent: Result[usize, NetError] = stream.send(encoded.as_str());
         if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }

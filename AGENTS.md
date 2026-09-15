@@ -91,7 +91,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
 - `std.net` owns cross-platform Linux/Winsock socket handles and exposes IPv4
   TCP streams/listeners, UDP datagrams, DNS resolution, structured HTTP/1.1
   request/response/header parsing, chunked responses, response limits, and
-  local-server primitives. HTTPS requires a separate TLS implementation.
+  local-server primitives. Socket I/O, accept, shutdown, and close use
+  exclusive receivers; handle access is shared and `free(self)` is consuming.
+  HTTPS requires a separate TLS implementation.
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.
