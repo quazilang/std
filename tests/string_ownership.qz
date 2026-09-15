@@ -1,11 +1,11 @@
-// Regression coverage for the compiler prelude's explicit String release.
+// Regression coverage for reusable in-place String cleanup.
 
 @test
-fn string_free_invalidates_and_is_repeat_safe() void {
+fn string_clear_invalidates_and_is_repeat_safe() void {
     var value: String = String.from("owned string");
-    value.free();
-    if (value.bytes_len() != 0) { panic("String.free did not clear the byte length"); }
-    if (!value.is_empty()) { panic("String.free did not invalidate the string view"); }
-    if (!value.as_str().is_empty()) { panic("String.free did not replace the data view"); }
-    value.free();
+    value.clear();
+    if (value.bytes_len() != 0) { panic("String.clear did not clear the byte length"); }
+    if (!value.is_empty()) { panic("String.clear did not invalidate the string view"); }
+    if (!value.as_str().is_empty()) { panic("String.clear did not replace the data view"); }
+    value.clear();
 }
