@@ -77,7 +77,7 @@ fn lookup(content: str, wanted_section: str, wanted_key: str) Option[String] {
             if !ignored(line.as_str()) {
                 const next_section = section_name(line.as_str());
                 if !next_section.is_empty() {
-                    section.free();
+                    section.clear();
                     section = next_section;
                 } else if section.as_str() == wanted_section {
                     const equal = line.as_str().find("=");
@@ -86,7 +86,7 @@ fn lookup(content: str, wanted_section: str, wanted_key: str) Option[String] {
                         const key = line.as_str()[0:at as isize].trim();
                         if key.as_str() == wanted_key {
                             const value = line.as_str()[at as isize + 1:].trim();
-                            result.free();
+                            result.clear();
                             result = value;
                             found = true;
                         }
@@ -147,7 +147,7 @@ impl IniDocument {
     pub fn parse_string(self: &IniDocument!, content: str) Result[bool, IniError] {
         const checked = validate(content);
         if checked.is_err() { ret Err(checked.unwrap_err()); }
-        self.content.free();
+        self.content.clear();
         self.content = String.from(content);
         ret Ok(true);
     }

@@ -1,0 +1,14 @@
+// Regression coverage for in-place replacement of owned INI document text.
+
+import std.ini;
+
+@test
+fn ini_parse_string_replaces_owned_content_without_consuming_document() void {
+    var document = ini.IniDocument.new();
+    document.parse_string("[first]\nvalue = old\n").unwrap();
+    document.parse_string("[second]\nvalue = new\n").unwrap();
+
+    if document.has_section("first") { panic("replaced INI content remained visible"); }
+    const value = document.get("second", "value").unwrap();
+    if value.as_str() != "new" { panic("replacement INI content was not retained"); }
+}
