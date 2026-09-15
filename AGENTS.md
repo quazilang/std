@@ -106,8 +106,10 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   failure; joining a zero handle is a no-op.
 - `std.process` is a runtime-backed, shell-free child-process API. `program`
   is an exact executable path and `args` excludes `argv[0]`; children inherit
-  standard streams. A `Child` is consumed by `wait`, an exited `try_wait`, or
-  `close`; closing a live Linux child kills and reaps it. The current runtime
+  standard streams. A `Child` is consumed by `wait` or `close`; `try_wait`
+  takes an exclusive receiver and clears an exited handle while keeping its
+  local valid for harmless later no-op operations. Closing a live Linux child
+  kills and reaps it. The current runtime
   implementation is Linux-only until the required Win32 UTF-16 command-line
   and inherited-handle lowering is complete, so do not describe it as a
   cross-platform facility yet.

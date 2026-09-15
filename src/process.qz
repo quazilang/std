@@ -43,8 +43,9 @@ fn status(kind: i32, value: i32) ExitStatus {
     ret ExitStatus.Signal(value);
 }
 
-// An owned child-process handle. A handle is consumed by wait, by an exited
-// try_wait, and by close. A cleared handle makes later operations harmless.
+// An owned child-process handle. `wait` and `close` consume the owner.
+// `try_wait` borrows it exclusively and clears an exited handle, so later
+// operations on that same local are harmless no-ops.
 pub struct Child {
     handle: usize,
 }
@@ -78,9 +79,9 @@ impl Child {
         ret Ok(Some(status(kind, value)));
     }
 
-    // Observe a child without blocking. An exited child is consumed; a live
-    // child returns Ok(None) and remains available for later operations.
-    pub fn try_wait(self: Child) Result[Option[ExitStatus], ProcessError] {
+    // Observe a child without blocking. A live child remains available; an
+    // exited child is cleared before its status is returned.
+    pub fn try_wait(self: &Child!) Result[Option[ExitStatus], ProcessError] {
         const handle: usize = self.handle;
         if (handle == 0) { ret Ok(None); }
         var exited: i32 = 0;

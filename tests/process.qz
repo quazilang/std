@@ -7,13 +7,10 @@ import std.process.ExitStatus;
 fn process_spawn_waits_for_an_exact_program_path() void {
     var args: Array[str] = Array.new();
     args.push("-i");
-    const launched = process.spawn("/usr/bin/env", args);
-    if (launched.is_err()) {
-        const code = launched.unwrap_err().native_code();
-        const message = code.to_string();
-        panic(message.as_str());
-    }
-    var child = launched.unwrap();
+    var child: process.Child = match process.spawn("/usr/bin/env", args) {
+        Ok(value) => value,
+        Err(error) => panic(error.native_code().to_string().as_str()),
+    };
     const waited = child.wait();
     if (waited.is_err()) { panic("process.wait failed"); }
     const succeeded: bool = match waited.unwrap() {
@@ -26,27 +23,33 @@ fn process_spawn_waits_for_an_exact_program_path() void {
 @test
 fn process_spawn_reports_execve_failure_before_returning_a_child() void {
     var args: Array[str] = Array.new();
-    const launched = process.spawn("/definitely-not-a-quazi-executable", args);
-    if (!launched.is_err()) { panic("process.spawn returned a child for a missing program"); }
+    const failed: bool = match process.spawn("/definitely-not-a-quazi-executable", args) {
+        Ok(_) => false,
+        Err(_) => true,
+    };
+    if (!failed) { panic("process.spawn returned a child for a missing program"); }
 }
 
 @test
-fn process_try_wait_and_close_consume_a_child_once() void {
+fn process_try_wait_keeps_the_local_available_for_wait_or_close() void {
     var args: Array[str] = Array.new();
     args.push("-i");
-    const launched = process.spawn("/usr/bin/env", args);
-    if (launched.is_err()) { panic("process.spawn failed for try_wait"); }
-    var child = launched.unwrap();
-    const polled = child.try_wait();
-    if (polled.is_err()) { panic("process.try_wait failed"); }
-    const waited = child.wait();
-    if (waited.is_err()) { panic("process.wait after try_wait failed"); }
+    var child: process.Child = match process.spawn("/usr/bin/env", args) {
+        Ok(value) => value,
+        Err(_) => panic("process.spawn failed for try_wait"),
+    };
+    const polled = child.try_wait().unwrap();
+    const exited: bool = polled.is_some();
+    const waited = child.wait().unwrap();
+    if (exited && waited.is_some()) { panic("wait returned a second status after try_wait cleared the child"); }
+    if (!exited && waited.is_none()) { panic("wait lost a live child after try_wait"); }
 
     var close_args: Array[str] = Array.new();
     close_args.push("-i");
-    const close_launch = process.spawn("/usr/bin/env", close_args);
-    if (close_launch.is_err()) { panic("process.spawn failed for close"); }
-    var closable = close_launch.unwrap();
+    var closable: process.Child = match process.spawn("/usr/bin/env", close_args) {
+        Ok(value) => value,
+        Err(_) => panic("process.spawn failed for close"),
+    };
     const closed = closable.close();
     if (closed.is_err() || !closed.unwrap()) { panic("process.close did not consume its child"); }
 }
