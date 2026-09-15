@@ -15,8 +15,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
 - `CStr` is a borrowed raw pointer and never frees it. `from_ptr` and `as_ptr`
   are unsafe because lifetime, validity, and termination remain foreign contracts.
 - `CString` owns an explicitly allocated NUL-terminated buffer. Construction is
-  explicit and fallible; its `free(self)` method participates in the compiler's
-  existing local scope cleanup through `std.core`.
+  explicit and fallible; consuming `free(self)` participates in the compiler's
+  existing local scope cleanup through `std.core`, while `clear(&CString!)`
+  releases storage and retains an empty reusable owner.
 - `CString.try_from(bytes)` rejects embedded NUL with its byte position and
   reports allocation failure. `unsafe CString.from_unchecked(str)` remains for
   legacy `str`, whose NUL-terminated representation cannot expose bytes after

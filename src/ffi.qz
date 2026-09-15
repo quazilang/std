@@ -149,22 +149,27 @@ impl CString {
         ret CStr { ptr: self.ptr };
     }
 
-    pub fn free(self: CString) void {
+    // Release the allocation while retaining an empty, reusable owner.
+    pub fn clear(self: &CString!) void {
         if (self.ptr != 0) {
             unsafe { core.free(self.ptr); }
             self.ptr = 0;
             self.len = 0;
         }
     }
+
+    pub fn free(self: CString) void {
+        self.clear();
+    }
 }
 
 @test
-fn cstring_free_invalidates_and_is_repeat_safe() void {
+fn cstring_clear_invalidates_and_is_repeat_safe() void {
     var value: CString = CString.try_from_str("owned C string").unwrap();
-    value.free();
+    value.clear();
     unsafe {
-        if (value.as_ptr() != 0) { panic("CString.free did not invalidate the pointer"); }
+        if (value.as_ptr() != 0) { panic("CString.clear did not invalidate the pointer"); }
     }
-    if (value.len() != 0) { panic("CString.free did not clear the byte length"); }
-    value.free();
+    if (value.len() != 0) { panic("CString.clear did not clear the byte length"); }
+    value.clear();
 }
