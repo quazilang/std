@@ -53,10 +53,7 @@ fn ascii_equal(left: str, right: str) bool {
 }
 
 fn owned_u32(value: u32) String {
-    const raw: str = (value as u64).to_string();
-    const length: usize = core.strlen(raw);
-    unsafe { ret String.from_raw(core.str_as_ptr(raw), length, 80); }
-    ret String.new();
+    ret (value as u64).to_string();
 }
 
 @cfg(target_os = "windows")

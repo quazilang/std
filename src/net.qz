@@ -278,13 +278,13 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     }
     var raw: u32 = 0;
     unsafe { raw = *((address + 4) as *u32); }
-    var ip: String = String.from((raw & 255).to_string());
+    var ip: String = String.from((raw & 255).to_str());
     ip = ip.push_str(".");
-    ip = ip.push_str(((raw >> 8) & 255).to_string());
+    ip = ip.push_str(((raw >> 8) & 255).to_str());
     ip = ip.push_str(".");
-    ip = ip.push_str(((raw >> 16) & 255).to_string());
+    ip = ip.push_str(((raw >> 16) & 255).to_str());
     ip = ip.push_str(".");
-    ip = ip.push_str(((raw >> 24) & 255).to_string());
+    ip = ip.push_str(((raw >> 24) & 255).to_str());
     @cfg(target_os = "windows") {
         unsafe { win32_core.free_address_info(info); win32_core.winsock_cleanup(); }
     }
@@ -674,10 +674,10 @@ impl UdpSocket {
         var raw_port: u16 = 0;
         unsafe { raw_ip = *((raw_address + 4) as *u32); raw_port = *((raw_address + 2) as *u16); }
         const port: i32 = (((raw_port << 8) | (raw_port >> 8)) as i32);
-        var host: String = String.from((raw_ip & 255).to_string());
-        host = host.push_str("."); host = host.push_str(((raw_ip >> 8) & 255).to_string());
-        host = host.push_str("."); host = host.push_str(((raw_ip >> 16) & 255).to_string());
-        host = host.push_str("."); host = host.push_str(((raw_ip >> 24) & 255).to_string());
+        var host: String = String.from((raw_ip & 255).to_str());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 8) & 255).to_str());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 16) & 255).to_str());
+        host = host.push_str("."); host = host.push_str(((raw_ip >> 24) & 255).to_str());
         var valid: bool = false;
         unsafe { valid = core.is_valid_utf8(data, count as usize); }
         if (!valid) {
@@ -963,7 +963,7 @@ impl HttpRequest {
         if (url.port() != 80 && url.scheme() == "http") {
             var authority: String = String.from(url.host());
             authority = authority.push_str(":");
-            authority = authority.push_str(url.port().to_string());
+            authority = authority.push_str(url.port().to_str());
             request.headers.append("Host", authority.as_str());
         }
         ret request;
@@ -981,7 +981,7 @@ impl HttpRequest {
     pub fn encode(self: HttpRequest) String {
         var headers: Headers = self.headers;
         if (!headers.contains("Host")) { headers.append("Host", self.host.as_str()); }
-        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_string()); }
+        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
         if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
         var output: String = String.from(self.method.as_str());
         output = output.push_str(" "); output = output.push_str(self.target.as_str());
@@ -1015,7 +1015,7 @@ impl HttpRequest {
             var authority: String = String.from(url.host());
             if (url.port() != 80) {
                 authority = authority.push_str(":");
-                authority = authority.push_str(url.port().to_string());
+                authority = authority.push_str(url.port().to_str());
             }
             self.headers.append("Host", authority.as_str());
         }
@@ -1087,10 +1087,10 @@ impl HttpResponse {
     pub fn body(self: HttpResponse) str { ret self.body.as_str(); }
     pub fn encode(self: HttpResponse) String {
         var headers: Headers = self.headers;
-        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_string()); }
+        if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
         if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
         var output: String = String.from("HTTP/1.1 ");
-        output = output.push_str(self.status.to_string()); output = output.push_str(" ");
+        output = output.push_str(self.status.to_str()); output = output.push_str(" ");
         output = output.push_str(self.reason.as_str()); output = output.push_str("\r\n");
         const encoded_headers: String = headers.encode();
         output = output.push_str(encoded_headers.as_str()); output = output.push_str("\r\n");
