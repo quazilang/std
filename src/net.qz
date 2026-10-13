@@ -560,7 +560,7 @@ impl TcpListener {
 pub struct UdpDatagram { data: String, address: SocketAddress, }
 
 impl UdpDatagram {
-    pub fn text(self: UdpDatagram) str { ret self.data.as_str(); }
+    pub fn text(self: &UdpDatagram) str { ret self.data.as_str(); }
     pub fn address(self: UdpDatagram) SocketAddress { ret self.address; }
 }
 
@@ -973,11 +973,11 @@ impl HttpRequest {
     }
     pub fn body(self: HttpRequest, body: str) HttpRequest { self.body = String.from(body); ret self; }
     pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest { self.response_limit = limit; ret self; }
-    pub fn method(self: HttpRequest) str { ret self.method.as_str(); }
-    pub fn target(self: HttpRequest) str { ret self.target.as_str(); }
-    pub fn host(self: HttpRequest) str { ret self.host.as_str(); }
+    pub fn method(self: &HttpRequest) str { ret self.method.as_str(); }
+    pub fn target(self: &HttpRequest) str { ret self.target.as_str(); }
+    pub fn host(self: &HttpRequest) str { ret self.host.as_str(); }
     pub fn headers(self: HttpRequest) Headers { ret self.headers; }
-    pub fn body_text(self: HttpRequest) str { ret self.body.as_str(); }
+    pub fn body_text(self: &HttpRequest) str { ret self.body.as_str(); }
     pub fn encode(self: HttpRequest) String {
         var headers: Headers = self.headers;
         if (!headers.contains("Host")) { headers.append("Host", self.host.as_str()); }
@@ -992,13 +992,14 @@ impl HttpRequest {
         ret output;
     }
     pub fn send(self: HttpRequest, port: i32) Result[HttpResponse, NetError] {
+        const response_limit: usize = self.response_limit;
         const connected: Result[TcpStream, NetError] = TcpStream.connect(self.host.as_str(), port);
         if (connected.is_err()) { ret Err(connected.unwrap_err()); }
         var stream: TcpStream = connected.unwrap();
         const encoded: String = self.encode();
         const sent: Result[usize, NetError] = stream.send(encoded.as_str());
         if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
-        const received: Result[String, NetError] = stream.receive_all(self.response_limit);
+        const received: Result[String, NetError] = stream.receive_all(response_limit);
         stream.close();
         if (received.is_err()) { ret Err(received.unwrap_err()); }
         ret HttpResponse.parse(received.unwrap());
@@ -1081,10 +1082,10 @@ impl HttpResponse {
         ret response;
     }
     pub fn header(self: HttpResponse, name: str, value: str) HttpResponse { self.headers.set(name, value); ret self; }
-    pub fn status(self: HttpResponse) i32 { ret self.status; }
-    pub fn reason(self: HttpResponse) str { ret self.reason.as_str(); }
+    pub fn status(self: &HttpResponse) i32 { ret self.status; }
+    pub fn reason(self: &HttpResponse) str { ret self.reason.as_str(); }
     pub fn headers(self: HttpResponse) Headers { ret self.headers; }
-    pub fn body(self: HttpResponse) str { ret self.body.as_str(); }
+    pub fn body(self: &HttpResponse) str { ret self.body.as_str(); }
     pub fn encode(self: HttpResponse) String {
         var headers: Headers = self.headers;
         if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
@@ -1148,18 +1149,18 @@ impl HttpResponse {
 pub struct HttpConnection { stream: TcpStream, }
 
 impl HttpConnection {
-    pub fn read(self: HttpConnection, limit: usize) Result[HttpRequest, NetError] {
+    pub fn read(self: &HttpConnection!, limit: usize) Result[HttpRequest, NetError] {
         const raw: Result[String, NetError] = self.stream.receive(limit);
         if (raw.is_err()) { ret Err(raw.unwrap_err()); }
         ret HttpRequest.parse(raw.unwrap());
     }
-    pub fn read_request(self: HttpConnection, limit: usize) Result[String, NetError] { ret self.stream.receive(limit); }
-    pub fn respond(self: HttpConnection, response: HttpResponse) Result[usize, NetError] {
+    pub fn read_request(self: &HttpConnection!, limit: usize) Result[String, NetError] { ret self.stream.receive(limit); }
+    pub fn respond(self: &HttpConnection!, response: HttpResponse) Result[usize, NetError] {
         const encoded: String = response.encode();
         const result: Result[usize, NetError] = self.stream.send(encoded.as_str());
         self.stream.close(); ret result;
     }
-    pub fn close(self: HttpConnection) void { self.stream.close(); }
+    pub fn close(self: &HttpConnection!) void { self.stream.close(); }
 }
 
 pub struct HttpServer { listener: TcpListener, }
@@ -1170,17 +1171,17 @@ impl HttpServer {
         if (listener.is_err()) { ret Err(listener.unwrap_err()); }
         ret Ok(HttpServer { listener: listener.unwrap() });
     }
-    pub fn accept(self: HttpServer) Result[HttpConnection, NetError] {
+    pub fn accept(self: &HttpServer!) Result[HttpConnection, NetError] {
         const stream: Result[TcpStream, NetError] = self.listener.accept();
         if (stream.is_err()) { ret Err(stream.unwrap_err()); }
         ret Ok(HttpConnection { stream: stream.unwrap() });
     }
-    pub fn close(self: HttpServer) void { self.listener.close(); }
+    pub fn close(self: &HttpServer!) void { self.listener.close(); }
     pub fn free(self: HttpServer) void { self.close(); }
     pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, NetError] {
         const connection: Result[HttpConnection, NetError] = self.accept();
         if (connection.is_err()) { self.close(); ret Err(connection.unwrap_err()); }
-        const client: HttpConnection = connection.unwrap();
+        var client: HttpConnection = connection.unwrap();
         const request: Result[String, NetError] = client.read_request(limit);
         if (request.is_err()) { client.close(); self.close(); ret Err(request.unwrap_err()); }
         const sent: Result[usize, NetError] = client.respond(response);

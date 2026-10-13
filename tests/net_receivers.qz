@@ -1,0 +1,110 @@
+// Shared observation and reusable HTTP socket capabilities.
+import std.core;
+import std.net.{UdpDatagram, SocketAddress, HttpRequest, HttpResponse, HttpConnection, HttpServer, TcpStream, TcpListener};
+
+@test
+fn datagram_text_preserves_its_owner() void {
+    const datagram = UdpDatagram {
+        data: String.from("payload"),
+        address: SocketAddress { host: String.from("127.0.0.1"), port: 8123 },
+    };
+    if (datagram.text() != "payload" || datagram.text() != "payload") {
+        panic("datagram observation consumed or changed the payload");
+    }
+    const address = datagram.address();
+    if (address.port() != 8123) { panic("datagram observation consumed the address"); }
+}
+
+@test
+fn request_observation_preserves_its_owner() void {
+    const request = HttpRequest.new("POST", "/path", "example.test");
+    if (request.method() != "POST" || request.target() != "/path"
+        || request.host() != "example.test" || request.body_text() != "") {
+        panic("request observation lost a component");
+    }
+    if (request.method() != "POST" || request.host() != "example.test") {
+        panic("request observation consumed the owner");
+    }
+}
+
+@test
+fn response_observation_preserves_its_owner() void {
+    const response = HttpResponse.new(201, "Created", "body");
+    if (response.status() != 201 || response.reason() != "Created" || response.body() != "body") {
+        panic("response observation lost a component");
+    }
+    if (response.status() != 201 || response.body() != "body") {
+        panic("response observation consumed the owner");
+    }
+}
+
+@test
+fn connection_errors_and_repeated_close_preserve_the_owner() void {
+    var connection = HttpConnection { stream: TcpStream { socket: -1 } };
+    if (!connection.read_request(32).is_err()) { panic("invalid connection read succeeded"); }
+    if (!connection.read_request(32).is_err()) { panic("second invalid connection read succeeded"); }
+    connection.close();
+    connection.close();
+    if (connection.stream.handle() != -1) { panic("close did not retain the invalid handle"); }
+}
+
+@test
+fn server_errors_and_repeated_close_preserve_the_owner() void {
+    var server = HttpServer { listener: TcpListener { socket: -1 } };
+    if (!server.accept().is_err()) { panic("invalid server accept succeeded"); }
+    if (!server.accept().is_err()) { panic("second invalid server accept succeeded"); }
+    server.close();
+    server.close();
+    if (server.listener.handle() != -1) { panic("close did not retain the invalid handle"); }
+    server.free();
+}
+
+@test
+fn bound_server_close_is_repeat_safe() void {
+    var server = HttpServer.bind(0).unwrap();
+    if (server.listener.handle() == -1) { panic("bound server has an invalid handle"); }
+    server.close();
+    server.close();
+    if (server.listener.handle() != -1) { panic("server close did not invalidate its listener"); }
+    server.free();
+}
+
+@cfg(target_os = "linux")
+@syscall(53)
+unsafe fn __receiver_socketpair(domain: i32, kind: i32, protocol: i32, descriptors: *i32) i32;
+
+@cfg(target_os = "linux")
+@syscall(72)
+unsafe fn __receiver_fcntl(descriptor: isize, command: i32, flags: i32) i32;
+
+@cfg(target_os = "linux")
+@test
+fn linux_connection_reads_then_closes_at_scope_exit() void {
+    var first: i32 = -1;
+    var second: i32 = -1;
+    unsafe {
+        const storage: *u8 = core.malloc(8);
+        if (storage == 0) { panic("socketpair fixture allocation failed"); }
+        const result = __receiver_socketpair(1, 1, 0, storage as *i32);
+        if (result != 0) { core.free(storage); panic("socketpair failed"); }
+        first = *(storage as *i32);
+        second = *((storage + 4) as *i32);
+        core.free(storage);
+    }
+    var peer = TcpStream { socket: first as isize };
+    if (true) {
+        var connection = HttpConnection { stream: TcpStream { socket: second as isize } };
+        peer.send("first").unwrap();
+        const first_text = connection.read_request(32).unwrap();
+        if (first_text.as_str() != "first") { panic("first connection read lost data"); }
+        peer.send("second").unwrap();
+        const second_text = connection.read_request(32).unwrap();
+        if (second_text.as_str() != "second") { panic("second connection read lost data"); }
+    }
+    // Nonblocking prevents a missing destructor from hanging this regression.
+    unsafe {
+        if (__receiver_fcntl(peer.handle(), 4, 2048) < 0) { panic("nonblocking fixture setup failed"); }
+    }
+    const eof = peer.receive(32).unwrap();
+    if (!eof.is_empty()) { panic("connection destruction did not produce EOF"); }
+}

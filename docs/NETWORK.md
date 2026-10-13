@@ -30,3 +30,23 @@ HTTPS returns `TlsUnavailable`; HTTP over TLS needs a dedicated TLS transport.
 Redirects, cookies, proxies, compression, and HTTP/2 are separate policy or
 protocol layers. Handles close at scope exit and may be closed early. The
 walkthrough is `examples/26-http-client-server` in the compiler repository.
+
+## Receiver migration checkpoint
+
+Datagram text and HTTP value accessors borrow their owners. HTTP connection
+read/respond/close and server accept/close operations require mutable locals
+and exclusive access; `serve_once` and server `free` remain consuming.
+
+Full HTTP header/codec ownership migration remains incomplete. Run the bounded
+transport/receiver check from the workspace root with the matching compiler:
+
+```sh
+python3 std/scripts/check_net_receivers.py quazistrap/target/debug/qz
+```
+
+The check isolates exact production declarations from unfinished headers and
+CLI sources; it is not a full-module build. Canonical contracts and limitations
+are recorded in the companion compiler's `docs/api/net.md` and
+`docs/migrations/http-receivers.md`. The canonical repository is
+[quazilang/quazistrap](https://github.com/quazilang/quazistrap); the migration
+checkpoint remains local until publication is separately authorized.
