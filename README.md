@@ -4,34 +4,31 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: ~50%.**
+**Plan completion: 47.7%.**
 
-**Remaining work: ~50%.**
+**Remaining work: 52.3%.**
 
-Unfinished plan areas (percentages show completion of each area):
+Completion of unfinished plan items:
 
-| Plan area | Complete | Remaining work |
-| --- | --- | --- |
-| Filesystem / I/O | ~50% | Buffered readers/writers, streaming contracts, large-file and partial-I/O validation |
-| Time | ~50% | Civil dates/times, UTC/time zones, parsing, formatting, timers, and deadlines |
-| Processes | ~50% | Windows runtime, environment/cwd controls, pipes, output capture, and timeouts |
-| Networking / TLS | ~50% | Ownership-safe HTTP headers, TLS backend, certificate verification, and deadlines |
-| Mathematics | ~50% | Numeric-domain, overflow, NaN/infinity, and accuracy validation |
-| Panic handling | ~50% | Final cleanup, concurrency, recursion, and portable handler policy |
-| Concurrency | ~50% | Structured cleanup, typed errors/results, panic propagation, synchronization, and cancellation |
-| Serialization | ~50% | Derived `Deserialize`, options, collections, and nested structs |
+| Plan item | Implemented requirements | Complete | Remaining |
+| --- | --- | --- | --- |
+| Filesystem / I/O | 9/16 | 56.2% | 43.8% |
+| Operating-system APIs | 5/10 | 50.0% | 50.0% |
+| Processes | 7/16 | 43.8% | 56.2% |
+| Networking / TLS | 8/17 | 47.1% | 52.9% |
+| Mathematics | 7/11 | 63.6% | 36.4% |
+| Panic handling | 5/10 | 50.0% | 50.0% |
+| Concurrency | 4/12 | 33.3% | 66.7% |
+| Time | 5/19 | 26.3% | 73.7% |
+| Serialization | 6/15 | 40.0% | 60.0% |
+| Library-wide safety / other modules | 6/9 | 66.7% | 33.3% |
 
-Estimate as of 2026-10-13 for eight standard-library plan areas: filesystem/I/O,
-time, processes, networking/TLS, mathematics, panic handling, concurrency, and
-serialization. Each area has equal weight and is partially implemented, counted
-as half complete; this is a coarse scope estimate, not an effort estimate.
-The [canonical readiness audit](https://github.com/quazilang/quazistrap/blob/dev/docs/audits/2026-09-08-readiness-status.md)
-and [compiler checkpoint](https://github.com/quazilang/quazistrap/blob/dev/RESUME.md)
-record the implemented foundations and gaps. Remaining work includes buffered
-I/O, civil time/time zones, Windows processes and piping, TLS, numeric edge-case
-validation, panic policy, structured concurrency, derived deserialization, and
-ownership-safe collections/HTTP/JSON. Full standard-library tests still fail;
-this percentage does not claim production readiness.
+Counted on 2026-10-13 from the [requirement checklist](docs/PLAN_PROGRESS.md).
+Each item has equal weight; its percentage is implemented requirements
+divided by listed requirements. The overall percentage averages those
+fractions before rounding. Pending or failing requirements receive no
+credit. These figures measure checklist coverage, not remaining effort
+or production readiness.
 
 ## Modules Overview
 
