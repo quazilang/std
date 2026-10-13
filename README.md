@@ -4,6 +4,35 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
+**Plan completion: ~50%.**
+
+**Remaining work: ~50%.**
+
+Unfinished plan areas (percentages show completion of each area):
+
+| Plan area | Complete | Remaining work |
+| --- | --- | --- |
+| Filesystem / I/O | ~50% | Buffered readers/writers, streaming contracts, large-file and partial-I/O validation |
+| Time | ~50% | Civil dates/times, UTC/time zones, parsing, formatting, timers, and deadlines |
+| Processes | ~50% | Windows runtime, environment/cwd controls, pipes, output capture, and timeouts |
+| Networking / TLS | ~50% | Ownership-safe HTTP headers, TLS backend, certificate verification, and deadlines |
+| Mathematics | ~50% | Numeric-domain, overflow, NaN/infinity, and accuracy validation |
+| Panic handling | ~50% | Final cleanup, concurrency, recursion, and portable handler policy |
+| Concurrency | ~50% | Structured cleanup, typed errors/results, panic propagation, synchronization, and cancellation |
+| Serialization | ~50% | Derived `Deserialize`, options, collections, and nested structs |
+
+Estimate as of 2026-10-13 for eight standard-library plan areas: filesystem/I/O,
+time, processes, networking/TLS, mathematics, panic handling, concurrency, and
+serialization. Each area has equal weight and is partially implemented, counted
+as half complete; this is a coarse scope estimate, not an effort estimate.
+The [canonical readiness audit](https://github.com/quazilang/quazistrap/blob/dev/docs/audits/2026-09-08-readiness-status.md)
+and [compiler checkpoint](https://github.com/quazilang/quazistrap/blob/dev/RESUME.md)
+record the implemented foundations and gaps. Remaining work includes buffered
+I/O, civil time/time zones, Windows processes and piping, TLS, numeric edge-case
+validation, panic policy, structured concurrency, derived deserialization, and
+ownership-safe collections/HTTP/JSON. Full standard-library tests still fail;
+this percentage does not claim production readiness.
+
 ## Modules Overview
 
 - `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
