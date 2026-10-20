@@ -1,0 +1,50 @@
+// Run with scripts/check_os_memory.py, beside the private production module.
+// Deterministic procfs fixtures; no dependency on the host's memory pressure.
+import ./os_memory;
+
+@test
+fn memory_available_includes_reclaimable_cache() void {
+    const value = os_memory.available_bytes("MemTotal: 1000 kB\nMemFree: 100 kB\nMemAvailable: 700 kB\nCached: 600 kB\n");
+    if (value.is_none() || value.unwrap() != 716800) { panic("MemAvailable was not preferred over MemFree"); }
+}
+
+@test
+fn memory_available_accepts_zero_and_total() void {
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 0 kB").unwrap() != 0) { panic("zero availability is valid"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 10 kB").unwrap() != 10240) { panic("all memory can be available"); }
+}
+
+@test
+fn memory_available_accepts_procfs_whitespace_and_field_order() void {
+    const value = os_memory.available_bytes("HugePages_Total: 0\r\nMemAvailable:\t7\tkB \r\nMemAvailableOther: 99 kB\nMemTotal: 10 kB");
+    if (value.is_none() || value.unwrap() != 7168) { panic("valid procfs formatting was rejected"); }
+}
+
+@test
+fn memory_available_rejects_missing_or_inconsistent_fields() void {
+    if (os_memory.available_bytes("").is_some()) { panic("empty procfs accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemFree: 7 kB").is_some()) { panic("MemFree is not MemAvailable"); }
+    if (os_memory.available_bytes("MemAvailable: 7 kB").is_some()) { panic("missing total accepted"); }
+    if (os_memory.available_bytes("MemTotal: 0 kB\nMemAvailable: 0 kB").is_some()) { panic("zero total accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 11 kB").is_some()) { panic("availability exceeded total"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 1 kB\nMemAvailable: 2 kB").is_some()) { panic("duplicate availability accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemTotal: 20 kB\nMemAvailable: 1 kB").is_some()) { panic("duplicate total accepted"); }
+}
+
+@test
+fn memory_available_rejects_malformed_values_and_units() void {
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: -1 kB").is_some()) { panic("negative counter accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: kB").is_some()) { panic("missing counter accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 1 MB").is_some()) { panic("wrong units accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 1kB").is_some()) { panic("missing separator accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 1 kB junk").is_some()) { panic("trailing garbage accepted"); }
+    if (os_memory.available_bytes("MemTotal: 10 kB\nMemAvailable: 1").is_some()) { panic("missing unit accepted"); }
+}
+
+@test
+fn memory_available_checks_decimal_and_byte_overflow() void {
+    if (os_memory.available_bytes("MemTotal: 18446744073709551616 kB\nMemAvailable: 1 kB").is_some()) { panic("decimal overflow accepted"); }
+    if (os_memory.available_bytes("MemTotal: 18014398509481984 kB\nMemAvailable: 1 kB").is_some()) { panic("byte conversion overflow accepted"); }
+    const limit = os_memory.available_bytes("MemTotal: 18014398509481983 kB\nMemAvailable: 18014398509481983 kB");
+    if (limit.is_none() || limit.unwrap() != 18446744073709550592) { panic("largest representable KiB counter was rejected"); }
+}

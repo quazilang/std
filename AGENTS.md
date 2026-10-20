@@ -69,6 +69,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   provide owned or value-based cross-platform system information. Their Linux
   implementations use kernel state/syscalls; their Windows implementations use
   Win32 APIs. Neither contract requires libc or a shell.
+  Linux `memory_available` parses `MemAvailable` from `/proc/meminfo`, including
+  reclaimable memory; unreadable or invalid snapshots fall back to the core
+  free-RAM counter. The private `os_memory.qz` helper returns only scalar bytes.
 - `std.fs.count_entries` owns and automatically destroys its scan buffer and
   enumeration handle. It excludes `.` and `..`, uses `getdents64` on Linux and
   `FindFirstFileA`/`FindNextFile` on Windows, and returns errors instead of

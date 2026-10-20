@@ -1,0 +1,68 @@
+// Internal Linux /proc/meminfo parsing. Return scalar bytes, never text views.
+import std.core;
+
+fn whitespace(value: u8) bool {
+    ret value == 32 || value == 9 || value == 13;
+}
+
+fn field_bytes(text: str, key: str) Option[u64] {
+    const length: usize = core.strlen(text);
+    const key_length: usize = core.strlen(key);
+    var offset: usize = 0;
+    var found: bool = false;
+    var result: u64 = 0;
+    for (offset < length) {
+        const start: usize = offset;
+        for (offset < length && core.str_byte_at(text, offset) != 10) { offset++; }
+        const end: usize = offset;
+        if (offset < length) { offset++; }
+        if (end - start <= key_length) { continue; }
+        var index: usize = 0;
+        for (index < key_length && core.str_byte_at(text, start + index) == core.str_byte_at(key, index)) {
+            index++;
+        }
+        if (index != key_length || core.str_byte_at(text, start + index) != 58) { continue; }
+        if (found) { ret Option.None; }
+        found = true;
+        index = start + key_length + 1;
+        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        const digits: usize = index;
+        var kib: u64 = 0;
+        for (index < end) {
+            const byte: u8 = core.str_byte_at(text, index);
+            if (byte < 48 || byte > 57) { break; }
+            const digit: u64 = (byte - 48) as u64;
+            if (kib > 1844674407370955161 || (kib == 1844674407370955161 && digit > 5)) {
+                ret Option.None;
+            }
+            kib = kib * 10 + digit;
+            index++;
+        }
+        if (index == digits || index == end || !whitespace(core.str_byte_at(text, index))) {
+            ret Option.None;
+        }
+        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        if (end - index < 2) { ret Option.None; }
+        if (core.str_byte_at(text, index) != 107 || core.str_byte_at(text, index + 1) != 66) {
+            ret Option.None;
+        }
+        index = index + 2;
+        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        if (index != end || kib > 18014398509481983) { ret Option.None; }
+        result = kib * 1024;
+    }
+    if (!found) { ret Option.None; }
+    ret Option.Some(result);
+}
+
+// MemAvailable includes memory reclaimable without swapping. Zero is valid.
+// Missing, malformed or inconsistent snapshots use the caller's native fallback.
+pub fn available_bytes(text: str) Option[u64] {
+    const total: Option[u64] = field_bytes(text, "MemTotal");
+    const available: Option[u64] = field_bytes(text, "MemAvailable");
+    if (total.is_none() || available.is_none()) { ret Option.None; }
+    const total_bytes: u64 = total.unwrap();
+    const available_bytes: u64 = available.unwrap();
+    if (total_bytes == 0 || available_bytes > total_bytes) { ret Option.None; }
+    ret Option.Some(available_bytes);
+}

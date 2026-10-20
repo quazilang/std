@@ -4,6 +4,8 @@
 import std.core;
 import std.unix;
 import std.win32_core;
+import std.fs;
+import ./os_memory;
 
 struct OsRawBuffer {
     data: *u8,
@@ -324,10 +326,21 @@ pub fn hostname() String {
     ret String.from("unknown");
 }
 
-// Physical-memory counters in bytes. Linux reports sysinfo.free_ram for the
-// available value; Windows reports MEMORYSTATUSEX.available_physical.
+// Physical-memory counters in bytes. Linux availability includes reclaimable
+// memory through MemAvailable, falling back to sysinfo.free_ram without procfs.
+// Windows reports MEMORYSTATUSEX.available_physical.
 pub fn memory_total() u64 { ret core.memory_total(); }
-pub fn memory_available() u64 { ret core.memory_available(); }
+pub fn memory_available() u64 {
+    @cfg(target_os = "linux") {
+        const read: Result[String, fs.FsError] = fs.read_to_string("/proc/meminfo");
+        if (read.is_ok()) {
+            const text: String = read.unwrap();
+            const available: Option[u64] = os_memory.available_bytes(text.as_str());
+            if (available.is_some()) { ret available.unwrap(); }
+        }
+    }
+    ret core.memory_available();
+}
 
 // ── Current directory ─────────────────────────────────────────────────────────
 
