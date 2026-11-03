@@ -7,14 +7,23 @@ import std.win32_core;
 @cfg(target_os = "linux")
 @api("dlopen")
 unsafe fn __linux_open(path: *c_char, flags: i32) usize;
+@cfg(target_os = "netbsd")
+@api("dlopen")
+unsafe fn __netbsd_open(path: *c_char, flags: i32) usize;
 
 @cfg(target_os = "linux")
 @api("dlsym")
 unsafe fn __linux_symbol(library: usize, name: *c_char) usize;
+@cfg(target_os = "netbsd")
+@api("dlsym")
+unsafe fn __netbsd_symbol(library: usize, name: *c_char) usize;
 
 @cfg(target_os = "linux")
 @api("dlclose")
 unsafe fn __linux_close(library: usize) i32;
+@cfg(target_os = "netbsd")
+@api("dlclose")
+unsafe fn __netbsd_close(library: usize) i32;
 
 pub enum DynamicLibraryError {
     InvalidName(usize),
@@ -56,6 +65,7 @@ impl DynamicLibrary {
         unsafe {
             @cfg(target_os = "windows") { handle = win32_core.load_library(name.as_ptr()); }
             @cfg(target_os = "linux") { handle = __linux_open(name.as_ptr(), 2); }
+            @cfg(target_os = "netbsd") { handle = __netbsd_open(name.as_ptr(), 2); }
         }
         name.free();
         if (handle == 0) {
@@ -82,6 +92,9 @@ impl DynamicLibrary {
         @cfg(target_os = "linux") {
             address = __linux_symbol(self.handle, symbol_name.as_ptr());
         }
+        @cfg(target_os = "netbsd") {
+            address = __netbsd_symbol(self.handle, symbol_name.as_ptr());
+        }
         symbol_name.free();
         if (address == 0) { ret Err(DynamicLibraryError.SymbolNotFound); }
         ret Ok(address);
@@ -93,6 +106,7 @@ impl DynamicLibrary {
         unsafe {
             @cfg(target_os = "windows") { result = win32_core.free_library(self.handle); }
             @cfg(target_os = "linux") { result = __linux_close(self.handle); }
+            @cfg(target_os = "netbsd") { result = __netbsd_close(self.handle); }
         }
         @cfg(target_os = "windows") {
             if (result == 0) {
@@ -102,6 +116,9 @@ impl DynamicLibrary {
             }
         }
         @cfg(target_os = "linux") {
+            if (result != 0) { ret Err(DynamicLibraryError.Native(result)); }
+        }
+        @cfg(target_os = "netbsd") {
             if (result != 0) { ret Err(DynamicLibraryError.Native(result)); }
         }
         self.handle = 0;

@@ -5,6 +5,8 @@
 // Application code normally never calls close/free explicitly.
 import std.core;
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 import std.win32_core;
 
 pub enum FsError {
@@ -95,6 +97,9 @@ impl DirectoryScan {
         @cfg(target_os = "linux") {
             if (self.handle >= 0) { unsafe { unix.close(self.handle as i32); } }
         }
+        @cfg(target_os = "netbsd") {
+            if (self.handle >= 0) { unsafe { netbsd.close(self.handle as i32); } }
+        }
         @cfg(target_os = "windows") {
             if (self.handle != -1) {
                 unsafe { win32_core.find_close(self.handle as usize); }
@@ -126,6 +131,13 @@ impl File {
                 ret Ok(File { handle: fd as isize });
             }
         }
+        @cfg(target_os = "netbsd") {
+            unsafe {
+                const fd: i32 = netbsd.open(path, 0, 0);
+                if (fd < 0) { ret Err(fs_error(fd)); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
         @cfg(target_os = "windows") {
             unsafe {
                 const raw: usize = win32_core.create_file(
@@ -144,6 +156,13 @@ impl File {
         @cfg(target_os = "linux") {
             unsafe {
                 const fd: i32 = unix.open(path, 577, 420);
+                if (fd < 0) { ret Err(fs_error(fd)); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
+        @cfg(target_os = "netbsd") {
+            unsafe {
+                const fd: i32 = netbsd.open(path, 577, 420);
                 if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
@@ -170,6 +189,13 @@ impl File {
                 ret Ok(File { handle: fd as isize });
             }
         }
+        @cfg(target_os = "netbsd") {
+            unsafe {
+                const fd: i32 = netbsd.open(path, 66, 420);
+                if (fd < 0) { ret Err(fs_error(fd)); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
         @cfg(target_os = "windows") {
             unsafe {
                 const raw: usize = win32_core.create_file(
@@ -192,6 +218,13 @@ impl File {
                 ret Ok(File { handle: fd as isize });
             }
         }
+        @cfg(target_os = "netbsd") {
+            unsafe {
+                const fd: i32 = netbsd.open(path, 1089, 420);
+                if (fd < 0) { ret Err(fs_error(fd)); }
+                ret Ok(File { handle: fd as isize });
+            }
+        }
         @cfg(target_os = "windows") {
             const opened: Result[File, FsError] = File.open_rw(path);
             if (opened.is_err()) { ret Err(opened.unwrap_err()); }
@@ -207,6 +240,9 @@ impl File {
     pub unsafe fn read(self: &File!, buf: *u8, n: usize) isize {
         @cfg(target_os = "linux") {
             ret core.read(self.handle as i32, buf, n);
+        }
+        @cfg(target_os = "netbsd") {
+            ret netbsd.read(self.handle as i32, buf, n);
         }
         @cfg(target_os = "windows") {
             var count: u32 = 0;
@@ -233,6 +269,9 @@ impl File {
     pub unsafe fn write_raw(self: &File!, buf: *u8, n: usize) isize {
         @cfg(target_os = "linux") {
             ret core.write_bytes(self.handle as i32, buf, n);
+        }
+        @cfg(target_os = "netbsd") {
+            ret netbsd.write(self.handle as i32, buf, n);
         }
         @cfg(target_os = "windows") {
             var count: u32 = 0;
@@ -263,6 +302,9 @@ impl File {
         @cfg(target_os = "linux") {
             unsafe { result = unix.close(self.handle as i32); }
         }
+        @cfg(target_os = "netbsd") {
+            unsafe { result = netbsd.close(self.handle as i32); }
+        }
         @cfg(target_os = "windows") {
             unsafe {
                 if (win32_core.close_handle(self.handle as usize) == 0) {
@@ -286,6 +328,12 @@ impl File {
         @cfg(target_os = "linux") {
             var position: i64 = -1;
             unsafe { position = unix.lseek(self.handle as i32, offset, whence); }
+            if (position < 0) { ret Err(fs_error(position as i32)); }
+            ret Ok(position);
+        }
+        @cfg(target_os = "netbsd") {
+            var position: i64 = -1;
+            unsafe { position = netbsd.lseek(self.handle as i32, offset, whence); }
             if (position < 0) { ret Err(fs_error(position as i32)); }
             ret Ok(position);
         }
@@ -313,6 +361,12 @@ impl File {
             if (result < 0) { ret Err(fs_error(result)); }
             ret Ok(true);
         }
+        @cfg(target_os = "netbsd") {
+            var result: i32 = -1;
+            unsafe { result = netbsd.fsync(self.handle as i32); }
+            if (result < 0) { ret Err(fs_error(result)); }
+            ret Ok(true);
+        }
         @cfg(target_os = "windows") {
             unsafe {
                 if (win32_core.sync(self.handle as usize) == 0) { ret Err(last_fs_error()); }
@@ -327,6 +381,12 @@ impl File {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
             unsafe { result = unix.ftruncate(self.handle as i32, len); }
+            if (result < 0) { ret Err(fs_error(result)); }
+            ret Ok(true);
+        }
+        @cfg(target_os = "netbsd") {
+            var result: i32 = -1;
+            unsafe { result = netbsd.ftruncate(self.handle as i32, len); }
             if (result < 0) { ret Err(fs_error(result)); }
             ret Ok(true);
         }
@@ -380,6 +440,9 @@ pub fn read_to_string(path: str) Result[String, FsError] {
 pub fn exists(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 0) == 0; }
+    }
+        @cfg(target_os = "netbsd") {
+        unsafe { ret netbsd.access(path, 0) == 0; }
     }
     @cfg(target_os = "windows") {
         unsafe {
@@ -440,6 +503,29 @@ pub fn count_entries(path: str) Result[usize, FsError] {
         ret Ok(count);
     }
 
+    @cfg(target_os = "netbsd") {
+        var raw_dir: *u8 = 0;
+        unsafe { raw_dir = netbsd.opendir(path); }
+        if (raw_dir == 0) {
+            var error: i32 = 0;
+            unsafe { error = netbsd.errno_value(); }
+            ret Err(fs_error(-error));
+        }
+        const scan: NetBsdDirectory = NetBsdDirectory { handle: raw_dir };
+        var count: usize = 0;
+        for (true) {
+            var entry: *u8 = 0;
+            unsafe { entry = netbsd.readdir(raw_dir); }
+            if (entry == 0) { break; }
+            // NetBSD 11 sys/dirent.h: ino_t(8), reclen(2), namlen(2),
+            // d_type(1), then d_name at byte offset 13.
+            var name: *u8 = entry + 13;
+            unsafe { if (!is_dot_entry(name)) { count++; } }
+        }
+        unsafe { netbsd.closedir(raw_dir); }
+        ret Ok(count);
+    }
+
     @cfg(target_os = "windows") {
         var pattern: String = String.from(path);
         pattern = pattern.push_str("\\*");
@@ -479,6 +565,9 @@ pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
     }
+        @cfg(target_os = "netbsd") {
+        unsafe { ret netbsd.access(path, 2) == 0; }
+    }
     @cfg(target_os = "windows") { ret exists(path); }
     ret false;
 }
@@ -487,6 +576,12 @@ pub fn remove(path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
         unsafe { result = unix.unlink(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.unlink(path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -510,6 +605,12 @@ pub fn mkdir_mode(path: str, mode: u32) Result[bool, FsError] {
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.mkdir(path, mode); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
     @cfg(target_os = "windows") {
         unsafe {
             if (win32_core.create_directory(core.str_as_ptr(path), 0) == 0) { ret Err(last_fs_error()); }
@@ -523,6 +624,12 @@ pub fn rmdir(path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
         unsafe { result = unix.rmdir(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.rmdir(path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -542,6 +649,12 @@ pub fn rename(from: str, to: str) Result[bool, FsError] {
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.rename(from, to); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
     @cfg(target_os = "windows") {
         unsafe {
             if (win32_core.move_file(core.str_as_ptr(from), core.str_as_ptr(to)) == 0) { ret Err(last_fs_error()); }
@@ -558,6 +671,12 @@ pub fn link(existing: str, new_path: str) Result[bool, FsError] {
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.link(existing, new_path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
     ret Err(FsError.Unsupported);
 }
 
@@ -568,6 +687,12 @@ pub fn symlink(target: str, link_path: str) Result[bool, FsError] {
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.symlink(target, link_path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
     ret Err(FsError.Unsupported);
 }
 
@@ -575,6 +700,12 @@ pub fn chmod(path: str, mode: u32) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
         unsafe { result = unix.chmod(path, mode); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+        @cfg(target_os = "netbsd") {
+        var result: i32 = -1;
+        unsafe { result = netbsd.chmod(path, mode); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }

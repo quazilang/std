@@ -3,6 +3,8 @@
 import std.core;
 import std.ffi.{c_char, CString, CStringError};
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 import std.win32_core;
 
 @cfg(target_os = "linux")
@@ -12,6 +14,15 @@ unsafe fn __linux_getaddrinfo(node: *c_char, service: *c_char, hints: *u8, resul
 @cfg(target_os = "linux")
 @api("freeaddrinfo")
 unsafe fn __linux_freeaddrinfo(result: *u8) void;
+
+@cfg(target_os = "netbsd")
+@api("getaddrinfo")
+unsafe fn __netbsd_getaddrinfo(node: *c_char, service: *c_char, hints: *u8, result: **u8) i32;
+
+@cfg(target_os = "netbsd")
+@api("freeaddrinfo")
+unsafe fn __netbsd_freeaddrinfo(result: *u8) void;
+
 
 pub enum NetError {
     InvalidAddress,
@@ -70,6 +81,22 @@ impl NetError {
 }
 
 fn __net_error(code: i32) NetError {
+    @cfg(target_os = "netbsd") {
+        if (code == -61) { ret NetError.ConnectionRefused; }
+        if (code == -48) { ret NetError.AddressInUse; }
+        if (code == -49) { ret NetError.AddressNotAvailable; }
+        if (code == -60) { ret NetError.TimedOut; }
+        if (code == -54) { ret NetError.ConnectionReset; }
+        if (code == -57) { ret NetError.NotConnected; }
+        if (code == -35) { ret NetError.WouldBlock; }
+        if (code == -51) { ret NetError.NetworkUnreachable; }
+        if (code == -65) { ret NetError.HostUnreachable; }
+        if (code == -13) { ret NetError.PermissionDenied; }
+        if (code == -32) { ret NetError.BrokenPipe; }
+        if (code == -40) { ret NetError.MessageTooLarge; }
+        if (code == -22) { ret NetError.InvalidAddress; }
+        ret NetError.Native(code);
+    }
     if (code == -111 || code == -10061) { ret NetError.ConnectionRefused; }
     if (code == -98 || code == -10048) { ret NetError.AddressInUse; }
     if (code == -99 || code == -10049) { ret NetError.AddressNotAvailable; }
@@ -121,6 +148,12 @@ fn __socket(kind: i32, protocol: i32) Result[isize, NetError] {
         if (socket < 0) { ret Err(__net_error(socket)); }
         ret Ok(socket as isize);
     }
+@cfg(target_os = "netbsd") {
+        var socket: i32 = 0;
+        unsafe { socket = netbsd.socket(2, kind, protocol); }
+        if (socket < 0) { ret Err(__net_error(socket)); }
+        ret Ok(socket as isize);
+    }
     @cfg(target_os = "windows") {
         const started: i32 = __winsock_start();
         if (started < 0) { ret Err(__net_error(started)); }
@@ -142,6 +175,7 @@ fn __socket(kind: i32, protocol: i32) Result[isize, NetError] {
 fn __close(socket: isize) void {
     if (socket == -1) { ret; }
     @cfg(target_os = "linux") { unsafe { unix.close(socket as i32); } }
+@cfg(target_os = "netbsd") { unsafe { netbsd.close(socket as i32); } }
     @cfg(target_os = "windows") {
         unsafe {
             win32_core.close_socket(socket as usize);
@@ -156,6 +190,11 @@ fn __listen(socket: isize, backlog: i32) i32 {
         unsafe { result = unix.listen(socket as i32, backlog); }
         ret result;
     }
+@cfg(target_os = "netbsd") {
+        var result: i32 = 0;
+        unsafe { result = netbsd.listen(socket as i32, backlog); }
+        ret result;
+    }
     @cfg(target_os = "windows") {
         var result: i32 = 0;
         unsafe { result = win32_core.listen_socket(socket as usize, backlog); }
@@ -168,6 +207,12 @@ fn __accept(socket: isize) Result[isize, NetError] {
     @cfg(target_os = "linux") {
         var accepted: i32 = 0;
         unsafe { accepted = unix.accept(socket as i32, 0, 0); }
+        if (accepted < 0) { ret Err(__net_error(accepted)); }
+        ret Ok(accepted as isize);
+    }
+@cfg(target_os = "netbsd") {
+        var accepted: i32 = 0;
+        unsafe { accepted = netbsd.accept(socket as i32, 0, 0); }
         if (accepted < 0) { ret Err(__net_error(accepted)); }
         ret Ok(accepted as isize);
     }
@@ -196,6 +241,9 @@ unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
     @cfg(target_os = "linux") {
         ret unix.sendto(socket as i32, data, length, 16384, 0, 0);
     }
+@cfg(target_os = "netbsd") {
+        ret netbsd.sendto(socket as i32, data, length, 16384, 0, 0);
+    }
     @cfg(target_os = "windows") {
         ret win32_core.send_socket(socket as usize, data, length as i32, 0) as isize;
     }
@@ -204,6 +252,7 @@ unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
 
 unsafe fn __recv(socket: isize, data: *u8, length: usize) isize {
     @cfg(target_os = "linux") { ret unix.read(socket as i32, data, length); }
+@cfg(target_os = "netbsd") { ret netbsd.read(socket as i32, data, length); }
     @cfg(target_os = "windows") {
         ret win32_core.receive_socket(socket as usize, data, length as i32, 0) as isize;
     }
@@ -212,6 +261,7 @@ unsafe fn __recv(socket: isize, data: *u8, length: usize) isize {
 
 fn __error(result: i32) i32 {
     @cfg(target_os = "linux") { ret result; }
+@cfg(target_os = "netbsd") { ret result; }
     @cfg(target_os = "windows") {
         var code: i32 = 0;
         unsafe { code = win32_core.winsock_last_error(); }
@@ -257,6 +307,9 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     @cfg(target_os = "linux") {
         unsafe { code = __linux_getaddrinfo(name.as_ptr(), 0, hints, result_slot as **u8); }
     }
+@cfg(target_os = "netbsd") {
+        unsafe { code = __netbsd_getaddrinfo(name.as_ptr(), 0, hints, result_slot as **u8); }
+    }
     name.clear();
     unsafe { core.free(hints); }
     if (code != 0) {
@@ -270,6 +323,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
         info = *(result_slot as **u8);
         @cfg(target_os = "windows") { address = *((info + 32) as **u8); }
         @cfg(target_os = "linux") { address = *((info + 24) as **u8); }
+@cfg(target_os = "netbsd") { address = *((info + 32) as **u8); }
     }
     if (info == 0 || address == 0) {
         @cfg(target_os = "windows") { unsafe { win32_core.winsock_cleanup(); } }
@@ -289,6 +343,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
         unsafe { win32_core.free_address_info(info); win32_core.winsock_cleanup(); }
     }
     @cfg(target_os = "linux") { unsafe { __linux_freeaddrinfo(info); } }
+@cfg(target_os = "netbsd") { unsafe { __netbsd_freeaddrinfo(info); } }
     unsafe { core.free(result_slot); }
     ret Ok(ip);
 }
@@ -358,7 +413,9 @@ fn __sockaddr(address: SocketAddress) Result[*u8, NetError] {
     const network_ip: u32 = encoded.unwrap();
     unsafe {
         core.memset(raw, 0, 16);
-        *(raw as *u16) = 2;
+        @cfg(target_os = "netbsd") { *(raw as *u16) = 528; }
+        @cfg(target_os = "linux") { *(raw as *u16) = 2; }
+        @cfg(target_os = "windows") { *(raw as *u16) = 2; }
         *((raw + 2) as *u16) = network_port;
         *((raw + 4) as *u32) = network_ip;
     }
@@ -503,6 +560,7 @@ impl TcpStream {
         else if (how == Shutdown.Write) { mode = 1; }
         var result: i32 = 0;
         @cfg(target_os = "linux") { unsafe { result = unix.shutdown(self.socket as i32, mode); } }
+@cfg(target_os = "netbsd") { unsafe { result = netbsd.shutdown(self.socket as i32, mode); } }
         @cfg(target_os = "windows") { unsafe { result = win32_core.shutdown_socket(self.socket as usize, mode); } }
         if (result < 0) { ret Err(__net_error(__error(result))); }
         ret Ok(true);
@@ -614,6 +672,9 @@ impl UdpSocket {
             @cfg(target_os = "linux") {
                 result = unix.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
             }
+@cfg(target_os = "netbsd") {
+                result = netbsd.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
+            }
             @cfg(target_os = "windows") {
                 result = win32_core.send_to_socket(self.socket as usize, core.str_as_ptr(text), text.bytes_len() as i32, 0, raw_address, 16) as isize;
             }
@@ -661,6 +722,9 @@ impl UdpSocket {
         unsafe {
             @cfg(target_os = "linux") {
                 count = unix.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
+            }
+@cfg(target_os = "netbsd") {
+                count = netbsd.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
             }
             @cfg(target_os = "windows") {
                 count = win32_core.receive_from_socket(self.socket as usize, data, limit as i32, 0, raw_address, raw_length as *i32) as isize;

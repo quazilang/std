@@ -5,6 +5,8 @@ pub import core;
 pub import io;
 pub import collections;
 pub import unix;
+@cfg(target_os="netbsd")
+pub import netbsd;
 @cfg(target_os="windows")
 pub import windows;
 pub import win32_core;

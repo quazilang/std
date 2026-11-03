@@ -7,6 +7,8 @@
 import std.core;
 @cfg(target_os="linux")
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 @cfg(target_os="windows")
 import std.win32_core;
 
@@ -113,6 +115,30 @@ impl Instant {
             seconds: seconds as u64,
             nanoseconds: nanoseconds as u32,
         });
+    }
+
+    @cfg(target_os="netbsd")
+    pub fn now() Result[Instant, TimeError] {
+        var raw: *u8 = 0;
+        unsafe { raw = core.malloc(16); }
+        if (raw == 0) { ret Err(TimeError.ClockUnavailable); }
+        var status: i32 = 0;
+        unsafe { status = netbsd.clock_gettime(3, raw); }
+        if (status != 0) {
+            unsafe { core.free(raw); }
+            ret Err(TimeError.ClockUnavailable);
+        }
+        var seconds: i64 = 0;
+        var nanoseconds: i64 = 0;
+        unsafe {
+            seconds = *(raw as *i64);
+            nanoseconds = *((raw + 8) as *i64);
+            core.free(raw);
+        }
+        if (seconds < 0 || nanoseconds < 0 || nanoseconds >= 1000000000) {
+            ret Err(TimeError.ClockUnavailable);
+        }
+        ret Ok(Instant { seconds: seconds as u64, nanoseconds: nanoseconds as u32 });
     }
 
     @cfg(target_os="windows")

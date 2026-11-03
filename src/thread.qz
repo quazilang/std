@@ -5,8 +5,14 @@
 // captured Quazi closures cannot cross this native boundary.
 import std.core;
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 
 @cfg(target_os = "linux")
+@repr(C)
+pub type ThreadCallback = fn(*u8) *u8;
+
+@cfg(target_os = "netbsd")
 @repr(C)
 pub type ThreadCallback = fn(*u8) *u8;
 
@@ -70,6 +76,7 @@ pub fn sleep(ms: u64) void {
 // Yield the processor to other threads.
 pub fn yield_now() void {
     @cfg(target_os = "linux") { unsafe { unix.sched_yield(); } }
+    @cfg(target_os = "netbsd") { unsafe { netbsd.sched_yield(); } }
     // Sleep(0) is the Win32 scheduler-yield operation. Keep this aligned with
     // std.os.yield_cpu rather than lowering a Linux syscall on Windows.
     @cfg(target_os = "windows") { core.sleep_ms(0); }

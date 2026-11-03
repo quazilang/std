@@ -111,7 +111,9 @@ pub fn shuffle[T](items: Array[T]) Result[Array[T], RandomError] {
         const index: usize = range(0..(remaining as i64))? as usize;
         remaining = remaining - 1;
         const temporary: T = items[index];
-        items.set(index, items[remaining]);
+        // Evaluate the shared read before the exclusive set() receiver loan.
+        const replacement: T = items[remaining];
+        items.set(index, replacement);
         items.set(remaining, temporary);
     }
     ret Ok(items);

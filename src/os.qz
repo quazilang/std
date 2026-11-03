@@ -3,6 +3,8 @@
 // falls back to unix.* for Linux-specific calls.
 import std.core;
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 import std.win32_core;
 import std.fs;
 import ./os_memory;
@@ -145,6 +147,7 @@ pub fn sleep(ms: u64) void {
 // Yield the CPU to other threads/processes.
 pub fn yield_cpu() void {
     @cfg(target_os = "linux") { unsafe { unix.sched_yield(); } }
+    @cfg(target_os = "netbsd") { unsafe { netbsd.sched_yield(); } }
     // Sleep(0) relinquishes the remainder of the current time slice to a
     // runnable peer without introducing a fixed-delay scheduling policy.
     @cfg(target_os = "windows") { core.sleep_ms(0); }
@@ -155,6 +158,11 @@ pub fn getpid() i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
         unsafe { r = unix.getpid(); }
+        ret r;
+    }
+        @cfg(target_os = "netbsd") {
+        var r: i32 = 0;
+        unsafe { r = netbsd.getpid(); }
         ret r;
     }
     @cfg(target_os = "windows") {
@@ -170,6 +178,11 @@ pub fn getppid() i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
         unsafe { r = unix.getppid(); }
+        ret r;
+    }
+        @cfg(target_os = "netbsd") {
+        var r: i32 = 0;
+        unsafe { r = netbsd.getppid(); }
         ret r;
     }
     ret -1;
@@ -203,6 +216,14 @@ pub fn env(name: str, fallback: str) String {
         }
     }
 
+    @cfg(target_os = "netbsd") {
+        unsafe {
+            const value: *u8 = core.getenv(name);
+            if (value == 0) { ret String.from(fallback); }
+            ret String.from(core.str_from_ptr(value));
+        }
+    }
+
     @cfg(target_os = "linux") {
         unsafe {
             const value: *u8 = core.getenv(name);
@@ -218,6 +239,7 @@ pub fn env(name: str, fallback: str) String {
 pub fn name() str {
     @cfg(target_os = "windows") { ret "Windows"; }
     @cfg(target_os = "linux") { ret "Linux"; }
+    @cfg(target_os = "netbsd") { ret "NetBSD"; }
     ret "Unknown";
 }
 
@@ -257,6 +279,7 @@ pub fn version() String {
         ret result;
     }
     @cfg(target_os = "linux") { ret String.from("Linux"); }
+    @cfg(target_os = "netbsd") { ret String.from("NetBSD"); }
     ret String.from("Unknown");
 }
 
@@ -296,6 +319,7 @@ pub fn shell() String {
         ret String.from("Console");
     }
     @cfg(target_os = "linux") { ret env("SHELL", "unknown"); }
+    @cfg(target_os = "netbsd") { ret env("SHELL", "unknown"); }
     ret String.from("unknown");
 }
 
@@ -308,6 +332,7 @@ pub fn terminal() String {
         ret String.from("Windows Console");
     }
     @cfg(target_os = "linux") { ret env("TERM", "unknown"); }
+    @cfg(target_os = "netbsd") { ret env("TERM", "unknown"); }
     ret String.from("unknown");
 }
 
@@ -349,6 +374,7 @@ pub fn memory_available() u64 {
 // buf must be at least size bytes long.
 pub unsafe fn cwd(buf: str, size: usize) isize {
     @cfg(target_os = "linux") { ret unix.getcwd(buf, size); }
+    @cfg(target_os = "netbsd") { ret netbsd.getcwd(buf, size); }
     ret -1;
 }
 
@@ -361,6 +387,11 @@ pub fn getuid() u32 {
         unsafe { r = unix.getuid(); }
         ret r;
     }
+    @cfg(target_os = "netbsd") {
+        var r: u32 = 0;
+        unsafe { r = netbsd.getuid(); }
+        ret r;
+    }
     ret 4294967295 as u32;
 }
 
@@ -369,6 +400,11 @@ pub fn getgid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
         unsafe { r = unix.getgid(); }
+        ret r;
+    }
+    @cfg(target_os = "netbsd") {
+        var r: u32 = 0;
+        unsafe { r = netbsd.getgid(); }
         ret r;
     }
     ret 4294967295 as u32;
@@ -381,6 +417,11 @@ pub fn geteuid() u32 {
         unsafe { r = unix.geteuid(); }
         ret r;
     }
+    @cfg(target_os = "netbsd") {
+        var r: u32 = 0;
+        unsafe { r = netbsd.geteuid(); }
+        ret r;
+    }
     ret 4294967295 as u32;
 }
 
@@ -389,6 +430,11 @@ pub fn getegid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
         unsafe { r = unix.getegid(); }
+        ret r;
+    }
+    @cfg(target_os = "netbsd") {
+        var r: u32 = 0;
+        unsafe { r = netbsd.getegid(); }
         ret r;
     }
     ret 4294967295 as u32;
@@ -403,6 +449,11 @@ pub fn kill(pid: i32, sig: i32) i32 {
         unsafe { r = unix.kill(pid, sig); }
         ret r;
     }
+    @cfg(target_os = "netbsd") {
+        var r: i32 = 0;
+        unsafe { r = netbsd.kill(pid, sig); }
+        ret r;
+    }
     ret -1;
 }
 
@@ -413,6 +464,11 @@ pub fn umask(mask: u32) u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
         unsafe { r = unix.umask(mask); }
+        ret r;
+    }
+    @cfg(target_os = "netbsd") {
+        var r: u32 = 0;
+        unsafe { r = netbsd.umask(mask); }
         ret r;
     }
     ret 4294967295 as u32;

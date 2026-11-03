@@ -1,0 +1,254 @@
+// std.netbsd — NetBSD 11.0/amd64 libc adapters.
+//
+// Unlike std.unix, these are NOT Linux syscalls. NetBSD libc returns -1 and
+// stores errno in thread-local state. These wrappers expose negative errno to
+// Quazi APIs that historically expect the Linux syscall error convention.
+// Only imported when @cfg(target_os="netbsd") is active.
+import std.core;
+
+@api("__errno")
+unsafe fn __errno_location() *i32;
+@api("open")
+unsafe fn __open(path: *u8, flags: i32, mode: u32) i32;
+@api("close")
+unsafe fn __close(fd: i32) i32;
+@api("read")
+unsafe fn __read(fd: i32, buf: *u8, count: usize) isize;
+@api("write")
+unsafe fn __write(fd: i32, buf: *u8, count: usize) isize;
+@api("lseek")
+unsafe fn __lseek(fd: i32, offset: i64, whence: i32) i64;
+@api("fsync")
+unsafe fn __fsync(fd: i32) i32;
+@api("ftruncate")
+unsafe fn __ftruncate(fd: i32, len: i64) i32;
+@api("access")
+unsafe fn __access(path: *u8, mode: i32) i32;
+@api("unlink")
+unsafe fn __unlink(path: *u8) i32;
+@api("mkdir")
+unsafe fn __mkdir(path: *u8, mode: u32) i32;
+@api("rmdir")
+unsafe fn __rmdir(path: *u8) i32;
+@api("rename")
+unsafe fn __rename(from_path: *u8, to_path: *u8) i32;
+@api("chdir")
+unsafe fn __chdir(path: *u8) i32;
+@api("getcwd")
+unsafe fn __getcwd(buf: *u8, count: usize) *u8;
+@api("sched_yield")
+unsafe fn __sched_yield() i32;
+@api("getuid")
+unsafe fn __getuid() u32;
+@api("getgid")
+unsafe fn __getgid() u32;
+@api("geteuid")
+unsafe fn __geteuid() u32;
+@api("getegid")
+unsafe fn __getegid() u32;
+@api("kill")
+unsafe fn __kill(pid: i32, signal: i32) i32;
+@api("umask")
+unsafe fn __umask(mask: u32) u32;
+@api("clock_gettime")
+unsafe fn __clock_gettime(clock_id: i32, time_out: *u8) i32;
+@api("opendir")
+unsafe fn __opendir(path: *u8) *u8;
+@api("readdir")
+unsafe fn __readdir(dir: *u8) *u8;
+@api("closedir")
+unsafe fn __closedir(dir: *u8) i32;
+
+// NetBSD open flags (usr/include/sys/fcntl.h): O_CREAT=0x200,
+// O_TRUNC=0x400, O_APPEND=0x8, O_DIRECTORY=0x00200000.
+// Input flags use std.fs's existing Linux values; translate at boundary.
+unsafe fn __err() i32 { ret -*__errno_location(); }
+pub unsafe fn errno_value() i32 { ret *__errno_location(); }
+
+pub unsafe fn open(path: str, flags: i32, mode: u32) i32 {
+    var native: i32 = flags & 3;
+    if ((flags & 64) != 0) { native = native | 512; }
+    if ((flags & 512) != 0) { native = native | 1024; }
+    if ((flags & 1024) != 0) { native = native | 8; }
+    if ((flags & 65536) != 0) { native = native | 2097152; }
+    const fd: i32 = __open(core.str_as_ptr(path), native, mode);
+    if (fd < 0) { ret __err(); }
+    ret fd;
+}
+
+pub unsafe fn close(fd: i32) i32 {
+    const code: i32 = __close(fd);
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+
+pub unsafe fn read(fd: i32, data: *u8, size: usize) isize {
+    const count: isize = __read(fd, data, size);
+    if (count < 0) { ret __err() as isize; }
+    ret count;
+}
+
+pub unsafe fn write(fd: i32, data: *u8, size: usize) isize {
+    const count: isize = __write(fd, data, size);
+    if (count < 0) { ret __err() as isize; }
+    ret count;
+}
+
+pub unsafe fn lseek(fd: i32, offset: i64, whence: i32) i64 {
+    const result: i64 = __lseek(fd, offset, whence);
+    if (result < 0) { ret __err() as i64; }
+    ret result;
+}
+
+pub unsafe fn fsync(fd: i32) i32 {
+    const result: i32 = __fsync(fd);
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn ftruncate(fd: i32, len: i64) i32 {
+    const result: i32 = __ftruncate(fd, len);
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn access(path: str, mode: i32) i32 {
+    const result: i32 = __access(core.str_as_ptr(path), mode);
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn unlink(path: str) i32 {
+    const result: i32 = __unlink(core.str_as_ptr(path));
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn mkdir(path: str, mode: u32) i32 {
+    const result: i32 = __mkdir(core.str_as_ptr(path), mode);
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn rmdir(path: str) i32 {
+    const result: i32 = __rmdir(core.str_as_ptr(path));
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn rename(old: str, new: str) i32 {
+    const result: i32 = __rename(core.str_as_ptr(old), core.str_as_ptr(new));
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn chdir(path: str) i32 {
+    const result: i32 = __chdir(core.str_as_ptr(path));
+    if (result < 0) { ret __err(); }
+    ret result;
+}
+
+pub unsafe fn getcwd(buf: str, size: usize) isize {
+    if (__getcwd(core.str_as_ptr(buf), size) == 0) { ret __err() as isize; }
+    ret (core.strlen(buf) + 1) as isize;
+}
+
+pub unsafe fn sched_yield() i32 { ret __sched_yield(); }
+pub unsafe fn getuid() u32 { ret __getuid(); }
+pub unsafe fn getgid() u32 { ret __getgid(); }
+pub unsafe fn geteuid() u32 { ret __geteuid(); }
+pub unsafe fn getegid() u32 { ret __getegid(); }
+pub unsafe fn umask(mask: u32) u32 { ret __umask(mask); }
+
+pub unsafe fn kill(pid: i32, sig: i32) i32 {
+    const code: i32 = __kill(pid, sig);
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+
+pub unsafe fn clock_gettime(clock_id: i32, result: *u8) i32 {
+    const code: i32 = __clock_gettime(clock_id, result);
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+
+pub unsafe fn opendir(path: str) *u8 { ret __opendir(core.str_as_ptr(path)); }
+pub unsafe fn readdir(handle: *u8) *u8 { ret __readdir(handle); }
+pub unsafe fn closedir(handle: *u8) i32 { ret __closedir(handle); }
+
+@api("link")
+unsafe fn __link(old: *u8, new_path: *u8) i32;
+@api("symlink")
+unsafe fn __symlink(target: *u8, link_path: *u8) i32;
+@api("chmod")
+unsafe fn __chmod(path: *u8, mode: u32) i32;
+@api("getpid")
+unsafe fn __getpid() i32;
+@api("getppid")
+unsafe fn __getppid() i32;
+
+pub unsafe fn link(old: str, new_path: str) i32 {
+    const code: i32 = __link(core.str_as_ptr(old), core.str_as_ptr(new_path));
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+pub unsafe fn symlink(target: str, link_path: str) i32 {
+    const code: i32 = __symlink(core.str_as_ptr(target), core.str_as_ptr(link_path));
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+pub unsafe fn chmod(path: str, mode: u32) i32 {
+    const code: i32 = __chmod(core.str_as_ptr(path), mode);
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+pub unsafe fn getpid() i32 { ret __getpid(); }
+pub unsafe fn getppid() i32 { ret __getppid(); }
+
+// Socket APIs: wrap libc errno in the existing negative-error convention.
+@api("socket")
+unsafe fn __socket(domain: i32, kind: i32, protocol: i32) i32;
+@api("listen")
+unsafe fn __listen(socket: i32, backlog: i32) i32;
+@api("accept")
+unsafe fn __accept(socket: i32, addr: *u8, len: *u32) i32;
+@api("sendto")
+unsafe fn __sendto(socket: i32, data: *u8, length: usize, flags: i32, address: *u8, address_size: u32) isize;
+@api("recvfrom")
+unsafe fn __recvfrom(socket: i32, data: *u8, length: usize, flags: i32, address: *u8, address_size: *u32) isize;
+@api("shutdown")
+unsafe fn __shutdown(socket: i32, how: i32) i32;
+
+pub unsafe fn socket(domain: i32, kind: i32, protocol: i32) i32 {
+    const fd: i32 = __socket(domain, kind, protocol);
+    if (fd < 0) { ret __err(); }
+    ret fd;
+}
+pub unsafe fn listen(fd: i32, backlog: i32) i32 {
+    const code: i32 = __listen(fd, backlog);
+    if (code < 0) { ret __err(); }
+    ret code;
+}
+pub unsafe fn accept(fd: i32, addr: *u8, len: *u32) i32 {
+    const accepted: i32 = __accept(fd, addr, len);
+    if (accepted < 0) { ret __err(); }
+    ret accepted;
+}
+pub unsafe fn sendto(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: u32) isize {
+    var native_flags: i32 = flags;
+    // Linux MSG_NOSIGNAL=0x4000, NetBSD MSG_NOSIGNAL=0x0400.
+    if ((flags & 16384) != 0) { native_flags = (flags ^ 16384) | 1024; }
+    const written: isize = __sendto(fd, buf, count, native_flags, address, address_size);
+    if (written < 0) { ret __err() as isize; }
+    ret written;
+}
+pub unsafe fn recvfrom(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: *u32) isize {
+    const n: isize = __recvfrom(fd, buf, count, flags, address, address_size);
+    if (n < 0) { ret __err() as isize; }
+    ret n;
+}
+pub unsafe fn shutdown(fd: i32, mode: i32) i32 {
+    const result: i32 = __shutdown(fd, mode);
+    if (result < 0) { ret __err(); }
+    ret result;
+}

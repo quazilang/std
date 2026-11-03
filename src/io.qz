@@ -11,11 +11,20 @@ import std.core.realloc;
 import std.core.str_as_ptr;
 import std.win32_core;
 import std.unix;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 
 @cfg(target_os = "linux")
 fn write_text(fd: i32, s: str) isize {
     var result: isize = 0;
     unsafe { result = raw_write(fd, s, strlen(s)); }
+    ret result;
+}
+
+@cfg(target_os = "netbsd")
+fn write_text(fd: i32, s: str) isize {
+    var result: isize = 0;
+    unsafe { result = netbsd.write(fd, core.str_as_ptr(s), strlen(s)); }
     ret result;
 }
 
@@ -225,6 +234,11 @@ unsafe fn __io_end_immediate_input(state: *u8) void {
     unix.ioctl_ptr(0, 21506, state); // TCSETS
     free(state);
 }
+
+@cfg(target_os = "netbsd")
+unsafe fn __io_begin_immediate_input() *u8 { ret 0; }
+@cfg(target_os = "netbsd")
+unsafe fn __io_end_immediate_input(state: *u8) void { ret; }
 
 @cfg(target_os = "windows")
 unsafe fn __io_begin_immediate_input() *u8 {
