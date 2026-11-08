@@ -236,10 +236,9 @@ D-012, and the 2026-10-13 compiler checkpoint. Current source has
 high-level return is not used for the count.
 
 Since 2026-11-08 every module, including HTTP Headers/codecs and JSON object
-composition, passes ownership analysis, and the `@test` suite passes when the
-isolated `tests/os_memory.qz` fixture is run through its own script. Running
-`qz test` from the repository root still compiles that private-module fixture
-with the library and fails, so the full library test gate receives no credit. Process cleanup is
+composition, passes ownership analysis, and `qz test` from the repository root
+passes all 38 `@test` functions (the procfs parser fixtures now live inside
+`src/os_memory.qz`). Process cleanup is
 explicit: there is no automatic `Child.free` hook. Windows process creation,
 portable cwd/environment mutation, buffered I/O, civil time, and TLS are absent.
 

@@ -18,10 +18,10 @@ def main():
         (work / "src").mkdir()
         (work / "quazi.toml").write_text(
             '[package]\nname="os_memory_tests"\nversion="0.1.0"\n'
-            '[lib]\npath="src/tests.qz"\n'
+            '[lib]\npath="src/os_memory.qz"\n'
         )
+        # The module carries its own @test fixtures.
         shutil.copyfile(root / "src/os_memory.qz", work / "src/os_memory.qz")
-        shutil.copyfile(root / "tests/os_memory.qz", work / "src/tests.qz")
         subprocess.run(
             [str(args.qz.resolve()), "test", "--no-color", "--no-unicode"],
             cwd=work, check=True, timeout=120,
