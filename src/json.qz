@@ -303,6 +303,35 @@ unsafe fn write_scalar(buffer: *u8, offset: usize, scalar: u32) usize {
     ret 4;
 }
 
+// Read/write offsets after one decoded escape sequence.
+struct EscapeStep { read: usize, written: usize }
+
+// Decode the escape whose letter is at `read` (after the backslash) into
+// `buffer` at `written`; None for an unpaired surrogate.
+unsafe fn decode_escape(source: str, read: usize, end: usize, buffer: *u8, written: usize) Option[EscapeStep] {
+    const byte: u8 = core.str_byte_at(source, read);
+    var simple: u32 = 0;
+    if (byte == 34 || byte == 92 || byte == 47) { simple = byte as u32; }
+    else if (byte == 98) { simple = 8; }
+    else if (byte == 102) { simple = 12; }
+    else if (byte == 110) { simple = 10; }
+    else if (byte == 114) { simple = 13; }
+    else if (byte == 116) { simple = 9; }
+    if (simple != 0) {
+        ret Some(EscapeStep { read: read + 1, written: written + write_scalar(buffer, written, simple) });
+    }
+    var scalar: u32 = unicode_escape(source, read + 1);
+    var next: usize = read + 5;
+    if (scalar >= 55296 && scalar <= 56319) {
+        if (next + 6 > end - 1 || core.str_byte_at(source, next) != 92 || core.str_byte_at(source, next + 1) != 117) { ret None; }
+        const low: u32 = unicode_escape(source, next + 2);
+        if (low < 56320 || low > 57343) { ret None; }
+        scalar = 65536 + ((scalar - 55296) << 10) + (low - 56320);
+        next = next + 6;
+    } else if (scalar >= 56320 && scalar <= 57343) { ret None; }
+    Some(EscapeStep { read: next, written: written + write_scalar(buffer, written, scalar) })
+}
+
 // Decode exactly one JSON string token after validating its syntax and limits.
 pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, JsonError] {
     const valid: Result[bool, JsonError] = validate_with_limits(source, max_input, max_depth);
@@ -316,23 +345,13 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
     if (buffer == 0) { ret Err(JsonError.InvalidString); }
     var read: usize = start + 1; var written: usize = 0;
     for (read < end - 1) {
-        var byte: u8 = core.str_byte_at(source, read); read = read + 1;
+        const byte: u8 = core.str_byte_at(source, read); read = read + 1;
         if (byte != 92) { unsafe { *(buffer + written) = byte; } written = written + 1; continue; }
-        byte = core.str_byte_at(source, read); read = read + 1;
-        if (byte == 34 || byte == 92 || byte == 47) { unsafe { *(buffer + written) = byte; } written = written + 1; continue; }
-        if (byte == 98) { unsafe { written = written + write_scalar(buffer, written, 8); } continue; }
-        if (byte == 102) { unsafe { written = written + write_scalar(buffer, written, 12); } continue; }
-        if (byte == 110) { unsafe { written = written + write_scalar(buffer, written, 10); } continue; }
-        if (byte == 114) { unsafe { written = written + write_scalar(buffer, written, 13); } continue; }
-        if (byte == 116) { unsafe { written = written + write_scalar(buffer, written, 9); } continue; }
-        var scalar: u32 = unicode_escape(source, read); read = read + 4;
-        if (scalar >= 55296 && scalar <= 56319) {
-            if (read + 6 > end - 1 || core.str_byte_at(source, read) != 92 || core.str_byte_at(source, read + 1) != 117) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
-            const low: u32 = unicode_escape(source, read + 2);
-            if (low < 56320 || low > 57343) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
-            scalar = 65536 + ((scalar - 55296) << 10) + (low - 56320); read = read + 6;
-        } else if (scalar >= 56320 && scalar <= 57343) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
-        unsafe { written = written + write_scalar(buffer, written, scalar); }
+        var step: Option[EscapeStep] = None;
+        unsafe { step = decode_escape(source, read, end, buffer, written); }
+        if (step.is_none()) { unsafe { core.free(buffer); } ret Err(JsonError.InvalidString); }
+        const next: EscapeStep = step.unwrap();
+        read = next.read; written = next.written;
     }
     unsafe { *(buffer + written) = 0; }
     var result: String = String.new(); unsafe { result = String.from_raw(buffer, written, source.bytes_len() + 1); }
@@ -424,4 +443,13 @@ fn object_composition_counts_the_enclosing_object_depth() void {
         panic("a scalar-valued object should fit a depth limit of one");
     }
     ret;
+}
+
+@test
+fn decode_string_handles_escapes_and_surrogates() void {
+    const plain: String = decode_string("\"a\\n\\\"b\\u00e9\"").unwrap();
+    if (plain.as_str() != "a\n\"b\u{e9}") { panic("escapes decoded wrongly"); }
+    const pair: String = decode_string("\"\\ud83d\\ude00\"").unwrap();
+    if (pair.as_str() != "\u{1F600}") { panic("surrogate pair decoded wrongly"); }
+    if (decode_string("\"\\ud83d\"").is_ok()) { panic("unpaired surrogate accepted"); }
 }
