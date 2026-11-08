@@ -120,6 +120,21 @@ pub fn str_concat(s1: str, s2: str) String {
 pub fn int_to_str(n: i64) String { ret n.to_string(); }
 pub fn float_to_str(f: f64) String { ret f.to_string(); }
 
+// Sequentially consistent atomic read-modify-write on an 8-byte aligned i64.
+// `atomic_add` returns the previous value; `atomic_cas` stores `desired` only
+// if the current value equals `expected` and returns the value it observed.
+@intrinsic("quazi.atomic.add")
+pub unsafe fn atomic_add(target: *i64, delta: i64) i64;
+
+@intrinsic("quazi.atomic.cas")
+pub unsafe fn atomic_cas(target: *i64, expected: i64, desired: i64) i64;
+
+// Save the current execution context into `save` (272 bytes) and resume the
+// one stored in `restore`. Building block for green threads; see the backend
+// AGENTS notes for the context layout. Misuse corrupts the stack.
+@intrinsic("quazi.context.switch")
+pub unsafe fn context_switch(save: *u8, restore: *u8) void;
+
 // Return the byte at index i in s (no bounds check — caller ensures i < strlen(s)).
 @intrinsic("quazi.str.byte_at")
 pub fn str_byte_at(s: str, i: usize) u8;
@@ -222,4 +237,18 @@ pub unsafe fn utf8_incomplete_tail(buf: *u8, len: usize) usize {
         index = index + 1;
     }
     ret width - available;
+}
+
+@test
+fn atomic_add_and_cas_update_shared_memory() void {
+    unsafe {
+        const cell: *u8 = malloc(8);
+        if (cell == 0) { panic("allocation failed"); }
+        *(cell as *i64) = 40;
+        if (atomic_add(cell as *i64, 2) != 40) { panic("atomic_add must return the previous value"); }
+        if (atomic_cas(cell as *i64, 42, 100) != 42) { panic("successful cas must return the expected value"); }
+        if (atomic_cas(cell as *i64, 42, 7) != 100) { panic("failed cas must return the current value"); }
+        if (*(cell as *i64) != 100) { panic("failed cas must not store"); }
+        free(cell);
+    }
 }
