@@ -39,6 +39,12 @@ pub unsafe fn seek(file: usize, distance: i64, position: *i64, method: u32) i32;
 @api("setsockopt")
 pub unsafe fn set_socket_option(socket: usize, level: i32, name: i32, value: *u8, length: i32) i32;
 
+// ANSI-path working directory APIs, matching the other *A file APIs here.
+@api("GetCurrentDirectoryA")
+pub unsafe fn get_current_directory(length: u32, buffer: *u8) u32;
+@api("SetCurrentDirectoryA")
+pub unsafe fn set_current_directory(path: *u8) i32;
+
 @api("GetTickCount64")
 pub unsafe fn get_tick_count64() u64;
 

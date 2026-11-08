@@ -4,16 +4,16 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 57.0%.**
+**Plan completion: 58.0%.**
 
-**Remaining work: 43.0%.**
+**Remaining work: 42.0%.**
 
 Completion of unfinished plan items:
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
 | Filesystem / I/O | 9/16 | 56.2% | 43.8% |
-| Operating-system APIs | 5/10 | 50.0% | 50.0% |
+| Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 7/11 | 63.6% | 36.4% |

@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 57.0%. Remaining: 43.0%.**
+**Complete: 58.0%. Remaining: 42.0%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -30,7 +30,7 @@ release-readiness probability. New requirements change the denominator.
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
 | Filesystem / I/O | 9/16 | 56.2% | 43.8% |
-| Operating-system APIs | 5/10 | 50.0% | 50.0% |
+| Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 7/11 | 63.6% | 36.4% |
@@ -73,7 +73,7 @@ Evidence: [src/os.qz](../src/os.qz).
 - [x] Process/parent identifiers.
 - [x] Sleep and scheduler-yield helpers.
 - [ ] Portable environment mutation.
-- [ ] Portable owned cwd query and cwd changes.
+- [x] Portable owned cwd query and cwd changes.
 - [ ] Portable standard-library argument access.
 - [ ] Move Unix-specific responsibilities out of portable os surface.
 - [ ] Complete target-native OS query/error matrix.

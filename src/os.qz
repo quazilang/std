@@ -369,6 +369,12 @@ pub fn memory_available() u64 {
 
 // ── Current directory ─────────────────────────────────────────────────────────
 
+// The current working directory as an owned path; see fs.current_dir.
+pub fn current_dir() Result[String, fs.FsError] { fs.current_dir() }
+
+// Change the current working directory for the whole process.
+pub fn set_current_dir(path: str) Result[bool, fs.FsError] { fs.set_current_dir(path) }
+
 // Fill buf with the current working directory path (null-terminated).
 // Returns number of bytes written (including null) or negative on error.
 // buf must be at least size bytes long.

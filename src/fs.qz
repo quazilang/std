@@ -68,6 +68,88 @@ fn last_fs_error() FsError {
     ret fs_error(code as i32);
 }
 
+// The process's current working directory as an owned path.
+pub fn current_dir() Result[String, FsError] {
+    var capacity: usize = 4096;
+    for (capacity <= 1048576) {
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(capacity); }
+        if (buffer == 0) { ret Err(FsError.AllocationFailed); }
+        var length: isize = -1;
+        var retry: bool = false;
+        @cfg(target_os = "linux") {
+            var result: isize = 0;
+            unsafe { result = unix.getcwd(core.str_from_ptr(buffer), capacity); }
+            // ERANGE: the path is longer than the buffer.
+            if (result == -34) { retry = true; } else if (result < 0) {
+                unsafe { core.free(buffer); }
+                ret Err(fs_error(result as i32));
+            } else { length = result - 1; }
+        }
+        @cfg(target_os = "netbsd") {
+            var result: isize = 0;
+            unsafe { result = netbsd.getcwd(core.str_from_ptr(buffer), capacity); }
+            if (result == -34) { retry = true; } else if (result < 0) {
+                unsafe { core.free(buffer); }
+                ret Err(fs_error(result as i32));
+            } else { unsafe { length = core.strlen(core.str_from_ptr(buffer)) as isize; } }
+        }
+        @cfg(target_os = "windows") {
+            var written: u32 = 0;
+            unsafe { written = win32_core.get_current_directory(capacity as u32, buffer); }
+            if (written == 0) {
+                unsafe { core.free(buffer); }
+                ret Err(last_fs_error());
+            }
+            // A result >= capacity is the required size including the NUL.
+            if ((written as usize) >= capacity) { retry = true; } else { length = written as isize; }
+        }
+        if (!retry) {
+            if (length < 0) { unsafe { core.free(buffer); } ret Err(FsError.Native(-1)); }
+            var path: String = String.new();
+            unsafe { path = String.from(core.str_from_ptr(buffer)); core.free(buffer); }
+            ret Ok(path);
+        }
+        unsafe { core.free(buffer); }
+        capacity = capacity * 2;
+    }
+    Err(FsError.InvalidPath)
+}
+
+// Change the process's current working directory. This affects every thread.
+pub fn set_current_dir(path: str) Result[bool, FsError] {
+    @cfg(target_os = "linux") {
+        var result: i32 = 0;
+        unsafe { result = unix.chdir(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    @cfg(target_os = "netbsd") {
+        var result: i32 = 0;
+        unsafe { result = netbsd.chdir(path); }
+        if (result < 0) { ret Err(fs_error(result)); }
+        ret Ok(true);
+    }
+    @cfg(target_os = "windows") {
+        var result: i32 = 0;
+        unsafe { result = win32_core.set_current_directory(core.str_as_ptr(path)); }
+        if (result == 0) { ret Err(last_fs_error()); }
+        ret Ok(true);
+    }
+    Err(FsError.Native(-1))
+}
+
+@test
+fn current_dir_round_trips_through_set_current_dir() void {
+    const original: String = current_dir().unwrap();
+    if (original.is_empty()) { panic("current directory is empty"); }
+    if (set_current_dir("/").is_err()) { panic("cannot change to the root directory"); }
+    const root: String = current_dir().unwrap();
+    if (root.as_str() != "/") { panic("current_dir did not report the new directory"); }
+    if (set_current_dir("/definitely/not/a/real/directory/quazi").is_ok()) { panic("missing directory accepted"); }
+    if (set_current_dir(original.as_str()).is_err()) { panic("cannot restore the original directory"); }
+}
+
 // Private ownership adapters keep raw buffers and directory handles inside the
 // same automatic-destruction model exposed by File and String.
 struct FsRawBuffer {
