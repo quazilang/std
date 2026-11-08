@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 58.0%. Remaining: 42.0%.**
+**Complete: 58.6%. Remaining: 41.4%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -29,7 +29,7 @@ release-readiness probability. New requirements change the denominator.
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 9/16 | 56.2% | 43.8% |
+| Filesystem / I/O | 10/16 | 62.5% | 37.5% |
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
@@ -60,7 +60,7 @@ Evidence: [src/fs.qz](../src/fs.qz).
 - [ ] Structured path abstraction.
 - [ ] Structured metadata API.
 - [ ] Directory iterator/traversal API.
-- [ ] Bounded large-file reads.
+- [x] Bounded large-file reads.
 - [ ] Complete target-native large-file/partial-I/O matrix.
 
 ### Operating-system APIs

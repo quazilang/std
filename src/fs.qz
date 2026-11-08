@@ -23,6 +23,7 @@ pub enum FsError {
     AllocationFailed,
     InvalidData,
     Unsupported,
+    TooLarge,
     Native(i32),
 }
 
@@ -42,6 +43,7 @@ impl FsError {
             FsError.AllocationFailed => "file-system buffer allocation failed",
             FsError.InvalidData => "invalid file-system data",
             FsError.Unsupported => "file-system operation is unsupported",
+            FsError.TooLarge => "file exceeds the requested size limit",
             FsError.Native(_) => "unclassified operating-system file error",
         };
     }
@@ -484,6 +486,13 @@ pub fn seek_end() i32 { ret 2; }
 // success and every error path; only the private raw staging allocation needs
 // explicit release before it has been promoted into String ownership.
 pub fn read_to_string(path: str) Result[String, FsError] {
+    read_to_string_with_limit(path, 18446744073709551615)
+}
+
+// Read a whole UTF-8 file of at most `max_bytes` bytes. A larger file fails
+// with TooLarge after reading at most `max_bytes + 1` bytes, so untrusted
+// paths cannot force unbounded allocation.
+pub fn read_to_string_with_limit(path: str, max_bytes: usize) Result[String, FsError] {
     const opened: Result[File, FsError] = File.open(path);
     if (opened.is_err()) { ret Err(opened.unwrap_err()); }
     var file: File = opened.unwrap();
@@ -501,14 +510,18 @@ pub fn read_to_string(path: str) Result[String, FsError] {
             if (grown == 0) { ret Err(FsError.AllocationFailed); }
             buffer.data = grown;
         }
+        // Never request more than one byte past the limit.
+        var request: usize = capacity - length;
+        if (max_bytes - length < request) { request = max_bytes - length + 1; }
         var count: isize = -1;
-        unsafe { count = file.read(buffer.data + length, capacity - length); }
+        unsafe { count = file.read(buffer.data + length, request); }
         if (count < 0) {
             @cfg(target_os = "windows") { ret Err(last_fs_error()); }
             ret Err(fs_error(count as i32));
         }
         if (count == 0) { break; }
         length = length + count as usize;
+        if (length > max_bytes) { ret Err(FsError.TooLarge); }
     }
     var valid: bool = false;
     unsafe { valid = core.is_valid_utf8(buffer.data, length); }
@@ -791,4 +804,18 @@ pub fn chmod(path: str, mode: u32) Result[bool, FsError] {
         ret Ok(true);
     }
     ret Err(FsError.Unsupported);
+}
+
+@test
+fn read_to_string_with_limit_rejects_larger_files() void {
+    const path = "/tmp/quazi_fs_limit_test.txt";
+    var file = File.create(path).unwrap();
+    file.write_str("hello world").unwrap();
+    file.close();
+    if (read_to_string_with_limit(path, 11).unwrap().as_str() != "hello world") { panic("exact-size file rejected"); }
+    const limited = read_to_string_with_limit(path, 5);
+    const too_large: bool = match limited { Err(FsError.TooLarge) => true, _ => false };
+    if (!too_large) { panic("oversized file was not rejected with TooLarge"); }
+    if (read_to_string(path).unwrap().as_str() != "hello world") { panic("unbounded read changed"); }
+    remove(path).unwrap();
 }
