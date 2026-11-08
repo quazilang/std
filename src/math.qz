@@ -136,7 +136,8 @@ pub fn degrees(radians: f64) f64 { ret radians * 57.2957795130823208768; }
 
 pub fn sqrt(value: f64) f64 {
     if (value < 0.0) { ret 0.0 / 0.0; }
-    if (value == 0.0) { ret 0.0; }
+    // Preserves the sign of zero (sqrt(-0.0) is -0.0) and propagates NaN.
+    if (value == 0.0 || value != value) { ret value; }
     if (value == 1.0 / 0.0) { ret value; }
     var estimate: f64 = value;
     if (estimate < 1.0) { estimate = 1.0; }
@@ -165,6 +166,9 @@ pub fn cbrt(value: f64) f64 {
 pub fn hypot(x: f64, y: f64) f64 {
     const ax: f64 = x.abs();
     const ay: f64 = y.abs();
+    // An infinite leg wins even over NaN (C99 Annex F).
+    if (ax == 1.0 / 0.0 || ay == 1.0 / 0.0) { ret 1.0 / 0.0; }
+    if (ax != ax || ay != ay) { ret 0.0 / 0.0; }
     const largest: f64 = math.max(ax, ay);
     if (largest == 0.0 || largest == 1.0 / 0.0) { ret largest; }
     const sx: f64 = ax / largest;
@@ -172,9 +176,14 @@ pub fn hypot(x: f64, y: f64) f64 {
     ret largest * math.sqrt(sx * sx + sy * sy);
 }
 
+// Reduce to [-pi, pi]. 2*pi is split into three parts (Cody-Waite) so the
+// subtraction stays accurate while the quotient fits in about 30 bits
+// (|value| up to ~1e9); beyond that the result loses accuracy.
 fn __reduce_angle(value: f64) f64 {
     const tau: f64 = 6.2831853071795864769;
-    var reduced: f64 = value - math.trunc(value / tau) * tau;
+    const quotient: f64 = math.trunc(value / tau);
+    var reduced: f64 = ((value - quotient * 6.28318530717958623200) - quotient * 2.44929359829470635445e-16)
+        - quotient * 1.0e-32;
     if (reduced > 3.1415926535897932385) { reduced = reduced - tau; }
     if (reduced < -3.1415926535897932385) { reduced = reduced + tau; }
     ret reduced;
@@ -214,6 +223,8 @@ pub fn cos(value: f64) f64 {
 pub fn tan(value: f64) f64 { ret math.sin(value) / math.cos(value); }
 
 pub fn atan(value: f64) f64 {
+    // Zeros (keeping their sign) and NaN pass through unchanged.
+    if (value == 0.0 || value != value) { ret value; }
     if (value < 0.0) { ret -math.atan(-value); }
     if (value > 1.0) { ret 1.5707963267948966192 - math.atan(1.0 / value); }
     if (value > 0.4142135623730950488) {
@@ -239,18 +250,29 @@ pub fn atan(value: f64) f64 {
 pub fn arctan(value: f64) f64 { ret math.atan(value); }
 
 pub fn atan2(y: f64, x: f64) f64 {
+    if (y != y || x != x) { ret 0.0 / 0.0; }
+    const infinity: f64 = 1.0 / 0.0;
+    const pi: f64 = 3.1415926535897932385;
+    // The sign of y, including -0.0, selects the half plane (C99 Annex F).
+    const y_negative: bool = y < 0.0 || (y == 0.0 && 1.0 / y < 0.0);
+    if (y.abs() == infinity && x.abs() == infinity) {
+        const angle: f64 = if (x > 0.0) { pi / 4.0 } else { 3.0 * pi / 4.0 };
+        ret if (y_negative) { -angle } else { angle };
+    }
     if (x > 0.0) { ret math.atan(y / x); }
-    if (x < 0.0 && y >= 0.0) { ret math.atan(y / x) + 3.1415926535897932385; }
-    if (x < 0.0) { ret math.atan(y / x) - 3.1415926535897932385; }
-    if (y > 0.0) { ret 1.5707963267948966192; }
-    if (y < 0.0) { ret -1.5707963267948966192; }
-    ret 0.0;
+    if (x < 0.0 || (x == 0.0 && 1.0 / x < 0.0)) {
+        if (y == 0.0) { ret if (y_negative) { -pi } else { pi }; }
+        ret if (y_negative) { math.atan(y / x) - pi } else { math.atan(y / x) + pi };
+    }
+    if (y > 0.0) { ret pi / 2.0; }
+    if (y < 0.0) { ret -pi / 2.0; }
+    y
 }
 
 pub fn arctan2(y: f64, x: f64) f64 { ret math.atan2(y, x); }
 
 pub fn asin(value: f64) f64 {
-    if (value < -1.0 || value > 1.0) { ret 0.0 / 0.0; }
+    if (value != value || value < -1.0 || value > 1.0) { ret 0.0 / 0.0; }
     ret math.atan2(value, math.sqrt(1.0 - value * value));
 }
 
@@ -327,7 +349,9 @@ pub fn tanh(value: f64) f64 {
 }
 
 pub fn pow(base: f64, exponent: f64) f64 {
-    if (exponent == 0.0) { ret 1.0; }
+    // pow(x, 0) and pow(1, y) are 1 even for NaN operands (C99 Annex F).
+    if (exponent == 0.0 || base == 1.0) { ret 1.0; }
+    if (base != base || exponent != exponent) { ret 0.0 / 0.0; }
     if (base == 0.0) { if (exponent < 0.0) { ret 1.0 / 0.0; } ret 0.0; }
     if (base < 0.0) {
         if (exponent == 1.0 / 0.0) {
@@ -386,4 +410,57 @@ impl f64 {
     pub fn degrees(self: f64) f64 { ret math.degrees(self); }
     pub fn radians(self: f64) f64 { ret math.radians(self); }
     pub fn pow(self: f64, exponent: f64) f64 { ret math.pow(self, exponent); }
+}
+
+fn __is_nan(value: f64) bool { value != value }
+fn __is_negative_zero(value: f64) bool { value == 0.0 && 1.0 / value < 0.0 }
+
+@test
+fn roots_and_hypot_follow_annex_f() void {
+    const zero: f64 = 0.0;
+    const nan: f64 = zero / zero;
+    const inf: f64 = 1.0 / zero;
+    if (!__is_nan(math.sqrt(-1.0)) || !__is_negative_zero(math.sqrt(-0.0)) || math.sqrt(inf) != inf) { panic("sqrt special values"); }
+    if (math.hypot(inf, nan) != inf || math.hypot(nan, -inf) != inf || !__is_nan(math.hypot(nan, 1.0))) { panic("hypot special values"); }
+}
+
+@test
+fn inverse_trigonometry_follows_annex_f() void {
+    const zero: f64 = 0.0;
+    const nan: f64 = zero / zero;
+    const inf: f64 = 1.0 / zero;
+    if (!__is_nan(math.asin(nan)) || !__is_nan(math.asin(2.0)) || !__is_nan(math.acos(-2.0))) { panic("asin/acos domain"); }
+    const pi: f64 = 3.1415926535897932385;
+    if (math.atan2(0.0, -1.0) != pi || math.atan2(-0.0, -1.0) != -pi) { panic("atan2 signed zero"); }
+    if (math.atan2(inf, inf) != pi / 4.0 || math.atan2(-inf, -inf) != -3.0 * pi / 4.0) { panic("atan2 infinities"); }
+    if (!__is_negative_zero(math.atan2(-0.0, 1.0)) || !__is_nan(math.atan2(nan, 1.0))) { panic("atan2 zero/NaN"); }
+}
+
+@test
+fn pow_and_min_max_follow_annex_f() void {
+    const zero: f64 = 0.0;
+    const nan: f64 = zero / zero;
+    const inf: f64 = 1.0 / zero;
+    if (math.pow(1.0, nan) != 1.0 || math.pow(nan, 0.0) != 1.0 || !__is_nan(math.pow(nan, 2.0)) || !__is_nan(math.pow(-8.0, 0.5))) {
+        panic("pow special values");
+    }
+    if (math.min(nan, 1.0) != 1.0 || math.max(1.0, nan) != 1.0 || math.max(nan, 2.0) != 2.0) { panic("min/max NaN operands"); }
+    if (__is_negative_zero(math.abs(-0.0)) || math.abs(-inf) != inf) { panic("abs signs"); }
+}
+
+@test
+fn exp_ln_and_rounding_follow_annex_f() void {
+    const zero: f64 = 0.0;
+    const nan: f64 = zero / zero;
+    const inf: f64 = 1.0 / zero;
+    if (math.ln(0.0) != -inf || !__is_nan(math.ln(-1.0)) || math.exp(-inf) != 0.0 || math.exp(inf) != inf) { panic("exp/ln"); }
+    if (math.trunc(1.0e300) != 1.0e300 || math.floor(-1.0e300) != -1.0e300) { panic("large rounding"); }
+}
+
+@test
+fn angle_reduction_stays_accurate_for_large_arguments() void {
+    // sin(1e6) = -0.34999350217129294; sin(1e9) = 0.5458434494486996.
+    if ((math.sin(1.0e6) + 0.34999350217129294).abs() > 1.0e-9) { panic("sin(1e6) is inaccurate"); }
+    if ((math.sin(1.0e9) - 0.5458434494486996).abs() > 1.0e-6) { panic("sin(1e9) is inaccurate"); }
+    if ((math.cos(1.0e6) - 0.9367521275331447).abs() > 1.0e-9) { panic("cos(1e6) is inaccurate"); }
 }

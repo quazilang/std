@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 58.6%. Remaining: 41.4%.**
+**Complete: 59.5%. Remaining: 40.5%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -33,7 +33,7 @@ release-readiness probability. New requirements change the denominator.
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
-| Mathematics | 7/11 | 63.6% | 36.4% |
+| Mathematics | 8/11 | 72.7% | 27.3% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
 | Time | 17/19 | 89.5% | 10.5% |
@@ -133,7 +133,7 @@ Evidence: [src/math.qz](../src/math.qz).
 - [x] Trigonometric functions.
 - [x] Exponential/logarithmic/power functions.
 - [ ] Checked overflow policy across integer operations.
-- [ ] Complete NaN/infinity/domain behavior audit.
+- [x] Complete NaN/infinity/domain behavior audit.
 - [ ] Quantified precision/error bounds.
 - [ ] Comprehensive numeric edge-case regression suite.
 
