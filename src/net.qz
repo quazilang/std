@@ -184,6 +184,25 @@ fn __close(socket: isize) void {
     }
 }
 
+// Let a restarted server bind its port while earlier connections remain in
+// TIME_WAIT. Windows is excluded: its SO_REUSEADDR also lets another socket
+// bind a port that is actively in use.
+fn __reuse_address(socket: isize) i32 {
+    @cfg(target_os = "windows") { ret 0; }
+    var value: *u8 = 0;
+    unsafe { value = core.malloc(4); }
+    if (value == 0) { ret -12; }
+    var result: i32 = 0;
+    unsafe {
+        core.memset(value, 0, 4);
+        *value = 1;
+        @cfg(target_os = "linux") { result = unix.setsockopt(socket as i32, 1, 2, value, 4); }
+        @cfg(target_os = "netbsd") { result = netbsd.setsockopt(socket as i32, 65535, 4, value, 4); }
+        core.free(value);
+    }
+    ret result;
+}
+
 fn __listen(socket: isize, backlog: i32) i32 {
     @cfg(target_os = "linux") {
         var result: i32 = 0;
@@ -586,7 +605,10 @@ impl TcpListener {
         const created: Result[isize, NetError] = __socket(1, 6);
         if (created.is_err()) { ret Err(created.unwrap_err()); }
         const socket: isize = created.unwrap();
-        var result: i32 = 0;
+        var result: i32 = __reuse_address(socket);
+        if (result < 0) {
+            const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));
+        }
         unsafe { result = __net_bind(socket, port); }
         if (result < 0) {
             const error: i32 = __error(result); __close(socket); ret Err(__net_error(error));

@@ -218,11 +218,18 @@ unsafe fn __sendto(socket: i32, data: *u8, length: usize, flags: i32, address: *
 unsafe fn __recvfrom(socket: i32, data: *u8, length: usize, flags: i32, address: *u8, address_size: *u32) isize;
 @api("shutdown")
 unsafe fn __shutdown(socket: i32, how: i32) i32;
+@api("setsockopt")
+unsafe fn __setsockopt(socket: i32, level: i32, name: i32, value: *u8, length: u32) i32;
 
 pub unsafe fn socket(domain: i32, kind: i32, protocol: i32) i32 {
     const fd: i32 = __socket(domain, kind, protocol);
     if (fd < 0) { ret __err(); }
     ret fd;
+}
+pub unsafe fn setsockopt(fd: i32, level: i32, name: i32, value: *u8, length: u32) i32 {
+    const code: i32 = __setsockopt(fd, level, name, value, length);
+    if (code < 0) { ret __err(); }
+    ret code;
 }
 pub unsafe fn listen(fd: i32, backlog: i32) i32 {
     const code: i32 = __listen(fd, backlog);
