@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 59.5%. Remaining: 40.5%.**
+**Complete: 60.3%. Remaining: 39.7%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -35,7 +35,7 @@ release-readiness probability. New requirements change the denominator.
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 8/11 | 72.7% | 27.3% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
-| Concurrency | 4/12 | 33.3% | 66.7% |
+| Concurrency | 5/12 | 41.7% | 58.3% |
 | Time | 17/19 | 89.5% | 10.5% |
 | Serialization | 7/15 | 46.7% | 53.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
@@ -161,7 +161,7 @@ Evidence: [src/thread.qz](../src/thread.qz).
 - [x] Result[Thread, ThreadError] creation failure.
 - [x] Target-specific exported C callback ABI.
 - [ ] Cancellation policy/API.
-- [ ] Synchronization primitives.
+- [x] Synchronization primitives.
 - [ ] Defined communication surface.
 - [ ] Typed thread result propagation.
 - [ ] Panic propagation.

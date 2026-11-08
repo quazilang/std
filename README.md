@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 59.5%.**
+**Plan completion: 60.3%.**
 
-**Remaining work: 40.5%.**
+**Remaining work: 39.7%.**
 
 Completion of unfinished plan items:
 
@@ -18,7 +18,7 @@ Completion of unfinished plan items:
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 8/11 | 72.7% | 27.3% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
-| Concurrency | 4/12 | 33.3% | 66.7% |
+| Concurrency | 5/12 | 41.7% | 58.3% |
 | Time | 17/19 | 89.5% | 10.5% |
 | Serialization | 7/15 | 46.7% | 53.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |

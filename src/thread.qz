@@ -71,6 +71,141 @@ impl Thread {
     pub fn handle(self: Thread) usize { ret self.handle; }
 }
 
+// ── Synchronization ───────────────────────────────────────────────────────────
+//
+// Until JoinHandle[T] can move values into threads, a value is shared with a
+// thread by passing `as_ptr()` (for example through thread_spawn_arg) and
+// opening it there with the unsafe `at(ptr)` view. The owner frees the cell
+// when it goes out of scope, so join every thread that uses it first.
+
+unsafe fn __alloc_cell(value: i64) *u8 {
+    var cell: *u8 = 0;
+    unsafe {
+        cell = core.malloc(8);
+        if (cell == 0) { panic("atomic cell allocation failed"); }
+        *(cell as *i64) = value;
+    }
+    cell
+}
+
+// A 64-bit integer whose operations are atomic and sequentially consistent.
+pub struct AtomicI64 {
+    cell: *u8,
+}
+
+impl AtomicI64 {
+    pub fn new(value: i64) AtomicI64 {
+        var cell: *u8 = 0;
+        unsafe { cell = __alloc_cell(value); }
+        AtomicI64 { cell: cell }
+    }
+
+    // A non-owning view of a cell created elsewhere; the caller guarantees
+    // `ptr` came from `as_ptr()` and outlives the view.
+    pub unsafe fn at(ptr: *u8) AtomicI64View { AtomicI64View { cell: ptr } }
+
+    pub unsafe fn as_ptr(self: &AtomicI64) *u8 { self.cell }
+    pub fn load(self: &AtomicI64) i64 { unsafe { ret __atomic_load(self.cell); } }
+    pub fn store(self: &AtomicI64, value: i64) void { unsafe { __atomic_swap(self.cell, value); } }
+    pub fn swap(self: &AtomicI64, value: i64) i64 { unsafe { ret __atomic_swap(self.cell, value); } }
+    // Add `delta` and return the previous value.
+    pub fn fetch_add(self: &AtomicI64, delta: i64) i64 { unsafe { ret __atomic_fetch_add(self.cell, delta); } }
+    // Store `desired` only if the value equals `expected`; return the value seen.
+    pub fn compare_exchange(self: &AtomicI64, expected: i64, desired: i64) i64 {
+        var seen: i64 = 0;
+        unsafe { seen = __atomic_compare_exchange(self.cell, expected, desired); }
+        seen
+    }
+    pub fn free(self: AtomicI64) void { unsafe { core.free(self.cell); } }
+}
+
+// Borrowed access to an AtomicI64 owned by another scope or thread.
+pub struct AtomicI64View {
+    cell: *u8,
+}
+
+impl AtomicI64View {
+    pub fn load(self: &AtomicI64View) i64 { unsafe { ret __atomic_load(self.cell); } }
+    pub fn store(self: &AtomicI64View, value: i64) void { unsafe { __atomic_swap(self.cell, value); } }
+    pub fn swap(self: &AtomicI64View, value: i64) i64 { unsafe { ret __atomic_swap(self.cell, value); } }
+    pub fn fetch_add(self: &AtomicI64View, delta: i64) i64 { unsafe { ret __atomic_fetch_add(self.cell, delta); } }
+    pub fn compare_exchange(self: &AtomicI64View, expected: i64, desired: i64) i64 {
+        var seen: i64 = 0;
+        unsafe { seen = __atomic_compare_exchange(self.cell, expected, desired); }
+        seen
+    }
+}
+
+unsafe fn __atomic_load(cell: *u8) i64 {
+    var value: i64 = 0;
+    unsafe { value = core.atomic_add(cell as *i64, 0); }
+    value
+}
+
+unsafe fn __atomic_fetch_add(cell: *u8, delta: i64) i64 {
+    var previous: i64 = 0;
+    unsafe { previous = core.atomic_add(cell as *i64, delta); }
+    previous
+}
+
+unsafe fn __atomic_compare_exchange(cell: *u8, expected: i64, desired: i64) i64 {
+    var seen: i64 = 0;
+    unsafe { seen = core.atomic_cas(cell as *i64, expected, desired); }
+    seen
+}
+
+unsafe fn __atomic_swap(cell: *u8, value: i64) i64 {
+    var current: i64 = __atomic_load(cell);
+    for (true) {
+        const seen: i64 = __atomic_compare_exchange(cell, current, value);
+        if (seen == current) { ret current; }
+        current = seen;
+    }
+    current
+}
+
+// A mutual-exclusion lock. `lock` spins with compare-and-swap and yields the
+// processor between attempts; it is not reentrant and not fair.
+pub struct Mutex {
+    state: *u8,
+}
+
+impl Mutex {
+    pub fn new() Mutex {
+        var state: *u8 = 0;
+        unsafe { state = __alloc_cell(0); }
+        Mutex { state: state }
+    }
+
+    // A non-owning view of a lock created elsewhere (see AtomicI64.at).
+    pub unsafe fn at(ptr: *u8) MutexView { MutexView { state: ptr } }
+
+    pub unsafe fn as_ptr(self: &Mutex) *u8 { self.state }
+    pub fn lock(self: &Mutex) void { unsafe { __lock(self.state); } }
+    // Acquire the lock only if it is free; true on success.
+    pub fn try_lock(self: &Mutex) bool { unsafe { ret __atomic_compare_exchange(self.state, 0, 1) == 0; } }
+    pub fn unlock(self: &Mutex) void { unsafe { __unlock(self.state); } }
+    pub fn free(self: Mutex) void { unsafe { core.free(self.state); } }
+}
+
+pub struct MutexView {
+    state: *u8,
+}
+
+impl MutexView {
+    pub fn lock(self: &MutexView) void { unsafe { __lock(self.state); } }
+    pub fn try_lock(self: &MutexView) bool { unsafe { ret __atomic_compare_exchange(self.state, 0, 1) == 0; } }
+    pub fn unlock(self: &MutexView) void { unsafe { __unlock(self.state); } }
+}
+
+unsafe fn __lock(state: *u8) void {
+    for (__atomic_compare_exchange(state, 0, 1) != 0) { yield_now(); }
+}
+
+unsafe fn __unlock(state: *u8) void {
+    if (__atomic_compare_exchange(state, 1, 0) != 1) { panic("unlock of a Mutex that is not locked"); }
+}
+
 // ── Convenience wrappers ──────────────────────────────────────────────────────
 
 // Suspend the current thread for ms milliseconds.
@@ -97,4 +232,27 @@ pub fn current_tid() i32 {
     // Windows has no Linux kernel thread ID. Keep the existing signature while
     // making unsupported-target behavior explicit instead of issuing gettid.
     ret -1;
+}
+
+@test
+fn atomic_i64_operations_are_consistent() void {
+    const value = AtomicI64.new(10);
+    if (value.fetch_add(5) != 10 || value.load() != 15) { panic("fetch_add"); }
+    if (value.compare_exchange(15, 20) != 15 || value.load() != 20) { panic("successful compare_exchange"); }
+    if (value.compare_exchange(15, 99) != 20 || value.load() != 20) { panic("failed compare_exchange stored"); }
+    if (value.swap(7) != 20 || value.load() != 7) { panic("swap"); }
+    value.store(-3);
+    var view = AtomicI64View { cell: 0 };
+    unsafe { view = AtomicI64.at(value.as_ptr()); }
+    if (view.fetch_add(3) != -3 || value.load() != 0) { panic("view shares the owner's cell"); }
+}
+
+@test
+fn mutex_try_lock_reflects_ownership() void {
+    const lock = Mutex.new();
+    if (!lock.try_lock()) { panic("a new mutex must be free"); }
+    if (lock.try_lock()) { panic("a held mutex must not be acquired twice"); }
+    lock.unlock();
+    lock.lock();
+    lock.unlock();
 }
