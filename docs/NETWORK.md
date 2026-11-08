@@ -37,15 +37,19 @@ Datagram text and HTTP value accessors borrow their owners. HTTP connection
 read/respond/close and server accept/close operations require mutable locals
 and exclusive access; `serve_once` and server `free` remain consuming.
 
-Full HTTP header/codec ownership migration remains incomplete. Run the bounded
-transport/receiver check from the workspace root with the matching compiler:
+`Headers` keeps fields in one owned wire-format buffer: `append`/`set` take an
+exclusive receiver, lookups are shared and return owned copies (`get` returns
+`Option[String]`). Request/response `headers()` and `encode()` copy the headers
+instead of moving fields, and `UdpDatagram.address()` returns a copy. The whole
+module passes ownership analysis. Run the bounded transport/receiver check from
+the workspace root with the matching compiler:
 
 ```sh
 python3 std/scripts/check_net_receivers.py quazistrap/target/debug/qz
 ```
 
-The check isolates exact production declarations from unfinished headers and
-CLI sources; it is not a full-module build. Canonical contracts and limitations
+The check isolates exact production declarations; the full HTTP round trip is
+covered by `examples/26-http-client-server` in the compiler repository. Canonical contracts and limitations
 are recorded in the companion compiler's `docs/api/net.md` and
 `docs/migrations/http-receivers.md`. The canonical repository is
 [quazilang/quazistrap](https://github.com/quazilang/quazistrap); the migration

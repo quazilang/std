@@ -230,6 +230,19 @@ pub fn object(keys: Array[str], values: Array[String]) Result[String, JsonError]
     ret object_with_limits(keys, values, 1048576, 64);
 }
 
+// Append `"key":value` after checking the output cap and validating `value`.
+fn append_member(output: str, key: str, value: String, max_output: usize, max_depth: usize) Result[String, JsonError] {
+    const quoted: String = quote(key);
+    const next_size: usize = output.bytes_len() + quoted.bytes_len() + value.bytes_len() + 2;
+    if (next_size > max_output) { ret Err(JsonError.OutputLimit); }
+    const valid: Result[bool, JsonError] = validate_with_limits(value.as_str(), max_output, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+    var result: String = String.from(output);
+    result = result.push_str(quoted.as_str());
+    result = result.push_str(":");
+    ret Ok(result.push_str(value.as_str()));
+}
+
 // Compose a JSON object with an explicit total-output and nesting policy.
 // It rejects mismatched or duplicate keys and validates each raw value before
 // appending it. The output cap includes punctuation and escaped keys.
@@ -237,20 +250,17 @@ pub fn object_with_limits(keys: Array[str], values: Array[String], max_output: u
     if (keys.len() != values.len()) { ret Err(JsonError.ObjectLengthMismatch); }
     if (max_output < 2) { ret Err(JsonError.OutputLimit); }
     var output: String = String.from("{");
+    // Owned elements cannot be read in place yet; take each value in order.
+    var remaining: Array[String] = values;
     for i : 0..keys.len() {
         for previous : 0..i {
             if (keys[previous] == keys[i]) { ret Err(JsonError.DuplicateKey); }
         }
         if (i > 0) { output = output.push_str(","); }
-        const key: String = quote(keys[i]);
-        const value: String = values[i];
-        const next_size: usize = output.bytes_len() + key.bytes_len() + value.bytes_len() + 2;
-        if (next_size > max_output) { ret Err(JsonError.OutputLimit); }
-        const valid: Result[bool, JsonError] = validate_with_limits(value.as_str(), max_output, max_depth);
-        if (valid.is_err()) { ret Err(valid.unwrap_err()); }
-        output = output.push_str(key.as_str());
-        output = output.push_str(":");
-        output = output.push_str(value.as_str());
+        const appended: Result[String, JsonError] = append_member(
+            output.as_str(), keys[i], remaining.remove(0), max_output, max_depth);
+        if (appended.is_err()) { ret Err(appended.unwrap_err()); }
+        output = appended.unwrap();
     }
     output = output.push_str("}");
     const valid: Result[bool, JsonError] = validate_with_limits(output.as_str(), max_output, max_depth);

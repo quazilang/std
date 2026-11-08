@@ -1,8 +1,8 @@
-# Standard-library plan checklist — 2026-10-13
+# Standard-library plan checklist — 2026-11-08
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 47.7%. Remaining: 52.3%.**
+**Complete: 48.3%. Remaining: 51.7%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -32,7 +32,7 @@ release-readiness probability. New requirements change the denominator.
 | Filesystem / I/O | 9/16 | 56.2% | 43.8% |
 | Operating-system APIs | 5/10 | 50.0% | 50.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
-| Networking / TLS | 8/17 | 47.1% | 52.9% |
+| Networking / TLS | 9/17 | 52.9% | 47.1% |
 | Mathematics | 7/11 | 63.6% | 36.4% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
@@ -117,7 +117,7 @@ Evidence: [src/net.qz](../src/net.qz).
 - [ ] Certificate-chain verification.
 - [ ] Hostname verification.
 - [ ] Trust-store/protocol/update policy.
-- [ ] Ownership-safe fully compiling HTTP Headers/request/response path.
+- [x] Ownership-safe fully compiling HTTP Headers/request/response path.
 - [ ] Defined concurrent socket-sharing policy.
 - [ ] Target-native TCP/UDP/HTTP/TLS integration matrix.
 
@@ -235,14 +235,17 @@ D-012, and the 2026-10-13 compiler checkpoint. Current source has
 `Result[Thread, ThreadError]`; older resume prose describing a zero-handle
 high-level return is not used for the count.
 
-Full standard-library compilation remains blocked by HTTP Headers/JSON
-owned reads and unrelated user CLI work. JSON object composition and the full
-library test gate therefore receive no completion credit. Process cleanup is
+Since 2026-11-08 every module, including HTTP Headers/codecs and JSON object
+composition, passes ownership analysis, and the `@test` suite passes when the
+isolated `tests/os_memory.qz` fixture is run through its own script. Running
+`qz test` from the repository root still compiles that private-module fixture
+with the library and fails, so the full library test gate receives no credit. Process cleanup is
 explicit: there is no automatic `Child.free` hook. Windows process creation,
 portable cwd/environment mutation, buffered I/O, civil time, and TLS are absent.
 
-The bounded receiver fixture excludes Headers/codec operations and does not
-establish a full-module build or full HTTP round trip. See `docs/NETWORK.md`.
+The bounded receiver fixture excludes Headers/codec operations. The full HTTP
+round trip is exercised by the compiler repository's
+`examples/26-http-client-server`. See `docs/NETWORK.md`.
 
 Current check: `python3 std/scripts/check_net_receivers.py quazistrap/target/debug/qz`
 (from the workspace root) passed **10 native tests**, rejected **3 negative

@@ -619,7 +619,10 @@ pub struct UdpDatagram { data: String, address: SocketAddress, }
 
 impl UdpDatagram {
     pub fn text(self: &UdpDatagram) str { ret self.data.as_str(); }
-    pub fn address(self: UdpDatagram) SocketAddress { ret self.address; }
+    // Return a copy of the sender address; the datagram stays usable.
+    pub fn address(self: &UdpDatagram) SocketAddress {
+        ret SocketAddress { host: String.from(self.address.host.as_str()), port: self.address.port };
+    }
 }
 
 pub struct UdpSocket { socket: isize, }
@@ -777,14 +780,14 @@ fn udp_close_invalidates_once_then_consumes_on_free() void {
 }
 
 @test
-fn udp_datagram_address_transfers_the_owned_address() void {
+fn udp_datagram_address_copies_the_peer_while_text_is_borrowed() void {
     const datagram = UdpDatagram {
         data: String.from("payload"),
         address: SocketAddress { host: String.from("127.0.0.1"), port: 8123 },
     };
     const address: SocketAddress = datagram.address();
-    if (address.host() != "127.0.0.1" || address.port() != 8123) {
-        panic("UDP datagram address transfer lost the peer address");
+    if (address.host() != "127.0.0.1" || address.port() != 8123 || datagram.text() != "payload") {
+        panic("UDP datagram address copy lost the peer address or payload");
     }
 }
 
@@ -826,47 +829,85 @@ fn network_value_accessors_support_shared_owners() void {
     }
 }
 
-pub struct Headers { items: Array[Header], }
+// Headers keep their HTTP wire encoding (`Name: value\r\n` per field) in one
+// owned buffer. Accessors return owned copies, so no caller can retain a view
+// into storage that a later `set` or `append` replaces.
+pub struct Headers { encoded: String, count: usize, }
 
 impl Headers {
-    // Zero-argument generic associated constructors do not yet infer their
-    // struct type from the surrounding field position, so the element type is
-    // pinned by an explicit annotated binding (same workaround as
-    // `std.random.random_bytes`).
-    pub fn new() Headers {
-        const items: Array[Header] = Array.new();
-        ret Headers { items: items };
+    pub fn new() Headers { ret Headers { encoded: String.new(), count: 0 }; }
+    pub fn append(self: &Headers!, name: str, value: str) void {
+        self.encoded = __append_header_line(self.encoded.as_str(), name, value);
+        self.count = self.count + 1;
     }
-    pub fn append(self: Headers, name: str, value: str) void { self.items.push(Header.new(name, value)); }
-    pub fn set(self: Headers, name: str, value: str) void {
-        const needle: String = name.to_lowercase();
-        for i : 0..self.items.len() {
-            const current: String = self.items[i].name().to_lowercase();
-            if (current == needle) { self.items.set(i, Header.new(name, value)); ret; }
+    // Replace the first field named `name` (ASCII case-insensitive), or append it.
+    pub fn set(self: &Headers!, name: str, value: str) void {
+        const index: Option[usize] = self.__index_of(name);
+        if (index.is_none()) { self.append(name, value); ret; }
+        const target: usize = index.unwrap();
+        var rebuilt: String = String.new();
+        for i : 0..self.count {
+            const header: Header = self.get_at(i);
+            if (i == target) {
+                rebuilt = __append_header_line(rebuilt.as_str(), name, value);
+            } else {
+                rebuilt = __append_header_line(rebuilt.as_str(), header.name(), header.value());
+            }
         }
-        self.append(name, value);
+        self.encoded = rebuilt;
     }
-    pub fn get(self: Headers, name: str) Option[str] {
+    // Return a copy of the first value named `name` (ASCII case-insensitive).
+    pub fn get(self: &Headers, name: str) Option[String] {
+        const index: Option[usize] = self.__index_of(name);
+        if (index.is_none()) { ret None; }
+        const header: Header = self.get_at(index.unwrap());
+        ret Some(String.from(header.value()));
+    }
+    pub fn contains(self: &Headers, name: str) bool { ret self.__index_of(name).is_some(); }
+    pub fn len(self: &Headers) usize { ret self.count; }
+    // Return a copy of the field at `index`; panics when `index >= len()`.
+    pub fn get_at(self: &Headers, index: usize) Header {
+        if (index >= self.count) { panic("header index out of bounds"); }
+        var offset: usize = 0;
+        var current: usize = 0;
+        for (current < index) {
+            offset = __next_header_line(self.encoded.as_str(), offset);
+            current = current + 1;
+        }
+        const end: usize = __next_header_line(self.encoded.as_str(), offset) - 2;
+        const line: String = self.encoded[offset as isize:end as isize];
+        const split: usize = line.find(": ").unwrap();
+        const name: String = line[0:split as isize];
+        const value: String = line[(split + 2) as isize:];
+        ret Header.new(name.as_str(), value.as_str());
+    }
+    pub fn copy(self: &Headers) Headers {
+        ret Headers { encoded: String.from(self.encoded.as_str()), count: self.count };
+    }
+    pub fn encode(self: &Headers) String { ret String.from(self.encoded.as_str()); }
+    fn __index_of(self: &Headers, name: str) Option[usize] {
         const needle: String = name.to_lowercase();
-        for i : 0..self.items.len() {
-            const header: Header = self.items[i];
+        for i : 0..self.count {
+            const header: Header = self.get_at(i);
             const current: String = header.name().to_lowercase();
-            if (current == needle) { ret Some(header.value()); }
+            if (current == needle) { ret Some(i); }
         }
         ret None;
     }
-    pub fn contains(self: Headers, name: str) bool { ret self.get(name).is_some(); }
-    pub fn len(self: Headers) usize { ret self.items.len(); }
-    pub fn get_at(self: Headers, index: usize) Header { ret self.items[index]; }
-    pub fn encode(self: Headers) String {
-        var output: String = String.new();
-        for i : 0..self.items.len() {
-            const header: Header = self.items[i];
-            output = output.push_str(header.name()); output = output.push_str(": ");
-            output = output.push_str(header.value()); output = output.push_str("\r\n");
-        }
-        ret output;
-    }
+}
+
+fn __append_header_line(encoded: str, name: str, value: str) String {
+    var output: String = String.from(encoded);
+    output = output.push_str(name);
+    output = output.push_str(": ");
+    output = output.push_str(value);
+    ret output.push_str("\r\n");
+}
+
+// Offset just past the `\r\n` that ends the line starting at `offset`.
+fn __next_header_line(encoded: str, offset: usize) usize {
+    const rest: String = encoded[offset as isize:];
+    ret offset + rest.find("\r\n").unwrap() + 2;
 }
 
 fn __parse_headers(block: str) Result[Headers, NetError] {
@@ -1040,10 +1081,10 @@ impl HttpRequest {
     pub fn method(self: &HttpRequest) str { ret self.method.as_str(); }
     pub fn target(self: &HttpRequest) str { ret self.target.as_str(); }
     pub fn host(self: &HttpRequest) str { ret self.host.as_str(); }
-    pub fn headers(self: HttpRequest) Headers { ret self.headers; }
+    pub fn headers(self: &HttpRequest) Headers { ret self.headers.copy(); }
     pub fn body_text(self: &HttpRequest) str { ret self.body.as_str(); }
-    pub fn encode(self: HttpRequest) String {
-        var headers: Headers = self.headers;
+    pub fn encode(self: &HttpRequest) String {
+        var headers: Headers = self.headers.copy();
         if (!headers.contains("Host")) { headers.append("Host", self.host.as_str()); }
         if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
         if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
@@ -1111,8 +1152,8 @@ impl HttpRequest {
         if (parsed_headers.is_err()) { ret Err(parsed_headers.unwrap_err()); }
         const headers: Headers = parsed_headers.unwrap();
         var host: String = String.new();
-        const host_value: Option[str] = headers.get("Host");
-        if (host_value.is_some()) { host = String.from(host_value.unwrap()); }
+        const host_value: Option[String] = headers.get("Host");
+        if (host_value.is_some()) { host = host_value.unwrap(); }
         const body: String = raw[(head_end + 4) as isize:];
         ret Ok(HttpRequest {
             method: method, target: target, host: host, headers: headers, body: body,
@@ -1148,10 +1189,10 @@ impl HttpResponse {
     pub fn header(self: HttpResponse, name: str, value: str) HttpResponse { self.headers.set(name, value); ret self; }
     pub fn status(self: &HttpResponse) i32 { ret self.status; }
     pub fn reason(self: &HttpResponse) str { ret self.reason.as_str(); }
-    pub fn headers(self: HttpResponse) Headers { ret self.headers; }
+    pub fn headers(self: &HttpResponse) Headers { ret self.headers.copy(); }
     pub fn body(self: &HttpResponse) str { ret self.body.as_str(); }
-    pub fn encode(self: HttpResponse) String {
-        var headers: Headers = self.headers;
+    pub fn encode(self: &HttpResponse) String {
+        var headers: Headers = self.headers.copy();
         if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
         if (!headers.contains("Connection")) { headers.append("Connection", "close"); }
         var output: String = String.from("HTTP/1.1 ");
@@ -1171,43 +1212,59 @@ impl HttpResponse {
         if (line_end.is_none()) { ret Err(NetError.InvalidHttp); }
         const line_index: usize = line_end.unwrap();
         const status_line: String = head[0:line_index as isize];
-        const first_space: Option[usize] = status_line.find(" ");
-        if (first_space.is_none()) { ret Err(NetError.InvalidHttp); }
-        const status_start: usize = first_space.unwrap() + 1;
-        const rest: String = status_line[status_start as isize:];
-        const second_space: Option[usize] = rest.find(" ");
-        if (second_space.is_none()) { ret Err(NetError.InvalidHttp); }
-        const reason_start: usize = second_space.unwrap() + 1;
-        const code_text: String = rest[0:(reason_start - 1) as isize];
-        const parsed_code: Result[i32, ParseError] = code_text.parse_i32();
-        if (parsed_code.is_err()) { ret Err(NetError.InvalidHttp); }
-        const reason: String = rest[reason_start as isize:];
+        const status: Result[HttpResponse, NetError] = __parse_status_line(status_line.as_str());
+        if (status.is_err()) { ret Err(status.unwrap_err()); }
+        var response: HttpResponse = status.unwrap();
         const header_block: String = head[(line_index + 2) as isize:];
         const parsed_headers: Result[Headers, NetError] = __parse_headers(header_block.as_str());
         if (parsed_headers.is_err()) { ret Err(parsed_headers.unwrap_err()); }
         const headers: Headers = parsed_headers.unwrap();
-        var body: String = raw[(head_end + 4) as isize:];
-        const transfer: Option[str] = headers.get("Transfer-Encoding");
-        if (transfer.is_some()) {
-            const transfer_value: str = transfer.unwrap();
-            const encoding: String = transfer_value.to_lowercase();
-            if (encoding.contains("chunked")) {
-                const decoded: Result[String, NetError] = __decode_chunked(body.as_str(), 16 * 1024 * 1024);
-                if (decoded.is_err()) { ret Err(decoded.unwrap_err()); }
-                body = decoded.unwrap();
-            }
-        }
-        const content_length: Option[str] = headers.get("Content-Length");
-        if (content_length.is_some()) {
-            const length_value: str = content_length.unwrap();
-            const length_text: String = String.from(length_value);
-            const expected: Result[usize, ParseError] = length_text.parse_usize();
-            if (expected.is_err()) { ret Err(NetError.InvalidHttp); }
-            const expected_length: usize = expected.unwrap();
-            if (body.bytes_len() < expected_length) { ret Err(NetError.InvalidHttp); }
-        }
-        ret Ok(HttpResponse { status: parsed_code.unwrap(), reason: reason, headers: headers, body: body });
+        const raw_body: String = raw[(head_end + 4) as isize:];
+        const body: Result[String, NetError] = __response_body(
+            headers.get("Transfer-Encoding"), headers.get("Content-Length"), raw_body);
+        if (body.is_err()) { ret Err(body.unwrap_err()); }
+        response.headers = headers;
+        response.body = body.unwrap();
+        ret Ok(response);
     }
+}
+
+// Parse `HTTP/1.x <code> <reason>` into a response without headers or body.
+fn __parse_status_line(status_line: str) Result[HttpResponse, NetError] {
+    const first_space: Option[usize] = status_line.find(" ");
+    if (first_space.is_none()) { ret Err(NetError.InvalidHttp); }
+    const status_start: usize = first_space.unwrap() + 1;
+    const rest: String = status_line[status_start as isize:];
+    const second_space: Option[usize] = rest.find(" ");
+    if (second_space.is_none()) { ret Err(NetError.InvalidHttp); }
+    const reason_start: usize = second_space.unwrap() + 1;
+    const code_text: String = rest[0:(reason_start - 1) as isize];
+    const parsed_code: Result[i32, ParseError] = code_text.parse_i32();
+    if (parsed_code.is_err()) { ret Err(NetError.InvalidHttp); }
+    const reason: String = rest[reason_start as isize:];
+    ret Ok(HttpResponse { status: parsed_code.unwrap(), reason: reason, headers: Headers.new(), body: String.new() });
+}
+
+// Decode a chunked body when requested and validate any declared length.
+fn __response_body(transfer: Option[String], content_length: Option[String], raw: String) Result[String, NetError] {
+    var body: String = raw;
+    if (transfer.is_some()) {
+        const transfer_value: String = transfer.unwrap();
+        const encoding: String = transfer_value.to_lowercase();
+        if (encoding.contains("chunked")) {
+            const decoded: Result[String, NetError] = __decode_chunked(body.as_str(), 16 * 1024 * 1024);
+            if (decoded.is_err()) { ret Err(decoded.unwrap_err()); }
+            body = decoded.unwrap();
+        }
+    }
+    if (content_length.is_some()) {
+        const length_text: String = content_length.unwrap();
+        const expected: Result[usize, ParseError] = length_text.parse_usize();
+        if (expected.is_err()) { ret Err(NetError.InvalidHttp); }
+        const expected_length: usize = expected.unwrap();
+        if (body.bytes_len() < expected_length) { ret Err(NetError.InvalidHttp); }
+    }
+    ret Ok(body);
 }
 
 pub struct HttpConnection { stream: TcpStream, }
