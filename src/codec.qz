@@ -2,6 +2,7 @@
 import std.core;
 import std.json;
 import std.json.JsonError;
+import std.time.SystemTime;
 
 pub enum EncodeError {
     UnsupportedType,
@@ -159,4 +160,34 @@ impl Serialize for String {
     pub fn to_json(self: String) Result[String, EncodeError] {
         ret Ok(json.quote(self.as_str()));
     }
+}
+
+// A timestamp serializes as an RFC 3339 UTC JSON string, e.g.
+// "2000-02-29T12:34:56Z"; fractions keep nine digits when nonzero.
+impl Serialize for SystemTime {
+    pub fn to_json(self: SystemTime) Result[String, EncodeError] {
+        const text: String = self.format_rfc3339();
+        Ok(json.quote(text.as_str()))
+    }
+}
+
+// Decode a JSON string holding an RFC 3339 timestamp (offsets are normalized
+// to UTC). Non-strings are TypeMismatch; malformed or out-of-range text is
+// InvalidValue.
+pub fn decode_system_time(source: str) Result[SystemTime, DecodeError] {
+    const text: String = decode_string(source)?;
+    const parsed = SystemTime.parse_rfc3339(text.as_str());
+    if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
+    Ok(parsed.unwrap())
+}
+
+@test
+fn system_time_round_trips_through_rfc3339_json() void {
+    const time = SystemTime.from_unix(951827696, 5).unwrap();
+    const encoded: String = time.to_json().unwrap();
+    if (encoded.as_str() != "\"2000-02-29T12:34:56.000000005Z\"") { panic("timestamp JSON is wrong"); }
+    const decoded = decode_system_time(encoded.as_str()).unwrap();
+    if (decoded.unix_seconds() != 951827696 || decoded.subsec_nanoseconds() != 5) { panic("timestamp did not round-trip"); }
+    if (decode_system_time("\"2000-02-30T00:00:00Z\"").is_ok()) { panic("invalid date decoded"); }
+    if (decode_system_time("12").is_ok()) { panic("number decoded as a timestamp"); }
 }
