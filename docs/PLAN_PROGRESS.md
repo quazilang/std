@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 48.3%. Remaining: 51.7%.**
+**Complete: 49.0%. Remaining: 51.0%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -37,7 +37,7 @@ release-readiness probability. New requirements change the denominator.
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
 | Time | 5/19 | 26.3% | 73.7% |
-| Serialization | 6/15 | 40.0% | 60.0% |
+| Serialization | 7/15 | 46.7% | 53.3% |
 | Library-wide safety / other modules | 6/9 | 66.7% | 33.3% |
 
 ## Requirements
@@ -203,7 +203,7 @@ Evidence: [src/codec.qz](../src/codec.qz).
 - [x] Escaped Unicode JSON-string encoding/decoding.
 - [x] Bounded bool/i64/String scalar decoding.
 - [x] Bounded top-level object-field extraction.
-- [ ] Ownership-safe JSON object composition under the current compiler.
+- [x] Ownership-safe JSON object composition under the current compiler.
 - [ ] Derived Deserialize.
 - [ ] Option field support.
 - [ ] Collection field support.
