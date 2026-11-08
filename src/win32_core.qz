@@ -39,6 +39,10 @@ pub unsafe fn seek(file: usize, distance: i64, position: *i64, method: u32) i32;
 @api("GetTickCount64")
 pub unsafe fn get_tick_count64() u64;
 
+// FILETIME: 100-nanosecond intervals since 1601-01-01 UTC.
+@api("GetSystemTimeAsFileTime")
+pub unsafe fn get_system_time_as_file_time(file_time: *u8) void;
+
 @api("FlushFileBuffers")
 pub unsafe fn sync(file: usize) i32;
 

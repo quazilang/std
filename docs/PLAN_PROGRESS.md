@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 49.0%. Remaining: 51.0%.**
+**Complete: 53.2%. Remaining: 46.8%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -36,7 +36,7 @@ release-readiness probability. New requirements change the denominator.
 | Mathematics | 7/11 | 63.6% | 36.4% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
-| Time | 5/19 | 26.3% | 73.7% |
+| Time | 13/19 | 68.4% | 31.6% |
 | Serialization | 7/15 | 46.7% | 53.3% |
 | Library-wide safety / other modules | 6/9 | 66.7% | 33.3% |
 
@@ -178,19 +178,19 @@ Evidence: [src/time.qz](../src/time.qz).
 - [x] Linux/Windows monotonic Instant backends.
 - [x] Elapsed/duration_since with backwards-clock errors.
 - [x] Deterministic duration/instant arithmetic regressions.
-- [ ] Unit-safe minute/hour constructors.
-- [ ] Wall-clock instants.
-- [ ] Civil dates and times.
+- [x] Unit-safe minute/hour constructors.
+- [x] Wall-clock instants.
+- [x] Civil dates and times.
 - [ ] Time zones.
 - [ ] UTC offsets.
-- [ ] Unix timestamps.
-- [ ] Parsing.
-- [ ] Formatting.
-- [ ] General temporal comparison surface.
+- [x] Unix timestamps.
+- [x] Parsing.
+- [x] Formatting.
+- [x] General temporal comparison surface.
 - [ ] Duration-based sleeping.
 - [ ] Timers.
 - [ ] Deadline abstraction.
-- [ ] Leap-second/range/calendar policy.
+- [x] Leap-second/range/calendar policy.
 - [ ] Time serialization.
 
 ### Serialization
@@ -240,7 +240,8 @@ composition, passes ownership analysis, and `qz test` from the repository root
 passes all 38 `@test` functions (the procfs parser fixtures now live inside
 `src/os_memory.qz`). Process cleanup is
 explicit: there is no automatic `Child.free` hook. Windows process creation,
-portable cwd/environment mutation, buffered I/O, civil time, and TLS are absent.
+portable cwd/environment mutation, buffered I/O, named time zones, and TLS are
+absent; UTC civil time and RFC 3339 exist since 2026-11-08.
 
 The bounded receiver fixture excludes Headers/codec operations. The full HTTP
 round trip is exercised by the compiler repository's
