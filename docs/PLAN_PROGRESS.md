@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 54.2%. Remaining: 45.8%.**
+**Complete: 55.3%. Remaining: 44.7%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -38,7 +38,7 @@ release-readiness probability. New requirements change the denominator.
 | Concurrency | 4/12 | 33.3% | 66.7% |
 | Time | 15/19 | 78.9% | 21.1% |
 | Serialization | 7/15 | 46.7% | 53.3% |
-| Library-wide safety / other modules | 6/9 | 66.7% | 33.3% |
+| Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
 ## Requirements
 
@@ -224,7 +224,7 @@ Evidence: [AGENTS.md](../AGENTS.md).
 - [x] Owned dynamic-library handles with unsafe symbol casts.
 - [x] Owned text and local view migration.
 - [ ] Sound generic hash/equality/drop-aware collections.
-- [ ] Passing full standard-library suite including HTTP/JSON.
+- [x] Passing full standard-library suite including HTTP/JSON.
 - [ ] Final public API/documentation/target consistency audit.
 
 ## Verification boundary
