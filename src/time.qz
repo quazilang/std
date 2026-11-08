@@ -189,6 +189,15 @@ impl Instant {
         ret Ok(Duration { seconds: seconds, nanoseconds: nanoseconds - earlier.nanoseconds });
     }
 
+    // None if the result does not fit the instant representation.
+    pub fn checked_add(self: &Instant, duration: Duration) Option[Instant] {
+        const sum: Option[Duration] = Duration { seconds: self.seconds, nanoseconds: self.nanoseconds }
+            .checked_add(duration);
+        if (sum.is_none()) { ret None; }
+        const value: Duration = sum.unwrap();
+        Some(Instant { seconds: value.seconds, nanoseconds: value.nanoseconds })
+    }
+
     // -1, 0 or 1 as `self` is earlier than, equal to or later than `other`.
     pub fn compare(self: &Instant, other: &Instant) i32 {
         __compare_parts(self.seconds as i64, self.nanoseconds, other.seconds as i64, other.nanoseconds, false)
@@ -197,6 +206,60 @@ impl Instant {
     pub fn elapsed(self: Instant) Result[Duration, TimeError] {
         var current: Instant = Instant.now()?;
         ret current.duration_since(self);
+    }
+}
+
+// Block the calling thread for at least `duration`, rounded up to whole
+// milliseconds (the platform sleep granularity); saturates at u64::MAX ms.
+pub fn sleep(duration: Duration) void {
+    core.sleep_ms(__ceil_milliseconds(&duration));
+}
+
+fn __ceil_milliseconds(duration: &Duration) u64 {
+    const extra: u64 = ((duration.nanoseconds as u64) + 999999) / 1000000;
+    if (duration.seconds > (18446744073709551615 - extra) / 1000) { ret 18446744073709551615; }
+    duration.seconds * 1000 + extra
+}
+
+// A point on the monotonic clock by which an operation should finish.
+pub struct Deadline {
+    at: Instant,
+}
+
+impl Deadline {
+    pub fn at(instant: Instant) Deadline { Deadline { at: instant } }
+
+    // The deadline `duration` from now; OutOfRange if it cannot be represented.
+    pub fn after(duration: Duration) Result[Deadline, TimeError] {
+        const now: Instant = Instant.now()?;
+        const at: Option[Instant] = now.checked_add(duration);
+        if (at.is_none()) { ret Err(TimeError.OutOfRange); }
+        Ok(Deadline { at: at.unwrap() })
+    }
+
+    // Time left before the deadline, or zero once it has passed.
+    pub fn remaining(self: &Deadline) Result[Duration, TimeError] {
+        const now: Instant = Instant.now()?;
+        Ok(self.remaining_at(&now))
+    }
+
+    pub fn has_expired(self: &Deadline) Result[bool, TimeError] {
+        const left: Duration = self.remaining()?;
+        Ok(left.seconds == 0 && left.nanoseconds == 0)
+    }
+
+    // `remaining` measured from an explicit instant (deterministic for tests).
+    pub fn remaining_at(self: &Deadline, now: &Instant) Duration {
+        if (__compare_parts(now.seconds as i64, now.nanoseconds, self.at.seconds as i64, self.at.nanoseconds, false) >= 0) {
+            ret Duration.zero();
+        }
+        var seconds: u64 = self.at.seconds - now.seconds;
+        var nanoseconds: u32 = self.at.nanoseconds;
+        if (nanoseconds < now.nanoseconds) {
+            seconds = seconds - 1;
+            nanoseconds = nanoseconds + 1000000000;
+        }
+        Duration { seconds: seconds, nanoseconds: nanoseconds - now.nanoseconds }
     }
 }
 
@@ -744,4 +807,33 @@ fn system_time_now_is_after_2020() void {
     if (now.is_err()) { panic("wall clock unavailable"); }
     // 2020-01-01T00:00:00Z; a sanity bound, not a dependency on the local zone.
     if (now.unwrap().unix_seconds() < 1577836800) { panic("wall clock is before 2020"); }
+}
+
+@test
+fn deadline_remaining_counts_down_and_stops_at_zero() void {
+    const deadline = Deadline.at(Instant { seconds: 10, nanoseconds: 500000000 });
+    const before = Instant { seconds: 9, nanoseconds: 700000000 };
+    const early = deadline.remaining_at(&before);
+    if (early.seconds() != 0 || early.subsec_nanoseconds() != 800000000) { panic("remaining time is wrong"); }
+    const after = Instant { seconds: 11, nanoseconds: 0 };
+    const late = deadline.remaining_at(&after);
+    if (late.seconds() != 0 || late.subsec_nanoseconds() != 0) { panic("an expired deadline must report zero"); }
+    const huge = Instant { seconds: 18446744073709551615, nanoseconds: 999999999 };
+    if (huge.checked_add(Duration.from_nanoseconds(1)).is_some()) { panic("instant overflow accepted"); }
+}
+
+@test
+fn sleep_rounds_up_and_waits_at_least_the_duration() void {
+    const tiny = Duration.from_nanoseconds(1);
+    const whole = Duration.from_milliseconds(1500);
+    if (__ceil_milliseconds(&tiny) != 1) { panic("partial millisecond not rounded up"); }
+    if (__ceil_milliseconds(&whole) != 1500) { panic("whole milliseconds changed"); }
+    const maximum = Duration { seconds: 18446744073709551615, nanoseconds: 0 };
+    if (__ceil_milliseconds(&maximum) != 18446744073709551615) { panic("millisecond conversion did not saturate"); }
+    // A lower bound only: the scheduler may wake later, never earlier.
+    const start = Instant.now().unwrap();
+    sleep(Duration.from_milliseconds(5));
+    const elapsed = start.elapsed().unwrap();
+    const requested = Duration.from_milliseconds(5);
+    if (elapsed.compare(&requested) < 0) { panic("sleep returned early"); }
 }
