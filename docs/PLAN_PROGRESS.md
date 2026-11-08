@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 55.3%. Remaining: 44.7%.**
+**Complete: 55.9%. Remaining: 44.1%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -32,7 +32,7 @@ release-readiness probability. New requirements change the denominator.
 | Filesystem / I/O | 9/16 | 56.2% | 43.8% |
 | Operating-system APIs | 5/10 | 50.0% | 50.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
-| Networking / TLS | 9/17 | 52.9% | 47.1% |
+| Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 7/11 | 63.6% | 36.4% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
@@ -111,7 +111,7 @@ Evidence: [src/net.qz](../src/net.qz).
 - [x] Exclusive socket shutdown/close lifecycle.
 - [x] Structured NetError surface.
 - [x] Deterministic transport/receiver regression fixtures.
-- [ ] Timeout/deadline API.
+- [x] Timeout/deadline API.
 - [ ] Common streaming-I/O integration.
 - [ ] Maintained TLS transport backend.
 - [ ] Certificate-chain verification.
