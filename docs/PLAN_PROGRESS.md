@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 56.4%. Remaining: 43.6%.**
+**Complete: 57.0%. Remaining: 43.0%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -36,7 +36,7 @@ release-readiness probability. New requirements change the denominator.
 | Mathematics | 7/11 | 63.6% | 36.4% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 4/12 | 33.3% | 66.7% |
-| Time | 16/19 | 84.2% | 15.8% |
+| Time | 17/19 | 89.5% | 10.5% |
 | Serialization | 7/15 | 46.7% | 53.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
@@ -182,7 +182,7 @@ Evidence: [src/time.qz](../src/time.qz).
 - [x] Wall-clock instants.
 - [x] Civil dates and times.
 - [ ] Time zones.
-- [ ] UTC offsets.
+- [x] UTC offsets.
 - [x] Unix timestamps.
 - [x] Parsing.
 - [x] Formatting.

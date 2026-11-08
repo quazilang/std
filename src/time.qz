@@ -440,6 +440,28 @@ impl SystemTime {
         }
     }
 
+    // Wall-clock fields at a fixed offset; None if they leave years 0001-9999.
+    pub fn to_offset(self: &SystemTime, offset: &UtcOffset) Option[DateTime] {
+        const shifted: Option[SystemTime] = SystemTime.from_unix(self.seconds + (offset.seconds as i64), self.nanoseconds);
+        if (shifted.is_none()) { ret None; }
+        Some(shifted.unwrap().to_utc())
+    }
+
+    // RFC 3339 text at a fixed offset, e.g. `2000-02-29T14:34:56+02:00`
+    // (`Z` for UTC); None if the local fields leave years 0001-9999.
+    pub fn format_rfc3339_at(self: &SystemTime, offset: &UtcOffset) Option[String] {
+        const local: Option[DateTime] = self.to_offset(offset);
+        if (local.is_none()) { ret None; }
+        const text: String = local.unwrap().format_rfc3339();
+        if (offset.seconds == 0) { ret Some(text); }
+        const body: String = text[0:(text.len() as isize) - 1];
+        var output: String = body.push_str(if (offset.seconds < 0) { "-" } else { "+" });
+        const magnitude: i64 = if (offset.seconds < 0) { -(offset.seconds as i64) } else { offset.seconds as i64 };
+        output = __push_padded(output, magnitude / 3600, 2);
+        output = output.push_str(":");
+        Some(__push_padded(output, (magnitude % 3600) / 60, 2))
+    }
+
     // RFC 3339 UTC text, e.g. `2026-11-08T09:05:00Z`; nonzero fractions use
     // nine digits (`...:00.000000123Z`).
     pub fn format_rfc3339(self: &SystemTime) String {
@@ -563,6 +585,26 @@ fn __push_padded(output: String, value: i64, width: usize) String {
         padding = padding + 1;
     }
     result.push_str(digits.as_str())
+}
+
+// A fixed offset from UTC in whole minutes, -23:59 through +23:59. It is not
+// a time zone: it carries no daylight-saving rules.
+pub struct UtcOffset {
+    seconds: i32,
+}
+
+impl UtcOffset {
+    pub fn utc() UtcOffset { UtcOffset { seconds: 0 } }
+
+    // `hours` carries the sign; `minutes` is 0-59 (e.g. (-5, 30) is -05:30).
+    pub fn from_hours_minutes(hours: i32, minutes: i32) Option[UtcOffset] {
+        if (hours < -23 || hours > 23 || minutes < 0 || minutes > 59) { ret None; }
+        const magnitude: i32 = (if (hours < 0) { -hours } else { hours }) * 3600 + minutes * 60;
+        Some(UtcOffset { seconds: if (hours < 0) { -magnitude } else { magnitude } })
+    }
+
+    // Seconds east of UTC.
+    pub fn seconds(self: &UtcOffset) i32 { self.seconds }
 }
 
 // A proleptic-Gregorian UTC date and time of day.
@@ -836,4 +878,26 @@ fn sleep_rounds_up_and_waits_at_least_the_duration() void {
     const elapsed = start.elapsed().unwrap();
     const requested = Duration.from_milliseconds(5);
     if (elapsed.compare(&requested) < 0) { panic("sleep returned early"); }
+}
+
+@test
+fn utc_offsets_shift_wall_fields_and_format() void {
+    if (UtcOffset.from_hours_minutes(24, 0).is_some() || UtcOffset.from_hours_minutes(1, 60).is_some()) {
+        panic("out-of-range offset accepted");
+    }
+    const east = UtcOffset.from_hours_minutes(2, 0).unwrap();
+    const west = UtcOffset.from_hours_minutes(-5, 30).unwrap();
+    if (west.seconds() != -19800) { panic("negative offset sign is wrong"); }
+    const instant = SystemTime.from_unix(951827696, 0).unwrap();
+    const local = instant.to_offset(&east).unwrap();
+    if (local.hour() != 14 || local.minute() != 34) { panic("east offset did not shift the hour"); }
+    const text: String = instant.format_rfc3339_at(&west).unwrap();
+    if (text.as_str() != "2000-02-29T07:04:56-05:30") { panic("negative offset formatting is wrong"); }
+    const parsed = SystemTime.parse_rfc3339(text.as_str()).unwrap();
+    if (parsed.compare(&instant) != 0) { panic("offset text did not round-trip"); }
+    const utc = UtcOffset.utc();
+    const zulu: String = instant.format_rfc3339_at(&utc).unwrap();
+    if (zulu.as_str() != "2000-02-29T12:34:56Z") { panic("zero offset must use Z"); }
+    const last = SystemTime.from_unix(253402300799, 0).unwrap();
+    if (last.to_offset(&east).is_some()) { panic("local fields past year 9999 accepted"); }
 }
