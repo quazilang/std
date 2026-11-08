@@ -29,6 +29,11 @@ pub type ThreadCallback = fn(*u8) u32;
 @intrinsic("quazi.thread.spawn")
 pub unsafe fn thread_spawn(f: ThreadCallback) usize;
 
+// Like thread_spawn, but passes `arg` as the callback's argument instead of
+// NULL. The caller must keep `arg` valid until the thread is joined.
+@intrinsic("quazi.thread.spawn_arg")
+pub unsafe fn thread_spawn_arg(f: ThreadCallback, arg: *u8) usize;
+
 // Wait for the thread identified by handle to finish.
 // On Linux also frees the pthread_t storage allocated by thread_spawn.
 // On Windows closes the thread handle after waiting.
