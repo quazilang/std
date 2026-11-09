@@ -72,6 +72,85 @@ impl Thread {
     pub fn handle(self: Thread) usize { ret self.handle; }
 }
 
+// ── JoinHandle[T] (D-019 10b) ─────────────────────────────────────────────────
+//
+// `thread.spawn(|| work(n))` runs a Quazi closure on a new OS thread;
+// `join()` waits and returns its result. The closure follows the ordinary
+// capture rules (plain scalars). A panic on the thread still ends the program.
+//
+// Block (32 bytes): +0 closure, +8 type-erased runner, +16 result slot.
+
+pub struct JoinHandle[T] {
+    block: *u8,
+    handle: usize,
+}
+
+unsafe fn __run_closure[T](block: *u8) void {
+    const f: fn() T = *(block as *fn() T);
+    const value: T = f();
+    *((block + 16) as *T) = value;
+}
+
+unsafe fn __thread_body(block: *u8) void {
+    // This binding owns the runner closure from here and releases it on return.
+    const runner: fn(*u8) void = *((block + 8) as *fn(*u8) void);
+    runner(block);
+}
+
+@cfg(target_os = "linux")
+@export("__quazi_std_thread_entry")
+pub unsafe fn __thread_entry(block: *u8) *u8 {
+    __thread_body(block);
+    ret 0;
+}
+
+@cfg(target_os = "netbsd")
+@export("__quazi_std_thread_entry")
+pub unsafe fn __thread_entry(block: *u8) *u8 {
+    __thread_body(block);
+    ret 0;
+}
+
+@cfg(target_os = "windows")
+@export("__quazi_std_thread_entry")
+pub unsafe fn __thread_entry(block: *u8) u32 {
+    __thread_body(block);
+    ret 0;
+}
+
+// Run `f` on a new OS thread.
+pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError] {
+    var block: *u8 = 0;
+    var handle: usize = 0;
+    unsafe {
+        block = core.malloc(32);
+        if (block == 0) { ret Err(ThreadError.CreationFailed); }
+        *(block as *fn() T) = f;
+        const runner: fn(*u8) void = |b| __run_closure[T](b);
+        *((block + 8) as *fn(*u8) void) = runner;
+        handle = thread_spawn_arg(__thread_entry, block);
+        if (handle == 0) {
+            core.free(*((block + 8) as **u8));
+            core.free(block);
+            ret Err(ThreadError.CreationFailed);
+        }
+    }
+    Ok(JoinHandle { block: block, handle: handle })
+}
+
+impl JoinHandle[T] {
+    // Wait for the thread and return its result.
+    pub fn join(self: JoinHandle[T]) Result[T, ThreadError] {
+        var value: T;
+        unsafe {
+            thread_join(self.handle);
+            value = *((self.block + 16) as *T);
+            core.free(self.block);
+        }
+        Ok(value)
+    }
+}
+
 // ── Synchronization ───────────────────────────────────────────────────────────
 //
 // Until JoinHandle[T] can move values into threads, a value is shared with a
@@ -246,6 +325,19 @@ fn atomic_i64_operations_are_consistent() void {
     var view = AtomicI64View { cell: 0 };
     unsafe { view = AtomicI64.at(value.as_ptr()); }
     if (view.fetch_add(3) != -3 || value.load() != 0) { panic("view shares the owner's cell"); }
+}
+
+fn square(n: i64) i64 { n * n }
+
+@test
+fn spawned_threads_return_their_results() void {
+    var total: i64 = 0;
+    for i : 0..8 {
+        const n: i64 = i as i64;
+        const handle = spawn(|| square(n)).unwrap();
+        total = total + handle.join().unwrap();
+    }
+    if (total != 140) { panic("thread results"); }
 }
 
 @test
