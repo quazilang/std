@@ -249,7 +249,7 @@ fn append_member(output: str, key: str, value: String, max_output: usize, max_de
 pub fn object_with_limits(keys: Array[str], values: Array[String], max_output: usize, max_depth: usize) Result[String, JsonError] {
     if (keys.len() != values.len()) { ret Err(JsonError.ObjectLengthMismatch); }
     if (max_output < 2) { ret Err(JsonError.OutputLimit); }
-    var output: String = String.from("{");
+    var output: String = String.from("{{");
     // Owned elements cannot be read in place yet; take each value in order.
     var remaining: Array[String] = values;
     for i : 0..keys.len() {
@@ -262,7 +262,7 @@ pub fn object_with_limits(keys: Array[str], values: Array[String], max_output: u
         if (appended.is_err()) { ret Err(appended.unwrap_err()); }
         output = appended.unwrap();
     }
-    output = output.push_str("}");
+    output = output.push_str("}}");
     const valid: Result[bool, JsonError] = validate_with_limits(output.as_str(), max_output, max_depth);
     if (valid.is_err()) { ret Err(valid.unwrap_err()); }
     ret Ok(output);
