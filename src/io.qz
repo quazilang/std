@@ -195,6 +195,8 @@ pub enum ReadError {
     InputFailed,
     InvalidDelimiter,
     InvalidUtf8,
+    // Standard input ended before any byte was read (an empty line is Ok("")).
+    EndOfInput,
 }
 
 // Put an interactive terminal into byte-at-a-time mode. A null state means
@@ -374,7 +376,16 @@ pub fn read(delimiter: str) Result[String, ReadError] {
 
         var n: isize = 0;
         unsafe { n = sys_read(0, buf + len, 1); }
-        if (n == 0) { break; }
+        if (n == 0) {
+            if (len == 0) {
+                unsafe {
+                    __io_end_immediate_input(input_state);
+                    free(buf);
+                }
+                ret Err(ReadError.EndOfInput);
+            }
+            break;
+        }
         if (n < 0) {
             unsafe {
                 __io_end_immediate_input(input_state);
