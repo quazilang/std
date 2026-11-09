@@ -1,6 +1,7 @@
 // std.thread — threading primitives
-// Cross-platform: Linux uses pthread_create/pthread_join,
-// Windows uses CreateThread/WaitForSingleObject.
+// Cross-platform: Linux uses the compiler's embedded clone/futex runtime
+// (pthread_create/pthread_join when the project links libc), NetBSD uses
+// pthreads, Windows uses CreateThread/WaitForSingleObject.
 // Thread callbacks use the platform C ABI. They must be exported functions;
 // captured Quazi closures cannot cross this native boundary.
 import std.core;
