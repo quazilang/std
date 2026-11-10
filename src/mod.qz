@@ -11,6 +11,7 @@ pub import netbsd;
 pub import windows;
 pub import win32_core;
 pub import fs;
+pub import path;
 pub import net;
 pub import os;
 pub import process;

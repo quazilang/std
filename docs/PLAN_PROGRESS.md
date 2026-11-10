@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 63.9%. Remaining: 36.1%.**
+**Complete: 64.5%. Remaining: 35.5%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -29,7 +29,7 @@ release-readiness probability. New requirements change the denominator.
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 10/16 | 62.5% | 37.5% |
+| Filesystem / I/O | 11/16 | 68.8% | 31.2% |
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
@@ -57,7 +57,9 @@ Evidence: [src/fs.qz](../src/fs.qz).
 - [x] Structured portable FsError surface.
 - [ ] Buffered reader/writer abstractions.
 - [ ] Common streaming reader/writer interfaces.
-- [ ] Structured path abstraction.
+- [x] Structured path abstraction (`std.path.Path`: join, parent, file_name, stem,
+  extension, is_absolute, components, lexical normalize; Windows separators and
+  drive roots; 2026-11-10).
 - [ ] Structured metadata API.
 - [ ] Directory iterator/traversal API (`read_dir_names` lists one directory as owned
   names since 2026-11-10; no streaming iterator or recursive traversal yet).

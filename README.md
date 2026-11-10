@@ -4,15 +4,15 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 63.9%.**
+**Plan completion: 64.5%.**
 
-**Remaining work: 36.1%.**
+**Remaining work: 35.5%.**
 
 Completion of unfinished plan items:
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 10/16 | 62.5% | 37.5% |
+| Filesystem / I/O | 11/16 | 68.8% | 31.2% |
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
@@ -36,6 +36,7 @@ or production readiness.
 - `collections`: Fallible, non-panicking `usize` map and set types.
 - `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
+- `path`: Lexical `Path` manipulation (join, parent, names, extensions, normalize).
 - `json`: Bounded JSON syntax validation and safe JSON string-token encoding.
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.

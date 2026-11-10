@@ -1,0 +1,244 @@
+// Quazi Programming Language
+// Copyright (c) 2026 quazilang
+// SPDX-License-Identifier: 0BSD
+
+// Lexical path manipulation. Nothing here touches the file system: `join`,
+// `parent` and `normalize` work on the text alone, so `normalize` does not
+// resolve symbolic links. `/` separates components everywhere; Windows builds
+// also accept `\` and treat `C:\` and `\\server\share` prefixes as absolute.
+// Indexes count Unicode scalars, like every `str` operation.
+
+pub struct Path {
+    text: String,
+}
+
+fn is_separator(text: str, index: usize) bool {
+    const piece: String = text[index:index + 1];
+    if (piece.as_str() == "/") { ret true; }
+    @cfg(target_os = "windows") {
+        if (piece.as_str() == "\\") { ret true; }
+    }
+    false
+}
+
+// Length of a Windows drive prefix (`C:`), or 0.
+fn drive_length(text: str) usize {
+    @cfg(target_os = "windows") {
+        if (text.len() >= 2 && text[1:2].as_str() == ":") { ret 2; }
+    }
+    0
+}
+
+fn separator() str {
+    @cfg(target_os = "windows") { ret "\\"; }
+    "/"
+}
+
+// End of the text once trailing separators are dropped (a root keeps one).
+fn trimmed_end(text: str) usize {
+    var end: usize = text.len();
+    const floor: usize = path.drive_length(text) + 1;
+    for (end > floor && path.is_separator(text, end - 1)) { end = end - 1; }
+    end
+}
+
+// Start of the last component of text[0:end].
+fn last_component_start(text: str, end: usize) usize {
+    var start: usize = end;
+    const floor: usize = path.drive_length(text);
+    for (start > floor && !path.is_separator(text, start - 1)) { start = start - 1; }
+    start
+}
+
+impl Path {
+    pub fn new(text: str) Path { Path { text: String.from(text) } }
+
+    pub fn as_str(self: &Path) str { ret self.text.as_str(); }
+
+    // A rooted path: `/x`, and on Windows also `\x`, `C:\x` and `\\host\x`.
+    pub fn is_absolute(self: &Path) bool {
+        const text = self.text.as_str();
+        const drive: usize = path.drive_length(text);
+        text.len() > drive && path.is_separator(text, drive)
+    }
+
+    // `child` appended with one separator; an absolute `child` replaces the
+    // path, as an empty base yields `child` unchanged.
+    pub fn join(self: &Path, child: str) Path {
+        const base = self.text.as_str();
+        const appended = Path.new(child);
+        if (base.is_empty() || appended.is_absolute()) { ret appended; }
+        var text: String = String.from(base);
+        if (!path.is_separator(base, base.len() - 1)) { text = text.push_str(path.separator()); }
+        Path { text: text.push_str(child) }
+    }
+
+    // The last component, unless the path ends in a root or `..`.
+    pub fn file_name(self: &Path) Option[String] {
+        const text = self.text.as_str();
+        const end: usize = path.trimmed_end(text);
+        const start: usize = path.last_component_start(text, end);
+        if (start == end) { ret None; }
+        const name: String = text[start:end];
+        if (name.as_str() == ".." || name.as_str() == ".") { ret None; }
+        Some(name)
+    }
+
+    // The path without its last component: `a/b` -> `a`, `a` -> ``, and a
+    // root or empty path has none.
+    pub fn parent(self: &Path) Option[Path] {
+        const text = self.text.as_str();
+        const end: usize = path.trimmed_end(text);
+        const start: usize = path.last_component_start(text, end);
+        if (start == end) { ret None; }
+        var cut: usize = start;
+        const floor: usize = path.drive_length(text) + 1;
+        for (cut > floor && path.is_separator(text, cut - 1)) { cut = cut - 1; }
+        if (cut == 1 && start == 1 && path.is_separator(text, 0)) { ret Some(Path { text: text[0:1] }); }
+        if (cut < floor && start > path.drive_length(text)) { ret Some(Path { text: text[0:start] }); }
+        Some(Path { text: text[0:cut] })
+    }
+
+    // The file name after its last `.`; none for `.hidden` or no dot.
+    pub fn extension(self: &Path) Option[String] {
+        const name_option = self.file_name();
+        if (name_option.is_none()) { ret None; }
+        const name: String = name_option.unwrap();
+        const text = name.as_str();
+        var dot: usize = text.len();
+        for (dot > 0 && text[dot - 1:dot].as_str() != ".") { dot = dot - 1; }
+        if (dot <= 1) { ret None; }
+        Some(text[dot:text.len()])
+    }
+
+    // The file name without its extension.
+    pub fn stem(self: &Path) Option[String] {
+        const name_option = self.file_name();
+        if (name_option.is_none()) { ret None; }
+        const name: String = name_option.unwrap();
+        const text = name.as_str();
+        var dot: usize = text.len();
+        for (dot > 0 && text[dot - 1:dot].as_str() != ".") { dot = dot - 1; }
+        if (dot <= 1) { ret Some(String.from(text)); }
+        Some(text[0:dot - 1])
+    }
+
+    // Components between separators, skipping empty ones and `.`; a root
+    // is reported as the separator (with its drive on Windows).
+    pub fn components(self: &Path) Array[String] {
+        const text = self.text.as_str();
+        var parts: Array[String] = Array.new();
+        var index: usize = 0;
+        if (self.is_absolute()) {
+            const root_end: usize = path.drive_length(text) + 1;
+            parts.push(text[0:root_end]);
+            index = root_end;
+        } else if (path.drive_length(text) > 0) {
+            parts.push(text[0:2]);
+            index = 2;
+        }
+        const length: usize = text.len();
+        for (index < length) {
+            var end: usize = index;
+            for (end < length && !path.is_separator(text, end)) { end = end + 1; }
+            if (end > index) {
+                const piece: String = text[index:end];
+                if (piece.as_str() != ".") { parts.push(piece); }
+            }
+            index = end + 1;
+        }
+        parts
+    }
+
+    // `.` components and duplicate separators removed and `x/..` pairs
+    // collapsed lexically; leading `..` of a relative path are kept and a
+    // root swallows `..`. An empty result is `.`.
+    pub fn normalize(self: &Path) Path {
+        const source = self.text.as_str();
+        const rooted: bool = self.is_absolute();
+        var index: usize = path.drive_length(source);
+        var prefix: String = String.from(source[0:index].as_str());
+        if (rooted) {
+            prefix = prefix.push_str(source[index:index + 1].as_str());
+            index = index + 1;
+        }
+        var kept: Array[String] = Array.new();
+        var depth: usize = 0;
+        const length: usize = source.len();
+        for (index < length) {
+            var end: usize = index;
+            for (end < length && !path.is_separator(source, end)) { end = end + 1; }
+            if (end > index) {
+                const piece: String = source[index:end];
+                if (piece.as_str() == "..") {
+                    if (depth > 0) {
+                        const last: usize = kept.len() - 1;
+                        kept.remove(last);
+                        depth = depth - 1;
+                    } else if (!rooted) {
+                        kept.push(String.from(".."));
+                    }
+                } else if (piece.as_str() != ".") {
+                    kept.push(piece);
+                    depth = depth + 1;
+                }
+            }
+            index = end + 1;
+        }
+        var text: String = prefix;
+        var count: usize = 0;
+        for (kept.len() > 0) {
+            const part: String = kept.remove(0);
+            if (count > 0) { text = text.push_str(path.separator()); }
+            text = text.push_str(part.as_str());
+            count = count + 1;
+        }
+        if (text.is_empty()) { ret Path.new("."); }
+        Path { text: text }
+    }
+}
+
+fn check_name(value: Option[String], expected: str, what: str) {
+    if (value.is_none()) {
+        if (expected != "<none>") { panic("{what}: expected {expected}, got none"); }
+        ret;
+    }
+    const text: String = value.unwrap();
+    if (text.as_str() != expected) { panic("{what}: expected {expected}, got {text}"); }
+}
+
+@test
+fn paths_split_join_and_normalize_lexically() {
+    const file = Path.new("/srv/data/report.tar.gz");
+    path.check_name(file.file_name(), "report.tar.gz", "file_name");
+    path.check_name(file.extension(), "gz", "extension");
+    path.check_name(file.stem(), "report.tar", "stem");
+    if (file.parent().unwrap().as_str() != "/srv/data") { panic("parent"); }
+    if (!file.is_absolute() || Path.new("a/b").is_absolute()) { panic("is_absolute"); }
+
+    path.check_name(Path.new(".bashrc").extension(), "<none>", "hidden file extension");
+    path.check_name(Path.new(".bashrc").stem(), ".bashrc", "hidden file stem");
+    path.check_name(Path.new("notes.").extension(), "", "trailing dot");
+    path.check_name(Path.new("dir/").file_name(), "dir", "trailing separator");
+    path.check_name(Path.new("a/..").file_name(), "<none>", "dot-dot name");
+    path.check_name(Path.new("/").file_name(), "<none>", "root name");
+    path.check_name(Path.new("λ/🙂.qz").stem(), "🙂", "unicode stem");
+
+    if (Path.new("/").parent().is_some()) { panic("root parent"); }
+    if (Path.new("/top").parent().unwrap().as_str() != "/") { panic("parent of /top"); }
+    if (Path.new("name").parent().unwrap().as_str() != "") { panic("parent of a bare name"); }
+
+    if (Path.new("a").join("b").as_str() != "a/b") { panic("join"); }
+    if (Path.new("a/").join("b").as_str() != "a/b") { panic("join after separator"); }
+    if (Path.new("a").join("/abs").as_str() != "/abs") { panic("absolute join"); }
+    if (Path.new("").join("b").as_str() != "b") { panic("empty base join"); }
+
+    const spaced = Path.new("/a//b/./c/");
+    const parts: Array[String] = spaced.components();
+    if (parts.len() != 4) { panic("components count"); }
+
+    if (Path.new("a/./b/../c//d").normalize().as_str() != "a/c/d") { panic("normalize"); }
+    if (Path.new("../x/../../y").normalize().as_str() != "../../y") { panic("leading dot-dot"); }
+    if (Path.new("/../a/..").normalize().as_str() != "/") { panic("root swallows dot-dot"); }
+    if (Path.new("a/..").normalize().as_str() != ".") { panic("empty normalizes to dot"); }
+}
