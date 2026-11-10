@@ -880,6 +880,36 @@ fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
     ret Err(FsError.Unsupported);
 }
 
+fn joined(base: str, name: str) String {
+    if (base.is_empty()) { ret String.from(name); }
+    String.from(base).push_str("/").push_str(name)
+}
+
+// Every entry below `root` as a path relative to it (`a`, `a/b.txt`, ...),
+// depth first. Directories are listed before their contents; symbolic links
+// are reported but not followed, so cycles cannot recur. `/` separates the
+// components on every platform (Windows accepts it too).
+pub fn walk(root: str) Result[Array[String], FsError] {
+    var found: Array[String] = Array.new();
+    var pending: Array[String] = Array.new();
+    pending.push(String.new());
+    for (pending.len() > 0) {
+        const last: usize = pending.len() - 1;
+        const relative: String = pending.remove(last);
+        const directory: String = joined(root, relative.as_str());
+        var names: Array[String] = read_dir_names(directory.as_str())?;
+        for (names.len() > 0) {
+            const name: String = names.remove(0);
+            const child: String = joined(relative.as_str(), name.as_str());
+            const full: String = joined(root, child.as_str());
+            const info: Metadata = symlink_metadata(full.as_str())?;
+            if (info.is_dir()) { pending.push(String.from(child.as_str())); }
+            found.push(child);
+        }
+    }
+    Ok(found)
+}
+
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
@@ -1098,4 +1128,33 @@ fn metadata_reports_size_kind_and_time() {
     remove(path).unwrap();
     const missing = metadata("/tmp/quazi_fs_metadata_absent");
     if (!match missing { Err(FsError.NotFound) => true, _ => false }) { panic("NotFound"); }
+}
+
+@test
+fn walk_lists_nested_entries_without_following_links() {
+    const root = "/tmp/quazi_fs_walk_test";
+    mkdir(root).unwrap();
+    mkdir("/tmp/quazi_fs_walk_test/a").unwrap();
+    mkdir("/tmp/quazi_fs_walk_test/a/b").unwrap();
+    var file = File.create("/tmp/quazi_fs_walk_test/a/b/deep.txt").unwrap();
+    file.close();
+    // A link back to the root must not be descended into.
+    symlink(root, "/tmp/quazi_fs_walk_test/a/loop").unwrap();
+    var entries: Array[String] = walk(root).unwrap();
+    const total: usize = entries.len();
+    var expected: usize = 0;
+    for (entries.len() > 0) {
+        const last: usize = entries.len() - 1;
+        const entry: String = entries.remove(last);
+        const text = entry.as_str();
+        if (text == "a" || text == "a/b" || text == "a/b/deep.txt" || text == "a/loop") {
+            expected = expected + 1;
+        }
+    }
+    if (total != 4 || expected != 4) { panic("walk entries"); }
+    remove("/tmp/quazi_fs_walk_test/a/loop").unwrap();
+    remove("/tmp/quazi_fs_walk_test/a/b/deep.txt").unwrap();
+    rmdir("/tmp/quazi_fs_walk_test/a/b").unwrap();
+    rmdir("/tmp/quazi_fs_walk_test/a").unwrap();
+    rmdir(root).unwrap();
 }
