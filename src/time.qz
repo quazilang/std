@@ -221,6 +221,89 @@ fn __ceil_milliseconds(duration: &Duration) u64 {
     duration.seconds * 1000 + extra
 }
 
+// A periodic timer on the monotonic clock. Ticks are scheduled at
+// start + k * period, so repeated waits do not drift; ticks missed while the
+// caller was busy are skipped and reported by the next `wait`.
+pub struct Interval {
+    period_nanos: u64,
+    next_seconds: u64,
+    next_nanos: u32,
+}
+
+impl Interval {
+    // The first tick is one `period` from now; a zero period is OutOfRange.
+    pub fn new(period: Duration) Result[Interval, TimeError] {
+        const now: Instant = Instant.now()?;
+        Interval.starting_at(&now, period)
+    }
+
+    // An interval whose first tick is one `period` after `start`.
+    pub fn starting_at(start: &Instant, period: Duration) Result[Interval, TimeError] {
+        if (period.seconds > 18000000000 || (period.seconds == 0 && period.nanoseconds == 0)) {
+            ret Err(TimeError.OutOfRange);
+        }
+        const nanos: u64 = period.seconds * 1000000000 + (period.nanoseconds as u64);
+        var interval = Interval { period_nanos: nanos, next_seconds: start.seconds, next_nanos: start.nanoseconds };
+        interval.step(1);
+        Ok(interval)
+    }
+
+    fn step(self: &Interval!, ticks: u64) {
+        const total: u64 = (self.next_nanos as u64) + self.period_nanos * ticks;
+        self.next_seconds = self.next_seconds + total / 1000000000;
+        self.next_nanos = (total % 1000000000) as u32;
+    }
+
+    // Blocks until the next tick and returns how many ticks have passed
+    // (1, or more when the caller fell behind).
+    pub fn wait(self: &Interval!) Result[u64, TimeError] {
+        const now: Instant = Instant.now()?;
+        const left: Duration = self.until(&now);
+        if (left.seconds != 0 || left.nanoseconds != 0) { sleep(left); }
+        const after: Instant = Instant.now()?;
+        var ticks: u64 = self.advance_at(&after);
+        // Millisecond sleep granularity can wake a moment early.
+        for (ticks == 0) {
+            sleep(Duration.from_milliseconds(1));
+            const later: Instant = Instant.now()?;
+            ticks = self.advance_at(&later);
+        }
+        Ok(ticks)
+    }
+
+    // Time from `now` until the next tick, zero if it is due.
+    pub fn until(self: &Interval, now: &Instant) Duration {
+        if (__compare_parts(now.seconds as i64, now.nanoseconds, self.next_seconds as i64, self.next_nanos, false) >= 0) {
+            ret Duration.zero();
+        }
+        var seconds: u64 = self.next_seconds - now.seconds;
+        var nanoseconds: u32 = self.next_nanos;
+        if (nanoseconds < now.nanoseconds) {
+            seconds = seconds - 1;
+            nanoseconds = nanoseconds + 1000000000;
+        }
+        Duration { seconds: seconds, nanoseconds: nanoseconds - now.nanoseconds }
+    }
+
+    // Ticks due at `now` (0 before the next tick), moving the schedule past
+    // `now`; deterministic for tests.
+    pub fn advance_at(self: &Interval!, now: &Instant) u64 {
+        if (__compare_parts(now.seconds as i64, now.nanoseconds, self.next_seconds as i64, self.next_nanos, false) < 0) {
+            ret 0;
+        }
+        var late_seconds: u64 = now.seconds - self.next_seconds;
+        var late_nanos: u32 = now.nanoseconds;
+        if (late_nanos < self.next_nanos) {
+            late_seconds = late_seconds - 1;
+            late_nanos = late_nanos + 1000000000;
+        }
+        const late: u64 = late_seconds * 1000000000 + ((late_nanos - self.next_nanos) as u64);
+        const ticks: u64 = 1 + late / self.period_nanos;
+        self.step(ticks);
+        ticks
+    }
+}
+
 // A point on the monotonic clock by which an operation should finish.
 pub struct Deadline {
     at: Instant,
@@ -900,4 +983,23 @@ fn utc_offsets_shift_wall_fields_and_format() void {
     if (zulu.as_str() != "2000-02-29T12:34:56Z") { panic("zero offset must use Z"); }
     const last = SystemTime.from_unix(253402300799, 0).unwrap();
     if (last.to_offset(&east).is_some()) { panic("local fields past year 9999 accepted"); }
+}
+
+@test
+fn intervals_tick_without_drift_and_count_missed_ticks() {
+    const start = Instant { seconds: 100, nanoseconds: 900000000 };
+    var interval = Interval.starting_at(&start, Duration.from_milliseconds(250)).unwrap();
+    const early = Instant { seconds: 101, nanoseconds: 100000000 };
+    if (interval.advance_at(&early) != 0) { panic("ticked early"); }
+    if (interval.until(&early).subsec_nanoseconds() != 50000000) { panic("until"); }
+    const due = Instant { seconds: 101, nanoseconds: 150000000 };
+    if (interval.advance_at(&due) != 1) { panic("due tick"); }
+    // 1.2 s late: the tick at 101.40 plus four more periods were missed.
+    const late = Instant { seconds: 102, nanoseconds: 600000000 };
+    if (interval.advance_at(&late) != 5) { panic("missed ticks"); }
+    // The schedule stays on the 250 ms grid: next tick at 102.65.
+    if (interval.until(&late).subsec_nanoseconds() != 50000000) { panic("grid"); }
+    if (Interval.new(Duration.zero()).is_ok()) { panic("zero period"); }
+    var real = Interval.new(Duration.from_milliseconds(5)).unwrap();
+    if (real.wait().unwrap() < 1) { panic("wait"); }
 }
