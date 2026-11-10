@@ -4,7 +4,7 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 67.9%.**
+**Plan completion: 69.2%.**
 
 **Remaining work: 32.1%.**
 
@@ -34,7 +34,7 @@ or production readiness.
 
 - `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
 - `collections`: Fallible, non-panicking `usize` map and set types.
-- `fs`: Cross-platform owned files, whole-file reads, paths, and metadata operations.
+- `fs`: Cross-platform owned files, whole-file reads, directory iteration (`read_dir`/`DirEntry`), `Path`/`PathBuf`, and metadata operations.
 - `io`: Standard input, output, and error streams handling.
 - `path`: Lexical `Path` manipulation (join, parent, names, extensions, normalize).
 - `json`: Bounded JSON syntax validation and safe JSON string-token encoding.
@@ -42,6 +42,7 @@ or production readiness.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
 - `os`: Cross-platform host, memory, process, and environment information.
+- `process`: Child processes; `Command` builder with PATH lookup, working directory, and environment (Linux).
 - `thread`: Threading and concurrency primitives.
 - `unix` / `windows`: OS-specific platform bindings.
 

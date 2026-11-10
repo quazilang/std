@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 67.9%. Remaining: 32.1%.**
+**Complete: 69.2%. Remaining: 30.8%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -31,7 +31,7 @@ release-readiness probability. New requirements change the denominator.
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
 | Operating-system APIs | 7/10 | 70.0% | 30.0% |
-| Processes | 7/16 | 43.8% | 56.2% |
+| Processes | 9/16 | 56.2% | 43.8% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
@@ -98,8 +98,10 @@ Evidence: [src/process.qz](../src/process.qz).
 - [x] Structured errors and exit/signal status.
 - [x] wait and try_wait.
 - [x] Explicit termination and close/reap lifecycle.
-- [ ] Per-child environment overrides.
-- [ ] Per-child working directory.
+- [x] Per-child environment overrides (`Command.env/env_remove/env_clear`,
+  Linux; D-021, 2026-11-10).
+- [x] Per-child working directory (`Command.current_dir`, Linux; also PATH
+  lookup; D-021, 2026-11-10).
 - [ ] Piped standard streams.
 - [ ] Owned binary output capture.
 - [ ] Timeout/cancellation API.
