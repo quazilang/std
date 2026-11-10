@@ -910,6 +910,180 @@ pub fn walk(root: str) Result[Array[String], FsError] {
     Ok(found)
 }
 
+// ── Buffered I/O ────────────────────────────────────────────────────────────
+
+// Size of the LineReader and BufferedWriter buffers.
+fn buffer_size() usize { 65536 }
+
+// Reads a file line by line through one 64 KiB buffer. Lines end at `\n`
+// (a preceding `\r` is dropped too); the last line needs no terminator.
+// Every line must be valid UTF-8.
+pub struct LineReader {
+    file: File,
+    buffer: *u8,
+    start: usize,
+    end: usize,
+    done: bool,
+}
+
+impl LineReader {
+    pub fn open(path: str) Result[LineReader, FsError] {
+        const file: File = File.open(path)?;
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(buffer_size()); }
+        if (buffer == 0) { ret Err(FsError.AllocationFailed); }
+        Ok(LineReader { file: file, buffer: buffer, start: 0, end: 0, done: false })
+    }
+
+    // The next line without its terminator, or None at the end of the file.
+    pub fn read_line(self: &LineReader!) Result[Option[String], FsError] {
+        var line: *u8 = 0;
+        var length: usize = 0;
+        var capacity: usize = 0;
+        var found: bool = false;
+        for (!found) {
+            if (self.start == self.end) {
+                if (self.done) { break; }
+                var count: isize = 0;
+                const target: *u8 = self.buffer;
+                unsafe { count = self.file.read(target, buffer_size()); }
+                if (count < 0) {
+                    unsafe { if (line != 0) { core.free(line); } }
+                    @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+                    ret Err(fs_error(count as i32));
+                }
+                if (count == 0) {
+                    self.done = true;
+                    break;
+                }
+                self.start = 0;
+                self.end = count as usize;
+            }
+            // Copy up to the next newline (or the buffered rest) into `line`.
+            var stop: usize = self.start;
+            unsafe {
+                for (stop < self.end && *(self.buffer + stop) != 10) { stop = stop + 1; }
+            }
+            const piece: usize = stop - self.start;
+            if (length + piece + 1 > capacity) {
+                var grown: usize = capacity * 2;
+                if (grown < length + piece + 1) { grown = length + piece + 1; }
+                if (grown < 64) { grown = 64; }
+                unsafe { line = core.realloc(line, grown); }
+                if (line == 0) { ret Err(FsError.AllocationFailed); }
+                capacity = grown;
+            }
+            unsafe { core.memcpy(line + length, self.buffer + self.start, piece); }
+            length = length + piece;
+            if (stop < self.end) {
+                found = true;
+                self.start = stop + 1;
+            } else {
+                self.start = self.end;
+            }
+        }
+        if (!found && length == 0) {
+            unsafe { if (line != 0) { core.free(line); } }
+            ret Ok(None);
+        }
+        if (line == 0) {
+            unsafe { line = core.malloc(1); }
+            if (line == 0) { ret Err(FsError.AllocationFailed); }
+            capacity = 1;
+        }
+        unsafe {
+            if (length > 0 && *(line + length - 1) == 13) { length = length - 1; }
+            *(line + length) = 0;
+            if (!core.is_valid_utf8(line, length)) {
+                core.free(line);
+                ret Err(FsError.InvalidData);
+            }
+        }
+        var text: String = String.new();
+        unsafe { text = String.from_raw(line, length, capacity); }
+        Ok(Some(text))
+    }
+
+    pub fn free(self: LineReader) void {
+        if (self.buffer != 0) { unsafe { core.free(self.buffer); } }
+        self.buffer = 0;
+        self.file.close();
+    }
+}
+
+// Collects writes in a 64 KiB buffer and hands them to the file in large
+// pieces. `flush` reports write errors; dropping the writer flushes what is
+// left (ignoring errors, like closing a file) and closes the file.
+pub struct BufferedWriter {
+    file: File,
+    buffer: *u8,
+    used: usize,
+}
+
+impl BufferedWriter {
+    pub fn create(path: str) Result[BufferedWriter, FsError] {
+        const file: File = File.create(path)?;
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(buffer_size()); }
+        if (buffer == 0) { ret Err(FsError.AllocationFailed); }
+        Ok(BufferedWriter { file: file, buffer: buffer, used: 0 })
+    }
+
+    unsafe fn write_all(self: &BufferedWriter!, data: *u8, length: usize) Result[bool, FsError] {
+        var offset: usize = 0;
+        for (offset < length) {
+            const written: isize = self.file.write_raw(data + offset, length - offset);
+            if (written <= 0) {
+                @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+                ret Err(fs_error(written as i32));
+            }
+            offset = offset + (written as usize);
+        }
+        Ok(true)
+    }
+
+    pub fn write_str(self: &BufferedWriter!, text: str) Result[usize, FsError] {
+        const length: usize = text.bytes_len();
+        unsafe {
+            const data: *u8 = core.str_as_ptr(text);
+            if (self.used + length > buffer_size()) {
+                self.flush()?;
+            }
+            if (length >= buffer_size()) {
+                self.write_all(data, length)?;
+                ret Ok(length);
+            }
+            core.memcpy(self.buffer + self.used, data, length);
+        }
+        self.used = self.used + length;
+        Ok(length)
+    }
+
+    // Hands the buffered bytes to the operating system.
+    pub fn flush(self: &BufferedWriter!) Result[bool, FsError] {
+        if (self.used == 0) { ret Ok(true); }
+        const pending: usize = self.used;
+        self.used = 0;
+        const data: *u8 = self.buffer;
+        unsafe { self.write_all(data, pending)?; }
+        Ok(true)
+    }
+
+    pub fn free(self: BufferedWriter) void {
+        if (self.buffer != 0) {
+            const pending: usize = self.used;
+            self.used = 0;
+            unsafe {
+                const data: *u8 = self.buffer;
+                if (pending > 0) { self.write_all(data, pending); }
+                core.free(self.buffer);
+            }
+        }
+        self.buffer = 0;
+        self.file.close();
+    }
+}
+
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
@@ -1157,4 +1331,31 @@ fn walk_lists_nested_entries_without_following_links() {
     rmdir("/tmp/quazi_fs_walk_test/a/b").unwrap();
     rmdir("/tmp/quazi_fs_walk_test/a").unwrap();
     rmdir(root).unwrap();
+}
+
+@test
+fn buffered_writer_and_line_reader_round_trip() {
+    const path = "/tmp/quazi_fs_buffered_test.txt";
+    var writer = BufferedWriter.create(path).unwrap();
+    for i : 0..20000 {
+        const line = "line {i} λ\n";
+        writer.write_str(line.as_str()).unwrap();
+    }
+    writer.write_str("crlf\r\nlast without newline").unwrap();
+    writer.flush().unwrap();
+    var reader = LineReader.open(path).unwrap();
+    var count: usize = 0;
+    var total_bytes: usize = 0;
+    var last: String = String.new();
+    for (true) {
+        const line = reader.read_line().unwrap();
+        if (line.is_none()) { break; }
+        const text: String = line.unwrap();
+        total_bytes = total_bytes + text.bytes_len();
+        count = count + 1;
+        last = text;
+    }
+    if (count != 20002) { panic("line count {count}"); }
+    if (last.as_str() != "last without newline") { panic("last line {last}"); }
+    remove(path).unwrap();
 }
