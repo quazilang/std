@@ -1004,6 +1004,14 @@ impl LineReader {
         Ok(Some(text))
     }
 
+    // Closes the file now (dropping the reader does it otherwise); later
+    // reads report the end of the file.
+    pub fn close(self: &LineReader!) Result[bool, FsError] {
+        self.done = true;
+        self.start = self.end;
+        self.file.close()
+    }
+
     pub fn free(self: LineReader) void {
         if (self.buffer != 0) { unsafe { core.free(self.buffer); } }
         self.buffer = 0;
@@ -1067,6 +1075,12 @@ impl BufferedWriter {
         const data: *u8 = self.buffer;
         unsafe { self.write_all(data, pending)?; }
         Ok(true)
+    }
+
+    // Flushes and closes the file, reporting either failure.
+    pub fn close(self: &BufferedWriter!) Result[bool, FsError] {
+        self.flush()?;
+        self.file.close()
     }
 
     pub fn free(self: BufferedWriter) void {
