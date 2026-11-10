@@ -1,6 +1,7 @@
 // Regression coverage for the compiler-backed child-process contract.
 
 import std.process;
+import std.time;
 import std.process.ExitStatus;
 
 @test
@@ -88,4 +89,30 @@ fn command_finds_programs_and_sets_directory_and_environment() void {
     if (command_code(process.Command.new("sh").arg("-c").arg("exit 7")) != 7) { panic("exit code"); }
     if (process.Command.new("definitely-not-a-quazi-program").status().is_ok()) { panic("missing program"); }
     if (process.Command.new("sh").current_dir("/definitely/missing").status().is_ok()) { panic("missing directory"); }
+}
+
+@test
+fn process_wait_timeout_returns_none_then_terminates() void {
+    var args: Array[str] = Array.new();
+    args.push("sleep");
+    args.push("5");
+    var child: process.Child = process.spawn("/usr/bin/env", args).unwrap();
+    const early = child.wait_timeout(time.Duration.from_milliseconds(50)).unwrap();
+    if (early.is_some()) { panic("sleep 5 finished within 50 ms"); }
+    const status = child.wait_or_terminate(time.Duration.from_milliseconds(20)).unwrap();
+    const signalled: bool = match status {
+        Option.Some(ExitStatus.Signal(_)) => true,
+        _ => false,
+    };
+    if (!signalled) { panic("a terminated child must report a signal"); }
+
+    var quick_args: Array[str] = Array.new();
+    quick_args.push("true");
+    var quick: process.Child = process.spawn("/usr/bin/env", quick_args).unwrap();
+    const done = quick.wait_timeout(time.Duration.from_seconds(5)).unwrap();
+    const exited: bool = match done {
+        Option.Some(ExitStatus.Code(0)) => true,
+        _ => false,
+    };
+    if (!exited) { panic("a quick child must exit within the timeout"); }
 }

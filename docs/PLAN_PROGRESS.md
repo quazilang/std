@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 69.2%. Remaining: 30.8%.**
+**Complete: 69.8%. Remaining: 30.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -31,7 +31,7 @@ release-readiness probability. New requirements change the denominator.
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
 | Operating-system APIs | 7/10 | 70.0% | 30.0% |
-| Processes | 9/16 | 56.2% | 43.8% |
+| Processes | 10/16 | 62.5% | 37.5% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
@@ -104,7 +104,9 @@ Evidence: [src/process.qz](../src/process.qz).
   lookup; D-021, 2026-11-10).
 - [ ] Piped standard streams.
 - [ ] Owned binary output capture.
-- [ ] Timeout/cancellation API.
+- [x] Timeout/cancellation API (`Child.wait_timeout` polls with back-off until a
+  deadline; `wait_or_terminate` cancels a child that overruns; restored on
+  2026-11-15 by maintainer answer В17).
 - [ ] Windows CreateProcessW runtime.
 - [ ] Large-output and simultaneous stdout/stderr regressions.
 - [ ] Automatic Child scope cleanup.

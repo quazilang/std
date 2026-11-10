@@ -122,6 +122,24 @@ pub fn close(self: Child) Result[bool, ProcessError]
 Consume this child. The runtime terminates a live child and reaps it,
 so closing cannot leave a Linux zombie behind.
 
+### `Child.wait_timeout`
+
+```quazi
+pub fn wait_timeout(self: &Child!, timeout: Duration) Result[Option[ExitStatus], ProcessError]
+```
+
+Wait up to `timeout` for the child to exit: its status, or None when it
+is still running (it stays available for another wait or terminate).
+
+### `Child.wait_or_terminate`
+
+```quazi
+pub fn wait_or_terminate(self: &Child!, timeout: Duration) Result[Option[ExitStatus], ProcessError]
+```
+
+Wait up to `timeout`, then terminate a child that is still running and
+wait for it; always returns its final status.
+
 ### `Child.handle`
 
 ```quazi

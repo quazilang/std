@@ -7,6 +7,8 @@
 import std.core;
 @cfg(target_os = "linux")
 import std.unix;
+import std.time;
+import std.time.Duration;
 
 // Why a process operation failed; each variant carries the native error
 // code (`errno` or Windows error).
@@ -126,6 +128,40 @@ impl Child {
         unsafe { result = core.process_close(handle, &error); }
         if (result != 0) { ret Err(ProcessError.CloseFailed(error)); }
         ret Ok(true);
+    }
+
+    // Wait up to `timeout` for the child to exit: its status, or None when it
+    // is still running (it stays available for another wait or terminate).
+    pub fn wait_timeout(self: &Child!, timeout: Duration) Result[Option[ExitStatus], ProcessError] {
+        const deadline_result = time.Deadline.after(timeout);
+        if (deadline_result.is_err()) { ret Err(ProcessError.WaitFailed(-1)); }
+        const deadline: time.Deadline = deadline_result.unwrap();
+        var pause: u64 = 1;
+        for (true) {
+            const polled = self.try_wait()?;
+            if (polled.is_some()) { ret Ok(polled); }
+            const expired = deadline.has_expired();
+            if (expired.is_err()) { ret Err(ProcessError.WaitFailed(-1)); }
+            if (expired.unwrap()) { ret Ok(None); }
+            // Back off from 1 ms to 50 ms between polls.
+            time.sleep(Duration.from_milliseconds(pause));
+            if (pause < 50) { pause = pause * 2; }
+        }
+        Ok(None)
+    }
+
+    // Wait up to `timeout`, then terminate a child that is still running and
+    // wait for it; always returns its final status.
+    pub fn wait_or_terminate(self: &Child!, timeout: Duration) Result[Option[ExitStatus], ProcessError] {
+        const status = self.wait_timeout(timeout)?;
+        if (status.is_some()) { ret Ok(status); }
+        self.terminate()?;
+        for (true) {
+            const polled = self.try_wait()?;
+            if (polled.is_some()) { ret Ok(polled); }
+            time.sleep(Duration.from_milliseconds(1));
+        }
+        Ok(None)
     }
 
     // The native process handle: the process id on Linux and NetBSD, a
