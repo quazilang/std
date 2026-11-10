@@ -153,3 +153,18 @@ pub unsafe fn get_address_info(node: *i8, service: *i8, hints: *u8, result: **u8
 
 @api("freeaddrinfo")
 pub unsafe fn free_address_info(result: *u8) void;
+
+// Process command line, split like the C runtime (UTF-16).
+@api("GetCommandLineW")
+pub unsafe fn command_line_w() *u8;
+
+@api("CommandLineToArgvW")
+pub unsafe fn command_line_to_argv_w(command_line: *u8, count: *i32) *u8;
+
+@api("WideCharToMultiByte")
+pub unsafe fn wide_to_multi_byte(code_page: u32, flags: u32, wide: *u8, wide_length: i32,
+    output: *u8, output_length: i32, default_char: *u8, used_default: *u8) i32;
+
+@api("LocalFree")
+pub unsafe fn local_free(memory: *u8) *u8;
+
