@@ -5,6 +5,8 @@
 // independent of those platform details. Linux is currently implemented;
 // Windows support remains pending its UTF-16 CreateProcessW lowerer.
 import std.core;
+@cfg(target_os = "linux")
+import std.unix;
 
 pub enum ProcessError {
     SpawnFailed(i32),
@@ -126,4 +128,358 @@ impl Child {
 // Convenience entry point for one borrowed program path and argument vector.
 pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
     ret Child.spawn(program, args);
+}
+
+// ── Command ─────────────────────────────────────────────────────────────────
+//
+// A process builder for scripting (D-021):
+//   process.Command.new("git").arg("push").current_dir(path).status()?
+// A program name without `/` is looked up in PATH (the PATH the child will
+// see). Arguments are passed as given, without a shell. Linux only for now;
+// other targets report SpawnFailed(-38) (ENOSYS).
+
+// An owned list of NUL-terminated strings, also usable as an argv/envp
+// pointer array (it keeps a trailing null slot).
+struct CStrings {
+    items: *u8,
+    count: usize,
+    capacity: usize,
+}
+
+impl CStrings {
+    fn new() CStrings { CStrings { items: 0, count: 0, capacity: 0 } }
+
+    fn push(self: &CStrings!, text: str) {
+        if (self.count + 1 >= self.capacity) {
+            var grown: usize = self.capacity * 2;
+            if (grown < 8) { grown = 8; }
+            unsafe {
+                const items: *u8 = core.realloc(self.items, grown * 8);
+                if (items == 0) { panic("process argument allocation failed"); }
+                self.items = items;
+            }
+            self.capacity = grown;
+        }
+        unsafe {
+            const copy: *u8 = c_copy(text);
+            if (copy == 0) { panic("process argument allocation failed"); }
+            *((self.items + self.count * 8) as **u8) = copy;
+            self.count = self.count + 1;
+            *((self.items + self.count * 8) as **u8) = 0;
+        }
+    }
+
+    fn get(self: &CStrings, index: usize) str {
+        unsafe { ret core.str_from_ptr(*((self.items + index * 8) as **u8)); }
+    }
+
+    // Whether an entry is `name` itself, or `name=...` when `pairs` is set.
+    fn names(self: &CStrings, entry: str, pairs: bool) bool {
+        for index : 0..self.count {
+            const stored: str = self.get(index);
+            var key_length: usize = stored.len();
+            if (pairs) {
+                const separator = stored.find("=");
+                if (separator.is_some()) { key_length = separator.unwrap(); }
+            }
+            if (entry.len() > key_length) {
+                const head: String = entry[0:key_length + 1];
+                const key: String = stored[0:key_length];
+                const expected: String = "{key.as_str()}=";
+                if (head.as_str() == expected.as_str()) { ret true; }
+            }
+        }
+        false
+    }
+
+    fn entry_named(self: &CStrings, index: usize, name: str, pairs: bool) bool {
+        const stored: str = self.get(index);
+        if (!pairs) { ret stored == name; }
+        if (stored.len() <= name.len()) { ret false; }
+        const head: String = stored[0:name.len() + 1];
+        const expected: String = "{name}=";
+        head.as_str() == expected.as_str()
+    }
+
+    // Drops entries named `name` (or `name=...` when `pairs` is set).
+    fn remove_named(self: &CStrings!, name: str, pairs: bool) {
+        var index: usize = 0;
+        for (index < self.count) {
+            if (self.entry_named(index, name, pairs)) {
+                unsafe {
+                    core.free(*((self.items + index * 8) as **u8));
+                    var move: usize = index;
+                    for (move + 1 <= self.count) {
+                        *((self.items + move * 8) as **u8) = *((self.items + (move + 1) * 8) as **u8);
+                        move = move + 1;
+                    }
+                }
+                self.count = self.count - 1;
+            } else {
+                index = index + 1;
+            }
+        }
+    }
+
+    fn free(self: CStrings) void {
+        unsafe {
+            for index : 0..self.count { core.free(*((self.items + index * 8) as **u8)); }
+            if (self.items != 0) { core.free(self.items); }
+        }
+        self.items = 0;
+        self.count = 0;
+    }
+}
+
+// A NUL-terminated copy of `text` (owned by the caller).
+unsafe fn c_copy(text: str) *u8 {
+    const length: usize = text.bytes_len();
+    const copy: *u8 = core.malloc(length + 1);
+    if (copy == 0) { ret 0; }
+    core.memcpy(copy, core.str_as_ptr(text), length);
+    *(copy + length) = 0;
+    copy
+}
+
+// ── Command ─────────────────────────────────────────────────────────────────
+//
+// A process builder for scripting (D-021):
+//   process.Command.new("git").arg("push").current_dir(path).status()?
+// A program name without `/` is looked up in the PATH the child will see.
+// Arguments are passed as given, without a shell. Linux only for now; other
+// targets report SpawnFailed(38) (ENOSYS).
+
+pub struct Command {
+    program: String,
+    arguments: CStrings,
+    directory: String,
+    // NAME=VALUE pairs added to (or replacing in) the inherited environment.
+    variables: CStrings,
+    // Names removed from the inherited environment.
+    removed: CStrings,
+    clear_environment: bool,
+}
+
+impl Command {
+    pub fn new(program: str) Command {
+        var arguments = CStrings.new();
+        arguments.push(program);
+        Command {
+            program: String.from(program),
+            arguments: arguments,
+            directory: String.new(),
+            variables: CStrings.new(),
+            removed: CStrings.new(),
+            clear_environment: false,
+        }
+    }
+
+    pub fn arg(self: Command, value: str) Command {
+        var command = self;
+        command.arguments.push(value);
+        command
+    }
+
+    pub fn args(self: Command, values: Array[str]) Command {
+        var command = self;
+        for index : 0..values.len() {
+            const value: str = values[index];
+            command.arguments.push(value);
+        }
+        command
+    }
+
+    // The child's working directory (default: the parent's).
+    pub fn current_dir(self: Command, directory: str) Command {
+        var command = self;
+        command.directory = String.from(directory);
+        command
+    }
+
+    // Sets NAME=VALUE in the child's environment.
+    pub fn env(self: Command, name: str, value: str) Command {
+        var command = self;
+        const pair: String = "{name}={value}";
+        command.variables.remove_named(name, true);
+        command.removed.remove_named(name, false);
+        command.variables.push(pair.as_str());
+        command
+    }
+
+    pub fn env_remove(self: Command, name: str) Command {
+        var command = self;
+        command.variables.remove_named(name, true);
+        command.removed.push(name);
+        command
+    }
+
+    // Starts the child with only the variables set through `env`.
+    pub fn env_clear(self: Command) Command {
+        var command = self;
+        command.clear_environment = true;
+        command
+    }
+
+    // Starts the program and returns its Child.
+    pub fn spawn(self: &Command) Result[Child, ProcessError] {
+        @cfg(target_os = "linux") {
+            ret command_spawn_linux(self);
+        }
+        Err(ProcessError.SpawnFailed(38))
+    }
+
+    // Runs the program to completion and returns its exit status.
+    pub fn status(self: &Command) Result[ExitStatus, ProcessError] {
+        const child: Child = self.spawn()?;
+        const waited = child.wait()?;
+        if (waited.is_none()) { ret Err(ProcessError.WaitFailed(-1)); }
+        Ok(waited.unwrap())
+    }
+}
+
+// The PATH the child will see: an override, else the inherited one.
+fn child_path(command: &Command) String {
+    for index : 0..command.variables.count {
+        const pair: str = command.variables.get(index);
+        if (pair.starts_with("PATH=")) { ret pair[5:pair.len()]; }
+    }
+    if (command.clear_environment) { ret String.new(); }
+    var value: *u8 = 0;
+    unsafe { value = core.getenv("PATH"); }
+    if (value == 0) { ret String.from("/usr/local/bin:/usr/bin:/bin"); }
+    unsafe { ret String.from(core.str_from_ptr(value)); }
+}
+
+@cfg(target_os = "linux")
+fn resolve_program(command: &Command) Option[String] {
+    const program = command.program.as_str();
+    if (program.contains("/")) { ret Some(String.from(program)); }
+    const search: String = child_path(command);
+    const text = search.as_str();
+    var start: usize = 0;
+    const length: usize = text.len();
+    for (start <= length) {
+        var end: usize = start;
+        for (end < length && text[end:end + 1].as_str() != ":") { end = end + 1; }
+        var directory: String = text[start:end];
+        if (directory.is_empty()) { directory = String.from("."); }
+        const candidate: String = "{directory.as_str()}/{program}";
+        // X_OK, and a directory is not a program.
+        var accessible: bool = false;
+        unsafe { accessible = unix.access(candidate.as_str(), 1) == 0; }
+        if (accessible) {
+            var fd: i32 = -1;
+            unsafe { fd = unix.open(candidate.as_str(), 65536, 0); }
+            if (fd < 0) { ret Some(candidate); }
+            unsafe { unix.close(fd); }
+        }
+        start = end + 1;
+    }
+    None
+}
+
+@cfg(target_os = "linux")
+fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
+    const resolved = resolve_program(command);
+    if (resolved.is_none()) { ret Err(ProcessError.SpawnFailed(2)); }
+    const path: String = resolved.unwrap();
+
+    // Environment: inherited entries (from /proc/self/environ) minus removed
+    // and overridden names, then the overrides. Everything the child touches
+    // is prepared before fork; the child only makes system calls.
+    var environment = CStrings.new();
+    if (!command.clear_environment) {
+        var capacity: usize = 65536;
+        var inherited: *u8 = 0;
+        unsafe { inherited = core.malloc(capacity + 1); }
+        if (inherited == 0) { ret Err(ProcessError.SpawnFailed(12)); }
+        var length: usize = 0;
+        var fd: i32 = -1;
+        unsafe { fd = unix.open("/proc/self/environ", 0, 0); }
+        if (fd >= 0) {
+            for (true) {
+                if (length == capacity) {
+                    capacity = capacity * 2;
+                    unsafe { inherited = core.realloc(inherited, capacity + 1); }
+                    if (inherited == 0) { ret Err(ProcessError.SpawnFailed(12)); }
+                }
+                var count: isize = 0;
+                unsafe { count = unix.read(fd, inherited + length, capacity - length); }
+                if (count <= 0) { break; }
+                length = length + (count as usize);
+            }
+            unsafe { unix.close(fd); }
+        }
+        var scan: usize = 0;
+        for (scan < length) {
+            var end: usize = scan;
+            unsafe {
+                for (end < length && *(inherited + end) != 0) { end = end + 1; }
+                *(inherited + end) = 0;
+                const entry: str = core.str_from_ptr(inherited + scan);
+                if (!command.removed.names(entry, false) && !command.variables.names(entry, true)) {
+                    environment.push(entry);
+                }
+            }
+            scan = end + 1;
+        }
+        unsafe { core.free(inherited); }
+    }
+    for index : 0..command.variables.count { environment.push(command.variables.get(index)); }
+    if (environment.count == 0) { environment.push("QUAZI_EMPTY_ENVIRONMENT=1"); }
+
+    // The child reports a failed chdir/execve through a close-on-exec pipe.
+    var pipe: *u8 = 0;
+    unsafe { pipe = core.malloc(8); }
+    if (pipe == 0) { ret Err(ProcessError.SpawnFailed(12)); }
+    var status: i32 = 0;
+    unsafe { status = unix.pipe2(pipe, 524288); }
+    if (status < 0) {
+        unsafe { core.free(pipe); }
+        ret Err(ProcessError.SpawnFailed(-status));
+    }
+    var read_end: i32 = 0;
+    var write_end: i32 = 0;
+    unsafe {
+        read_end = *(pipe as *i32);
+        write_end = *((pipe + 4) as *i32);
+    }
+    const directory = command.directory.as_str();
+    const argv: *u8 = command.arguments.items;
+    const envp: *u8 = environment.items;
+    var pid: i32 = 0;
+    unsafe { pid = unix.fork(); }
+    if (pid == 0) {
+        var failure: i32 = 0;
+        unsafe {
+            unix.close(read_end);
+            if (!directory.is_empty()) {
+                const changed: i32 = unix.chdir(directory);
+                if (changed < 0) { failure = -changed; }
+            }
+            if (failure == 0) { failure = -unix.execve(path.as_str(), argv, envp); }
+            *(pipe as *i32) = failure;
+            unix.write(write_end, pipe, 4);
+            unix.exit(127);
+        }
+    }
+    var reported: isize = 0;
+    var child_error: i32 = 0;
+    unsafe {
+        unix.close(write_end);
+        reported = unix.read(read_end, pipe, 4);
+        unix.close(read_end);
+        child_error = *(pipe as *i32);
+        core.free(pipe);
+    }
+    if (pid < 0) { ret Err(ProcessError.SpawnFailed(-pid)); }
+    if (reported == 4) {
+        // Reap the failed child before reporting.
+        var kind: i32 = 0;
+        var value: i32 = 0;
+        var error: i32 = 0;
+        unsafe { core.process_wait(pid as usize, &kind, &value, &error); }
+        ret Err(ProcessError.SpawnFailed(child_error));
+    }
+    Ok(Child { handle: pid as usize })
 }

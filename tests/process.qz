@@ -53,3 +53,39 @@ fn process_try_wait_keeps_the_local_available_for_wait_or_close() void {
     const closed = closable.close();
     if (closed.is_err() || !closed.unwrap()) { panic("process.close did not consume its child"); }
 }
+
+fn command_code(command: process.Command) i32 {
+    const status = command.status().unwrap();
+    match status {
+        ExitStatus.Code(code) => code,
+        ExitStatus.Signal(_) => -1,
+    }
+}
+
+@test
+fn command_finds_programs_and_sets_directory_and_environment() void {
+    // PATH lookup, working directory and an added variable.
+    const configured = process.Command.new("sh")
+        .arg("-c")
+        .arg("test \"$(pwd)\" = /tmp && test \"$QUAZI_COMMAND_TEST\" = 'a b'")
+        .current_dir("/tmp")
+        .env("QUAZI_COMMAND_TEST", "a b");
+    if (command_code(configured) != 0) { panic("directory or environment not applied"); }
+    // A removed variable is gone; an inherited one (PATH) stays.
+    const removed = process.Command.new("sh")
+        .arg("-c")
+        .arg("test -z \"$QUAZI_COMMAND_TEST\" && test -n \"$PATH\"")
+        .env("QUAZI_COMMAND_TEST", "x")
+        .env_remove("QUAZI_COMMAND_TEST");
+    if (command_code(removed) != 0) { panic("env_remove"); }
+    // A cleared environment keeps only explicit variables.
+    const cleared = process.Command.new("/bin/sh")
+        .arg("-c")
+        .arg("test -z \"$HOME\" && test \"$ONLY\" = 1")
+        .env_clear()
+        .env("ONLY", "1");
+    if (command_code(cleared) != 0) { panic("env_clear"); }
+    if (command_code(process.Command.new("sh").arg("-c").arg("exit 7")) != 7) { panic("exit code"); }
+    if (process.Command.new("definitely-not-a-quazi-program").status().is_ok()) { panic("missing program"); }
+    if (process.Command.new("sh").current_dir("/definitely/missing").status().is_ok()) { panic("missing directory"); }
+}
