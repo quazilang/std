@@ -23,7 +23,7 @@ slack for the reference):
 | ln, log2, log10 | 1e-300..1e300 | 1, 2, 3 |
 | sinh, cosh, tanh | -20..20, -10..10 | 5, 4, 2 |
 | hypot | 1e-150..1e150 | 1 |
-| pow | base 0.1..100, exponent -10..10 | 43 |
+| pow | base 0.1..100 with exponent -10..10; negative bases with integral exponents; results near overflow; bases next to 1 with large exponents | 3 |
 | floor, ceil, round, trunc | -1e6..1e6 | 0 (exact) |
 
 Range reduction for `sin`/`cos`/`tan` follows fdlibm: a three-step
@@ -31,7 +31,9 @@ Cody-Waite reduction with low-part tails below 2^20 * pi/2 and Payne-Hanek
 reduction with 2/pi to 1584 bits above, so results stay within 1 ULP over the
 whole finite range. `sinh`/`cosh` stay finite up to |x| = 710.47 and `cbrt`
 covers the full range including subnormals and DBL_MAX.
-`pow` computes `exp(y * ln(x))` and its error grows with |y * ln(x)|.
+`pow` carries ln(x) and y * ln(x) as double-doubles (Veltkamp/Dekker
+products, no FMA), so its error stays near `exp`'s instead of growing with
+|y * ln(x)|.
 
 Special values checked: NaN propagation, `sqrt(-1)`/`ln(-1)`/`asin(2)` are
 NaN, signed zeros (`sqrt(-0.0)`, `trunc(-0.0)`, `ceil(-0.5)` keep `-0.0`),

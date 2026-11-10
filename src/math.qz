@@ -709,11 +709,83 @@ pub fn tanh(value: f64) f64 {
     ret (doubled - 1.0) / (doubled + 1.0);
 }
 
+// An unevaluated sum high + low with |low| <= ulp(high) / 2.
+struct __DoubleDouble { high: f64, low: f64, }
+
+// Exact a * b as high + low (Veltkamp split, Dekker product; no FMA).
+fn __split_high(a: f64) f64 {
+    const t: f64 = 134217729.0 * a;
+    ret t - (t - a);
+}
+
+fn __two_product(a: f64, b: f64) __DoubleDouble {
+    const product: f64 = a * b;
+    const a_high: f64 = math.__split_high(a);
+    const a_low: f64 = a - a_high;
+    const b_high: f64 = math.__split_high(b);
+    const b_low: f64 = b - b_high;
+    const error: f64 = ((a_high * b_high - product) + a_high * b_low + a_low * b_high)
+        + a_low * b_low;
+    __DoubleDouble { high: product, low: error }
+}
+
+// ln(x) for a positive finite x to about 2^-100 relative error:
+// x = m * 2^k with m in [sqrt(1/2), sqrt(2)), ln(m) = 2 atanh(s) where
+// s = (m - 1) / (m + 1) is carried as a double-double.
+fn __ln_double_double(value: f64) __DoubleDouble {
+    var x: f64 = value;
+    var k: f64 = 0.0;
+    if (math.__exponent_field(x) == 0) {
+        x = x * 18014398509481984.0;
+        k = -54.0;
+    }
+    k = k + math.__from_count(math.__exponent_field(x) as u64) - 1023.0;
+    var m: f64 = math.__from_bits((math.__to_bits(x) & 4503599627370495) | 4607182418800017408);
+    if (m > 1.4142135623730951) {
+        m = m * 0.5;
+        k = k + 1.0;
+    }
+    const f: f64 = m - 1.0;
+    const denominator: f64 = 2.0 + f;
+    const denominator_low: f64 = f - (denominator - 2.0);
+    const s: f64 = f / denominator;
+    const product = math.__two_product(s, denominator);
+    const s_low: f64 = (((f - product.high) - product.low) - s * denominator_low) / denominator;
+    const z: f64 = s * s;
+    const tail: f64 = s * z * (0.66666666666666666667 + z * (0.4 + z * (0.28571428571428571429
+        + z * (0.22222222222222222222 + z * (0.18181818181818181818 + z * (0.15384615384615384615
+        + z * (0.13333333333333333333 + z * (0.11764705882352941176 + z * (0.10526315789473684211
+        + z * 0.09523809523809523810)))))))));
+    // k * ln2_high is exact (ln2_high has 32 significant bits).
+    const a: f64 = k * 6.93147180369123816490e-01;
+    const b: f64 = 2.0 * s;
+    const high: f64 = a + b;
+    const error: f64 = if (a.abs() >= b.abs()) { b - (high - a) } else { a - (high - b) };
+    const low: f64 = error + (k * 1.90821492927058770002e-10 + (2.0 * s_low + tail));
+    const sum: f64 = high + low;
+    __DoubleDouble { high: sum, low: low - (sum - high) }
+}
+
+// x^y for x > 0: exp of y * ln(x) carried with extra precision, so the error
+// stays near exp's own instead of growing with |y * ln(x)|.
+fn __pow_positive(base: f64, exponent: f64) f64 {
+    const logarithm = math.__ln_double_double(base);
+    const product = math.__two_product(exponent, logarithm.high);
+    const high: f64 = product.high;
+    const low: f64 = product.low + exponent * logarithm.low;
+    if (high != high) { ret high; }
+    if (high > 709.79) { ret 1.0 / 0.0; }
+    if (high < -745.2) { ret 0.0; }
+    const scaled: f64 = math.exp(high);
+    scaled + scaled * low
+}
+
 pub fn pow(base: f64, exponent: f64) f64 {
     // pow(x, 0) and pow(1, y) are 1 even for NaN operands (C99 Annex F).
     if (exponent == 0.0 || base == 1.0) { ret 1.0; }
     if (base != base || exponent != exponent) { ret 0.0 / 0.0; }
     if (base == 0.0) { if (exponent < 0.0) { ret 1.0 / 0.0; } ret 0.0; }
+    if (base == 1.0 / 0.0) { if (exponent < 0.0) { ret 0.0; } ret base; }
     if (base < 0.0) {
         if (exponent == 1.0 / 0.0) {
             if (base == -1.0) { ret 1.0; }
@@ -727,20 +799,13 @@ pub fn pow(base: f64, exponent: f64) f64 {
         }
         const integral: f64 = math.trunc(exponent);
         if (integral != exponent) { ret 0.0 / 0.0; }
-        var magnitude: f64 = integral.abs();
-        var result: f64 = 1.0;
-        var factor: f64 = base;
-        // Integral f64 values need at most 53 squaring steps, even near 2^53.
-        for (magnitude > 0.0) {
-            const half: f64 = math.trunc(magnitude / 2.0);
-            if (magnitude - half * 2.0 != 0.0) { result = result * factor; }
-            factor = factor * factor;
-            magnitude = half;
-        }
-        if (exponent < 0.0) { ret 1.0 / result; }
-        ret result;
+        // Every f64 at or above 2^53 is even.
+        const odd: bool = integral.abs() < 9007199254740992.0
+            && integral - 2.0 * math.trunc(integral / 2.0) != 0.0;
+        const magnitude: f64 = math.__pow_positive(-base, exponent);
+        ret if (odd) { -magnitude } else { magnitude };
     }
-    ret math.exp(exponent * math.ln(base));
+    math.__pow_positive(base, exponent)
 }
 
 impl f64 {

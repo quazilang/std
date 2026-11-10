@@ -154,6 +154,11 @@ def samples(rng):
     records += [("atan2", y, x) for y, x in zip(uniform(-10, 10), uniform(-10, 10))]
     records += [("hypot", x, y) for x, y in zip(logarithmic(1e-150, 1e150), logarithmic(1e-150, 1e150))]
     records += [("pow", x, y) for x, y in zip(logarithmic(0.1, 100), uniform(-10, 10))]
+    # pow: negative bases with integral exponents, exponents near overflow
+    # and bases next to 1 with large exponents (where y * ln(x) amplifies).
+    records += [("pow", -x, float(rng.randint(-60, 60))) for x in logarithmic(0.1, 10, 200)]
+    records += [("pow", x, 700.0 / math.log(x)) for x in logarithmic(1.5, 1e300, 100)]
+    records += [("pow", 1.0 + x, 1.0 / x * rng.uniform(1, 600)) for x in logarithmic(1e-12, 1e-3, 100)]
     # Huge arguments (Payne-Hanek reduction) and multiples of pi/2.
     for name in ("sin", "cos", "tan"):
         records += [(name, x, 0.0) for x in logarithmic(1e6, 1e300, 200)]
@@ -193,7 +198,7 @@ SPECIAL = [
 BOUNDS = {
     "sqrt": 0, "cbrt": 3, "sin": 2, "cos": 2, "tan": 3, "atan": 2, "asin": 3, "acos": 2,
     "exp": 4, "ln": 2, "log2": 3, "log10": 4, "sinh": 6, "cosh": 5, "tanh": 3, "atan2": 2,
-    "hypot": 2, "pow": 64, "floor": 0, "ceil": 0, "round": 0, "trunc": 0,
+    "hypot": 2, "pow": 4, "floor": 0, "ceil": 0, "round": 0, "trunc": 0,
 }
 
 
