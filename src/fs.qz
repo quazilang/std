@@ -888,8 +888,11 @@ fn joined(base: str, name: str) String {
 // Every entry below `root` as a path relative to it (`a`, `a/b.txt`, ...),
 // depth first. Directories are listed before their contents; symbolic links
 // are reported but not followed, so cycles cannot recur. `/` separates the
-// components on every platform (Windows accepts it too).
-pub fn walk(root: str) Result[Array[String], FsError] {
+// components on every platform (Windows accepts it too). An empty root is the
+// current directory. The root must be readable; a subdirectory that cannot be
+// listed (for example without permission) is reported but not entered.
+pub fn walk(root_path: str) Result[Array[String], FsError] {
+    const root: str = if (root_path.is_empty()) { "." } else { root_path };
     var found: Array[String] = Array.new();
     var pending: Array[String] = Array.new();
     pending.push(String.new());
@@ -897,7 +900,12 @@ pub fn walk(root: str) Result[Array[String], FsError] {
         const last: usize = pending.len() - 1;
         const relative: String = pending.remove(last);
         const directory: String = joined(root, relative.as_str());
-        var names: Array[String] = read_dir_names(directory.as_str())?;
+        const listed = read_dir_names(directory.as_str());
+        if (listed.is_err()) {
+            if (relative.is_empty()) { ret Err(listed.unwrap_err()); }
+            continue;
+        }
+        var names: Array[String] = listed.unwrap();
         for (names.len() > 0) {
             const name: String = names.remove(0);
             const child: String = joined(relative.as_str(), name.as_str());
@@ -1067,13 +1075,25 @@ impl BufferedWriter {
         Ok(length)
     }
 
-    // Hands the buffered bytes to the operating system.
+    // Hands the buffered bytes to the operating system. After an error the
+    // bytes not yet written stay buffered for a later flush.
     pub fn flush(self: &BufferedWriter!) Result[bool, FsError] {
-        if (self.used == 0) { ret Ok(true); }
         const pending: usize = self.used;
-        self.used = 0;
         const data: *u8 = self.buffer;
-        unsafe { self.write_all(data, pending)?; }
+        var offset: usize = 0;
+        for (offset < pending) {
+            var written: isize = 0;
+            unsafe { written = self.file.write_raw(data + offset, pending - offset); }
+            if (written <= 0) {
+                unsafe { core.memmove(data, data + offset, pending - offset); }
+                self.used = pending - offset;
+                @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+                if (written == 0) { ret Err(FsError.InvalidData); }
+                ret Err(fs_error(written as i32));
+            }
+            offset = offset + (written as usize);
+        }
+        self.used = 0;
         Ok(true)
     }
 
@@ -1085,13 +1105,9 @@ impl BufferedWriter {
 
     pub fn free(self: BufferedWriter) void {
         if (self.buffer != 0) {
-            const pending: usize = self.used;
-            self.used = 0;
-            unsafe {
-                const data: *u8 = self.buffer;
-                if (pending > 0) { self.write_all(data, pending); }
-                core.free(self.buffer);
-            }
+            // Best effort, like closing a file: errors cannot be reported here.
+            if (self.used > 0) { self.flush(); }
+            unsafe { core.free(self.buffer); }
         }
         self.buffer = 0;
         self.file.close();

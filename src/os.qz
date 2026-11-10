@@ -142,13 +142,24 @@ fn process_role(role: i32) String {
 pub fn args() Result[Array[String], fs.FsError] {
     var values: Array[String] = Array.new();
     @cfg(target_os = "linux") {
-        const capacity: usize = 131072;
+        // /proc/self/cmdline can exceed any fixed buffer: grow until EOF.
+        var capacity: usize = 65536;
         var buffer: *u8 = 0;
         unsafe { buffer = core.malloc(capacity + 1); }
         if (buffer == 0) { ret Err(FsError.AllocationFailed); }
         var file = fs.File.open("/proc/self/cmdline")?;
         var length: usize = 0;
-        for (length < capacity) {
+        for (true) {
+            if (length == capacity) {
+                capacity = capacity * 2;
+                var grown: *u8 = 0;
+                unsafe { grown = core.realloc(buffer, capacity + 1); }
+                if (grown == 0) {
+                    unsafe { core.free(buffer); }
+                    ret Err(FsError.AllocationFailed);
+                }
+                buffer = grown;
+            }
             var count: isize = 0;
             unsafe { count = file.read(buffer + length, capacity - length); }
             if (count < 0) {

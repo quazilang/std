@@ -21,12 +21,28 @@ fn is_separator(text: str, index: usize) bool {
     false
 }
 
-// Length of a Windows drive prefix (`C:`), or 0.
+// Length of a Windows prefix: a drive (`C:`) or a UNC share
+// (`\\server\share`), or 0.
 fn drive_length(text: str) usize {
     @cfg(target_os = "windows") {
+        if (path.unc_length(text) > 0) { ret path.unc_length(text); }
         if (text.len() >= 2 && text[1:2].as_str() == ":") { ret 2; }
     }
     0
+}
+
+// `\\server\share` spans two separators and two names.
+fn unc_length(text: str) usize {
+    const length: usize = text.len();
+    if (length < 5 || !path.is_separator(text, 0) || !path.is_separator(text, 1)) { ret 0; }
+    var index: usize = 2;
+    for (index < length && !path.is_separator(text, index)) { index = index + 1; }
+    if (index == 2 || index >= length) { ret 0; }
+    index = index + 1;
+    const share: usize = index;
+    for (index < length && !path.is_separator(text, index)) { index = index + 1; }
+    if (index == share) { ret 0; }
+    index
 }
 
 fn separator() str {
@@ -58,6 +74,7 @@ impl Path {
     // A rooted path: `/x`, and on Windows also `\x`, `C:\x` and `\\host\x`.
     pub fn is_absolute(self: &Path) bool {
         const text = self.text.as_str();
+        if (path.unc_length(text) > 0) { ret true; }
         const drive: usize = path.drive_length(text);
         text.len() > drive && path.is_separator(text, drive)
     }
@@ -158,7 +175,7 @@ impl Path {
         const rooted: bool = self.is_absolute();
         var index: usize = path.drive_length(source);
         var prefix: String = String.from(source[0:index].as_str());
-        if (rooted) {
+        if (rooted && index < source.len()) {
             prefix = prefix.push_str(source[index:index + 1].as_str());
             index = index + 1;
         }
