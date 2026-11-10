@@ -83,22 +83,34 @@ pub fn min(a: f64, b: f64) f64 { ret a.min(b); }
 pub fn max(a: f64, b: f64) f64 { ret a.max(b); }
 pub fn clamp(value: f64, low: f64, high: f64) f64 { ret value.clamp(low, high); }
 
+// The IEEE-754 bits of an f64 and back, and the correctly rounded SSE2
+// square root.
+@intrinsic("quazi.f64.to_bits")
+fn __to_bits(value: f64) u64;
+@intrinsic("quazi.f64.from_bits")
+fn __from_bits(bits: u64) f64;
+@intrinsic("quazi.f64.sqrt")
+fn __hardware_sqrt(value: f64) f64;
+
+// Biased exponent field (0..2047).
+fn __exponent_field(value: f64) i64 { ret ((math.__to_bits(value) >> 52) & 2047) as i64; }
+
+// 2^k for an integral f64 -1022 <= k <= 1023. Adding 1.5 * 2^52 moves k
+// into the low fraction bits (two's complement modulo 2^52), and the
+// exponent field takes k + 1023 modulo 2048.
+fn __power_of_two(k: f64) f64 {
+    const low: u64 = math.__to_bits(k + 6755399441055744.0);
+    ret math.__from_bits(((low + 1023) & 2047) << 52);
+}
+
+// Clears the fraction bits below the units place; keeps the sign of zero.
 pub fn trunc(value: f64) f64 {
-    if (value != value) { ret value; }
-    var magnitude: f64 = value.abs();
-    if (magnitude >= 9007199254740992.0) { ret value; }
-    var step: f64 = 1.0;
-    for (step * 2.0 <= magnitude) { step = step * 2.0; }
-    var whole: f64 = 0.0;
-    for (step >= 1.0) {
-        if (magnitude >= step) {
-            whole = whole + step;
-            magnitude = magnitude - step;
-        }
-        step = step / 2.0;
-    }
-    if (value < 0.0) { ret -whole; }
-    ret whole;
+    const exponent: i64 = math.__exponent_field(value) - 1023;
+    if (exponent >= 52) { ret value; }
+    const bits: u64 = math.__to_bits(value);
+    if (exponent < 0) { ret math.__from_bits(bits & 9223372036854775808); }
+    const fraction: u64 = (4503599627370495 as u64) >> (exponent as u64);
+    ret math.__from_bits(bits & (fraction ^ 18446744073709551615));
 }
 
 pub fn floor(value: f64) f64 {
@@ -113,9 +125,14 @@ pub fn ceil(value: f64) f64 {
     ret whole;
 }
 
+// Halves round away from zero. `value - whole` is exact, so values just below
+// a half (0.49999999999999994) are not pushed over it.
 pub fn round(value: f64) f64 {
-    if (value < 0.0) { ret math.ceil(value - 0.5); }
-    ret math.floor(value + 0.5);
+    const whole: f64 = math.trunc(value);
+    const rest: f64 = value - whole;
+    if (rest >= 0.5) { ret whole + 1.0; }
+    if (rest <= -0.5) { ret whole - 1.0; }
+    ret whole;
 }
 
 pub fn fract(value: f64) f64 { ret value - math.trunc(value); }
@@ -134,33 +151,29 @@ pub fn map_range(value: f64, from_low: f64, from_high: f64,
 pub fn radians(degrees: f64) f64 { ret degrees * 0.0174532925199432958; }
 pub fn degrees(radians: f64) f64 { ret radians * 57.2957795130823208768; }
 
-pub fn sqrt(value: f64) f64 {
-    if (value < 0.0) { ret 0.0 / 0.0; }
-    // Preserves the sign of zero (sqrt(-0.0) is -0.0) and propagates NaN.
-    if (value == 0.0 || value != value) { ret value; }
-    if (value == 1.0 / 0.0) { ret value; }
-    var estimate: f64 = value;
-    if (estimate < 1.0) { estimate = 1.0; }
-    var iteration: usize = 0;
-    for (iteration < 24) {
-        estimate = 0.5 * (estimate + value / estimate);
-        iteration++;
-    }
-    ret estimate;
-}
+// Correctly rounded (sqrtsd); NaN below zero, -0.0 stays -0.0.
+pub fn sqrt(value: f64) f64 { ret math.__hardware_sqrt(value); }
 
 pub fn cbrt(value: f64) f64 {
     if (value == 0.0 || value != value) { ret value; }
     if (value < 0.0) { ret -math.cbrt(-value); }
     if (value == 1.0 / 0.0) { ret value; }
-    var estimate: f64 = value;
-    if (estimate < 1.0) { estimate = 1.0; }
+    // Subnormals are scaled into the normal range first (2^54 = (2^18)^3).
+    var x: f64 = value;
+    var scale: f64 = 1.0;
+    if (math.__exponent_field(x) == 0) {
+        x = x * 18014398509481984.0;
+        scale = 1.0 / 262144.0;
+    }
+    // Dividing the bit pattern by three approximates the cube root's exponent
+    // and leading bits (within about 5%); Newton steps then converge.
+    var estimate: f64 = math.__from_bits(math.__to_bits(x) / 3 + 3071306043645493248);
     var iteration: usize = 0;
-    for (iteration < 28) {
-        estimate = (2.0 * estimate + value / (estimate * estimate)) / 3.0;
+    for (iteration < 6) {
+        estimate = estimate - (estimate * estimate * estimate - x) / (3.0 * estimate * estimate);
         iteration++;
     }
-    ret estimate;
+    ret estimate * scale;
 }
 
 pub fn hypot(x: f64, y: f64) f64 {
@@ -176,75 +189,114 @@ pub fn hypot(x: f64, y: f64) f64 {
     ret largest * math.sqrt(sx * sx + sy * sy);
 }
 
-// Reduce to [-pi, pi]. 2*pi is split into three parts (Cody-Waite) so the
-// subtraction stays accurate while the quotient fits in about 30 bits
-// (|value| up to ~1e9); beyond that the result loses accuracy.
-fn __reduce_angle(value: f64) f64 {
-    const tau: f64 = 6.2831853071795864769;
-    const quotient: f64 = math.trunc(value / tau);
-    var reduced: f64 = ((value - quotient * 6.28318530717958623200) - quotient * 2.44929359829470635445e-16)
-        - quotient * 1.0e-32;
-    if (reduced > 3.1415926535897932385) { reduced = reduced - tau; }
-    if (reduced < -3.1415926535897932385) { reduced = reduced + tau; }
-    ret reduced;
+// sin and cos on [-pi/4, pi/4] (fdlibm kernels, about 1 ULP).
+fn __sin_kernel(x: f64) f64 {
+    const z: f64 = x * x;
+    const r: f64 = 8.33333333332248946124e-03 + z * (-1.98412698298579493134e-04
+        + z * (2.75573137070700676789e-06 + z * (-2.50507602534068634195e-08
+        + z * 1.58969099521155010221e-10)));
+    ret x + z * x * (-1.66666666666666324348e-01 + z * r);
+}
+
+fn __cos_kernel(x: f64) f64 {
+    const z: f64 = x * x;
+    const r: f64 = z * (4.16666666666666019037e-02 + z * (-1.38888888888741095749e-03
+        + z * (2.48015872894767294178e-05 + z * (-2.75573143513906633035e-07
+        + z * (2.08757232129817482790e-09 + z * -1.13596475577881948265e-11)))));
+    const half: f64 = 0.5 * z;
+    const w: f64 = 1.0 - half;
+    ret w + (((1.0 - w) - half) + z * r);
+}
+
+// value = n * pi/2 + reduced with |reduced| <= pi/4. pi/2 is split into three
+// parts (Cody-Waite), exact for |n| < 2^20 (|value| up to about 1.6e6);
+// beyond that accuracy degrades gradually.
+struct __Reduced { quadrant: f64, angle: f64, }
+
+fn __reduce_half_pi(value: f64) __Reduced {
+    const n: f64 = math.round(value * 0.63661977236758134308);
+    const angle: f64 = ((value - n * 1.57079632673412561417)
+        - n * 6.07710050630396597660e-11) - n * 2.02226624871116645580e-21;
+    const quadrant: f64 = n - 4.0 * math.floor(n / 4.0);
+    __Reduced { quadrant: quadrant, angle: angle }
 }
 
 pub fn sin(value: f64) f64 {
-    var x: f64 = math.__reduce_angle(value);
-    if (x > 1.5707963267948966192) { x = 3.1415926535897932385 - x; }
-    if (x < -1.5707963267948966192) { x = -3.1415926535897932385 - x; }
-    const x2: f64 = x * x;
-    ret x * (1.0 + x2 * (-0.16666666666666666
-        + x2 * (0.008333333333333333
-        + x2 * (-0.0001984126984126984
-        + x2 * (0.0000027557319223985893
-        + x2 * -0.00000002505210838544172)))));
+    if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
+    // Tiny inputs (and signed zeros) are their own sine.
+    if (value.abs() < 7.450580596923828e-09) { ret value; }
+    const reduced = math.__reduce_half_pi(value);
+    const q: f64 = reduced.quadrant;
+    if (q == 0.0) { ret math.__sin_kernel(reduced.angle); }
+    if (q == 1.0) { ret math.__cos_kernel(reduced.angle); }
+    if (q == 2.0) { ret -math.__sin_kernel(reduced.angle); }
+    -math.__cos_kernel(reduced.angle)
 }
 
 pub fn cos(value: f64) f64 {
-    var x: f64 = math.__reduce_angle(value);
-    var sign: f64 = 1.0;
-    if (x > 1.5707963267948966192) {
-        x = 3.1415926535897932385 - x;
-        sign = -1.0;
-    }
-    if (x < -1.5707963267948966192) {
-        x = -3.1415926535897932385 - x;
-        sign = -1.0;
-    }
-    const x2: f64 = x * x;
-    ret sign * (1.0 + x2 * (-0.5
-        + x2 * (0.041666666666666664
-        + x2 * (-0.001388888888888889
-        + x2 * (0.0000248015873015873
-        + x2 * -0.0000002755731922398589)))));
+    if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
+    const reduced = math.__reduce_half_pi(value);
+    const q: f64 = reduced.quadrant;
+    if (q == 0.0) { ret math.__cos_kernel(reduced.angle); }
+    if (q == 1.0) { ret -math.__sin_kernel(reduced.angle); }
+    if (q == 2.0) { ret -math.__cos_kernel(reduced.angle); }
+    math.__sin_kernel(reduced.angle)
 }
 
-pub fn tan(value: f64) f64 { ret math.sin(value) / math.cos(value); }
+pub fn tan(value: f64) f64 {
+    if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
+    if (value.abs() < 7.450580596923828e-09) { ret value; }
+    const reduced = math.__reduce_half_pi(value);
+    const s: f64 = math.__sin_kernel(reduced.angle);
+    const c: f64 = math.__cos_kernel(reduced.angle);
+    if (reduced.quadrant == 0.0 || reduced.quadrant == 2.0) { ret s / c; }
+    -c / s
+}
+
+// fdlibm's atan: reduce against atan(1/2), atan(1), atan(3/2) or pi/2
+// (each split into high and low parts), then an odd polynomial.
+fn __atan_polynomial(x: f64) f64 {
+    const z: f64 = x * x;
+    const w: f64 = z * z;
+    const odd: f64 = z * (3.33333333333329318027e-01 + w * (1.42857142725034663711e-01
+        + w * (9.09088713343650656196e-02 + w * (6.66107313738753120669e-02
+        + w * (4.97687799461593236017e-02 + w * 1.62858201153657823623e-02)))));
+    const even: f64 = w * (-1.99999999998764832476e-01 + w * (-1.11111104054623557880e-01
+        + w * (-7.69187620504482999495e-02 + w * (-5.83357013379057348645e-02
+        + w * -3.65315727442169155270e-02))));
+    ret x * (odd + even);
+}
 
 pub fn atan(value: f64) f64 {
     // Zeros (keeping their sign) and NaN pass through unchanged.
     if (value == 0.0 || value != value) { ret value; }
     if (value < 0.0) { ret -math.atan(-value); }
-    if (value > 1.0) { ret 1.5707963267948966192 - math.atan(1.0 / value); }
-    if (value > 0.4142135623730950488) {
-        ret 0.7853981633974483096 + math.atan((value - 1.0) / (value + 1.0));
+    if (value > 7.378697629483821e19) { ret 1.5707963267948966192; }
+    if (value < 0.4375) {
+        if (value < 7.450580596923828e-09) { ret value; }
+        ret value - math.__atan_polynomial(value);
     }
-    const squared: f64 = value * value;
-    var term: f64 = value;
-    var sum: f64 = value;
-    var denominator: f64 = 3.0;
-    var subtract: bool = true;
-    var iteration: usize = 0;
-    for (iteration < 16) {
-        term = term * squared;
-        if (subtract) { sum = sum - term / denominator; }
-        else { sum = sum + term / denominator; }
-        subtract = !subtract;
-        denominator = denominator + 2.0;
-        iteration++;
+    var x: f64 = value;
+    var high: f64 = 0.0;
+    var low: f64 = 0.0;
+    if (value < 0.6875) {
+        x = (2.0 * value - 1.0) / (2.0 + value);
+        high = 4.63647609000806093515e-01;
+        low = 2.26987774529616870924e-17;
+    } else if (value < 1.1875) {
+        x = (value - 1.0) / (value + 1.0);
+        high = 7.85398163397448278999e-01;
+        low = 3.06161699786838301793e-17;
+    } else if (value < 2.4375) {
+        x = (value - 1.5) / (1.0 + 1.5 * value);
+        high = 9.82793723247329054082e-01;
+        low = 1.39033110312309984516e-17;
+    } else {
+        x = -1.0 / value;
+        high = 1.57079632679489655800e+00;
+        low = 6.12323399573676603587e-17;
     }
-    ret sum;
+    ret high - ((math.__atan_polynomial(x) - low) - x);
 }
 
 pub fn arctan(value: f64) f64 { ret math.atan(value); }
@@ -273,37 +325,42 @@ pub fn arctan2(y: f64, x: f64) f64 { ret math.atan2(y, x); }
 
 pub fn asin(value: f64) f64 {
     if (value != value || value < -1.0 || value > 1.0) { ret 0.0 / 0.0; }
-    ret math.atan2(value, math.sqrt(1.0 - value * value));
+    // (1 - v)(1 + v) keeps the digits that 1 - v * v cancels near |v| = 1.
+    ret math.atan2(value, math.sqrt((1.0 - value) * (1.0 + value)));
 }
 
-pub fn acos(value: f64) f64 { ret 1.5707963267948966192 - math.asin(value); }
+// Near |v| = 1, pi/2 - asin(v) cancels; the half-angle forms keep the digits.
+pub fn acos(value: f64) f64 {
+    if (value > 0.5) { ret 2.0 * math.asin(math.sqrt((1.0 - value) * 0.5)); }
+    if (value < -0.5) {
+        ret 3.1415926535897932385 - 2.0 * math.asin(math.sqrt((1.0 + value) * 0.5));
+    }
+    1.5707963267948966192 - math.asin(value)
+}
 
 pub fn exp(value: f64) f64 {
     if (value != value) { ret value; }
-    // Avoid non-terminating range reduction and match IEEE overflow behavior.
     if (value > 709.782712893384) { ret 1.0 / 0.0; }
     if (value < -745.1332191019411) { ret 0.0; }
-    var reduced: f64 = value;
-    var scale: f64 = 1.0;
-    for (reduced > 0.6931471805599453094) {
-        reduced = reduced - 0.6931471805599453094;
-        scale = scale * 2.0;
-    }
-    for (reduced < -0.6931471805599453094) {
-        reduced = reduced + 0.6931471805599453094;
-        scale = scale * 0.5;
-    }
+    // value = k * ln2 + r with |r| <= ln2/2; ln2 is split in two parts so
+    // k * ln2_hi is exact.
+    const k: f64 = math.round(value * 1.44269504088896338700);
+    const r: f64 = (value - k * 6.93147180369123816490e-01) - k * 1.90821492927058770002e-10;
+    // exp(r) by its Taylor series to r^13 (truncation below 1e-17 here).
     var sum: f64 = 1.0;
     var term: f64 = 1.0;
-    var divisor: f64 = 1.0;
-    var iteration: usize = 0;
-    for (iteration < 24) {
-        term = term * reduced / divisor;
+    var index: f64 = 1.0;
+    for (index <= 13.0) {
+        term = term * r / index;
         sum = sum + term;
-        divisor = divisor + 1.0;
-        iteration++;
+        index = index + 1.0;
     }
-    ret sum * scale;
+    // Scale by 2^k in at most two exact steps (subnormal results round once).
+    if (k > 1023.0) { ret sum * 2.0 * math.__power_of_two(k - 1.0); }
+    if (k < -1022.0) {
+        ret sum * math.__power_of_two(k + 1000.0) * math.__power_of_two(-1000.0);
+    }
+    sum * math.__power_of_two(k)
 }
 
 pub fn ln(value: f64) f64 {
@@ -333,7 +390,17 @@ pub fn ln(value: f64) f64 {
 pub fn log2(value: f64) f64 { ret math.ln(value) / 0.6931471805599453094; }
 pub fn log10(value: f64) f64 { ret math.ln(value) / 2.3025850929940456840; }
 
+// sinh by its odd Taylor series below 1/2, where exp(x) - exp(-x) would
+// cancel; the truncated term x^17/17! is below 2e-21 there.
+fn __small_sinh(x: f64) f64 {
+    const z: f64 = x * x;
+    ret x + x * z * (1.0 / 6.0 + z * (1.0 / 120.0 + z * (1.0 / 5040.0
+        + z * (1.0 / 362880.0 + z * (1.0 / 39916800.0 + z * (1.0 / 6227020800.0
+        + z * (1.0 / 1307674368000.0)))))));
+}
+
 pub fn sinh(value: f64) f64 {
+    if (value.abs() < 0.5) { ret math.__small_sinh(value); }
     const positive: f64 = math.exp(value);
     ret (positive - 1.0 / positive) * 0.5;
 }
@@ -342,8 +409,13 @@ pub fn cosh(value: f64) f64 {
     ret (positive + 1.0 / positive) * 0.5;
 }
 pub fn tanh(value: f64) f64 {
+    if (value != value) { ret value; }
     if (value > 20.0) { ret 1.0; }
     if (value < -20.0) { ret -1.0; }
+    if (value.abs() < 0.5) {
+        const s: f64 = math.__small_sinh(value);
+        ret s / math.sqrt(1.0 + s * s);
+    }
     const doubled: f64 = math.exp(2.0 * value);
     ret (doubled - 1.0) / (doubled + 1.0);
 }
@@ -463,4 +535,19 @@ fn angle_reduction_stays_accurate_for_large_arguments() void {
     if ((math.sin(1.0e6) + 0.34999350217129294).abs() > 1.0e-9) { panic("sin(1e6) is inaccurate"); }
     if ((math.sin(1.0e9) - 0.5458434494486996).abs() > 1.0e-6) { panic("sin(1e9) is inaccurate"); }
     if ((math.cos(1.0e6) - 0.9367521275331447).abs() > 1.0e-9) { panic("cos(1e6) is inaccurate"); }
+}
+
+@test
+fn special_values_and_reductions_hold() {
+    if (math.__to_bits(math.sqrt(2.0)) != 4609047870845172685) { panic("sqrt(2) is not correctly rounded"); }
+    if (math.sqrt(5e-324) != 2.2227587494850775e-162) { panic("subnormal sqrt"); }
+    if (math.__to_bits(math.trunc(-0.0)) != 9223372036854775808) { panic("trunc(-0.0) lost its sign"); }
+    if (math.__to_bits(math.ceil(-0.5)) != 9223372036854775808) { panic("ceil(-0.5) must be -0.0"); }
+    if (math.round(0.49999999999999994) != 0.0 || math.round(-2.5) != -3.0) { panic("round halves"); }
+    if (math.floor(-4.5e15) != -4.5e15 || math.floor(-1.5) != -2.0) { panic("floor"); }
+    if (math.__to_bits(math.sin(2.0)) != 4606365442650518598) { panic("sin(2) is off by more than 0 ULP"); }
+    if (math.cos(1e5).abs() > 1.0 || math.sin(1e5) != math.sin(1e5)) { panic("large-argument reduction"); }
+    if ((math.exp(1.0) - 2.718281828459045).abs() > 1.4e-15 || math.exp(-745.2) != 0.0) { panic("exp"); }
+    if (math.cbrt(-27.0) != -3.0 || math.cbrt(8e-300) != 2e-100) { panic("cbrt"); }
+    if (math.atan(1.0) != 0.7853981633974483 || math.acos(-1.0) != 3.141592653589793) { panic("atan/acos"); }
 }

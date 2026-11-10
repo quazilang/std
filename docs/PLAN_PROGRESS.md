@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 61.2%. Remaining: 38.8%.**
+**Complete: 63.0%. Remaining: 37.0%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -33,7 +33,7 @@ release-readiness probability. New requirements change the denominator.
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
-| Mathematics | 8/11 | 72.7% | 27.3% |
+| Mathematics | 10/11 | 90.9% | 9.1% |
 | Panic handling | 5/10 | 50.0% | 50.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 17/19 | 89.5% | 10.5% |
@@ -135,8 +135,10 @@ Evidence: [src/math.qz](../src/math.qz).
 - [x] Exponential/logarithmic/power functions.
 - [ ] Checked overflow policy across integer operations.
 - [x] Complete NaN/infinity/domain behavior audit.
-- [ ] Quantified precision/error bounds.
-- [ ] Comprehensive numeric edge-case regression suite.
+- [x] Quantified precision/error bounds ([MATH_ACCURACY.md](MATH_ACCURACY.md),
+  `scripts/check_math_accuracy.py`, 2026-11-10).
+- [x] Comprehensive numeric edge-case regression suite (special values in
+  `scripts/check_math_accuracy.py` and the `special_values_and_reductions_hold` test).
 
 ### Panic handling
 
