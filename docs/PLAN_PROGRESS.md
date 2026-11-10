@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 64.5%. Remaining: 35.5%.**
+**Complete: 65.1%. Remaining: 34.9%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -29,7 +29,7 @@ release-readiness probability. New requirements change the denominator.
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 11/16 | 68.8% | 31.2% |
+| Filesystem / I/O | 12/16 | 75.0% | 25.0% |
 | Operating-system APIs | 6/10 | 60.0% | 40.0% |
 | Processes | 7/16 | 43.8% | 56.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
@@ -60,7 +60,9 @@ Evidence: [src/fs.qz](../src/fs.qz).
 - [x] Structured path abstraction (`std.path.Path`: join, parent, file_name, stem,
   extension, is_absolute, components, lexical normalize; Windows separators and
   drive roots; 2026-11-10).
-- [ ] Structured metadata API.
+- [x] Structured metadata API (`metadata`/`symlink_metadata` -> `Metadata`: length,
+  `FileKind`, read-only, modification time; Linux stat/lstat, Windows
+  GetFileAttributesExA; NetBSD reports Unsupported; 2026-11-10).
 - [ ] Directory iterator/traversal API (`read_dir_names` lists one directory as owned
   names since 2026-11-10; no streaming iterator or recursive traversal yet).
 - [x] Bounded large-file reads.

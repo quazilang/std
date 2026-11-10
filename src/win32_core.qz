@@ -58,6 +58,11 @@ pub unsafe fn sync(file: usize) i32;
 @api("GetFileAttributesA")
 pub unsafe fn file_attributes(path: *u8) u32;
 
+// level 0 (GetFileExInfoStandard) fills WIN32_FILE_ATTRIBUTE_DATA: attributes
+// at 0, creation/access/write FILETIMEs at 4/12/20, size high/low at 28/32.
+@api("GetFileAttributesExA")
+pub unsafe fn file_attribute_data(path: *u8, level: i32, data: *u8) i32;
+
 @api("DeleteFileA")
 pub unsafe fn delete_file(path: *u8) i32;
 

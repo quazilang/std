@@ -760,6 +760,126 @@ pub fn read_dir_names(path: str) Result[Array[String], FsError] {
     ret Err(FsError.Unsupported);
 }
 
+// What a path names, as reported by the operating system.
+pub enum FileKind {
+    File,
+    Directory,
+    Symlink,
+    Other,
+}
+
+// Size, kind, write protection and modification time of a file-system entry.
+pub struct Metadata {
+    size: u64,
+    // 0 file, 1 directory, 2 symbolic link, 3 other.
+    kind_code: u8,
+    readonly: bool,
+    modified_nanos: i64,
+}
+
+impl Metadata {
+    pub fn len(self: &Metadata) u64 { ret self.size; }
+    pub fn kind(self: &Metadata) FileKind {
+        if (self.kind_code == 0) { ret FileKind.File; }
+        if (self.kind_code == 1) { ret FileKind.Directory; }
+        if (self.kind_code == 2) { ret FileKind.Symlink; }
+        FileKind.Other
+    }
+    pub fn is_file(self: &Metadata) bool { ret self.kind_code == 0; }
+    pub fn is_dir(self: &Metadata) bool { ret self.kind_code == 1; }
+    pub fn is_symlink(self: &Metadata) bool { ret self.kind_code == 2; }
+    // No write permission bit for anyone (Linux) or the read-only attribute
+    // (Windows).
+    pub fn readonly(self: &Metadata) bool { ret self.readonly; }
+    // Last modification as nanoseconds since 1970-01-01 UTC.
+    pub fn modified_unix_nanos(self: &Metadata) i64 { ret self.modified_nanos; }
+}
+
+// Metadata of the entry `path` names, following symbolic links.
+pub fn metadata(path: str) Result[Metadata, FsError] { ret fs_metadata(path, true); }
+
+// Metadata of `path` itself: a symbolic link reports FileKind.Symlink.
+pub fn symlink_metadata(path: str) Result[Metadata, FsError] { ret fs_metadata(path, false); }
+
+fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
+    var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(160); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
+
+    @cfg(target_os = "linux") {
+        // struct stat (x86-64): st_mode u32 at 24, st_size i64 at 48,
+        // st_mtime seconds/nanoseconds at 88/96.
+        var status: i32 = 0;
+        unsafe {
+            if (follow) { status = unix.stat(path, buffer.data); }
+            else { status = unix.lstat(path, buffer.data); }
+        }
+        if (status < 0) { ret Err(fs_error(status)); }
+        var mode: u32 = 0;
+        var size: i64 = 0;
+        var seconds: i64 = 0;
+        var nanos: i64 = 0;
+        unsafe {
+            mode = *((buffer.data + 24) as *u32);
+            size = *((buffer.data + 48) as *i64);
+            seconds = *((buffer.data + 88) as *i64);
+            nanos = *((buffer.data + 96) as *i64);
+        }
+        const format: u32 = mode & 61440;
+        var kind: u8 = 3;
+        if (format == 32768) { kind = 0; }
+        else if (format == 16384) { kind = 1; }
+        else if (format == 40960) { kind = 2; }
+        ret Ok(Metadata {
+            size: size as u64,
+            kind_code: kind,
+            readonly: (mode & 146) == 0,
+            modified_nanos: seconds * 1000000000 + nanos,
+        });
+    }
+
+    @cfg(target_os = "windows") {
+        // Windows reports links as reparse points on the link itself only;
+        // following them needs a handle, so both forms read the entry.
+        var status: i32 = 0;
+        const text: String = String.from(path);
+        unsafe {
+            status = win32_core.file_attribute_data(core.str_as_ptr(text.as_str()), 0, buffer.data);
+        }
+        if (status == 0) {
+            var error: u32 = 0;
+            unsafe { error = win32_core.last_error(); }
+            ret Err(fs_error(error as i32));
+        }
+        var attributes: u32 = 0;
+        var write_low: u64 = 0;
+        var write_high: u64 = 0;
+        var size_high: u64 = 0;
+        var size_low: u64 = 0;
+        unsafe {
+            attributes = *(buffer.data as *u32);
+            write_low = (*((buffer.data + 20) as *u32)) as u64;
+            write_high = (*((buffer.data + 24) as *u32)) as u64;
+            size_high = (*((buffer.data + 28) as *u32)) as u64;
+            size_low = (*((buffer.data + 32) as *u32)) as u64;
+        }
+        var kind: u8 = 0;
+        if ((attributes & 1024) != 0 && !follow) { kind = 2; }
+        else if ((attributes & 16) != 0) { kind = 1; }
+        // FILETIME counts 100 ns since 1601-01-01.
+        const ticks: u64 = (write_high << 32) | write_low;
+        const unix_ticks: i64 = (ticks as i64) - 116444736000000000;
+        ret Ok(Metadata {
+            size: (size_high << 32) | size_low,
+            kind_code: kind,
+            readonly: (attributes & 1) != 0,
+            modified_nanos: unix_ticks * 100,
+        });
+    }
+
+    ret Err(FsError.Unsupported);
+}
+
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
@@ -954,4 +1074,28 @@ fn read_dir_names_lists_entries_without_dot_links() void {
     remove("/tmp/quazi_fs_read_dir_test/λ🙂.qz").unwrap();
     rmdir("/tmp/quazi_fs_read_dir_test/nested").unwrap();
     rmdir(directory).unwrap();
+}
+
+@test
+fn metadata_reports_size_kind_and_time() {
+    const path = "/tmp/quazi_fs_metadata_test.txt";
+    var file = File.create(path).unwrap();
+    file.write_str("hello").unwrap();
+    file.close();
+    const info: Metadata = metadata(path).unwrap();
+    if (info.len() != 5 || !info.is_file() || info.is_dir()) { panic("file metadata"); }
+    // Written within the last day (1.7e18 ns is late 2023).
+    if (info.modified_unix_nanos() < 1700000000000000000) { panic("modification time"); }
+    if (info.readonly()) { panic("a new file is writable"); }
+    chmod(path, 292).unwrap();
+    if (!metadata(path).unwrap().readonly()) { panic("0444 is read-only"); }
+    const directory: Metadata = metadata("/tmp").unwrap();
+    if (!directory.is_dir()) { panic("directory metadata"); }
+    symlink(path, "/tmp/quazi_fs_metadata_link").unwrap();
+    if (!symlink_metadata("/tmp/quazi_fs_metadata_link").unwrap().is_symlink()) { panic("symlink_metadata"); }
+    if (!metadata("/tmp/quazi_fs_metadata_link").unwrap().is_file()) { panic("metadata follows links"); }
+    remove("/tmp/quazi_fs_metadata_link").unwrap();
+    remove(path).unwrap();
+    const missing = metadata("/tmp/quazi_fs_metadata_absent");
+    if (!match missing { Err(FsError.NotFound) => true, _ => false }) { panic("NotFound"); }
 }
