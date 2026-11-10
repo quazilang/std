@@ -116,7 +116,14 @@ def ulps(actual, expected):
 
 def reference(name, function, x, y):
     if name == "round":
-        return math.floor(x + 0.5) if x >= 0 else -math.floor(-x + 0.5)
+        # Halves away from zero; x - trunc(x) is exact, unlike x + 0.5.
+        whole = float(math.trunc(x))
+        rest = x - whole
+        if rest >= 0.5:
+            whole += 1.0
+        elif rest <= -0.5:
+            whole -= 1.0
+        return math.copysign(whole, x) if whole == 0 else whole
     try:
         result = function(x, y) if name in ("atan2", "hypot", "pow") else function(x)
         return float(result)
@@ -136,7 +143,7 @@ def samples(rng):
     unary = {
         "sqrt": logarithmic(1e-300, 1e300), "cbrt": logarithmic(1e-300, 1e300),
         "sin": uniform(-10, 10) + uniform(-1e5, 1e5, 100), "cos": uniform(-10, 10) + uniform(-1e5, 1e5, 100),
-        "tan": uniform(-1.5, 1.5), "atan": uniform(-1e3, 1e3), "asin": uniform(-1, 1),
+        "tan": uniform(-1.5707963, 1.5707963), "atan": uniform(-1e3, 1e3), "asin": uniform(-1, 1),
         "acos": uniform(-1, 1), "exp": uniform(-700, 700), "ln": logarithmic(1e-300, 1e300),
         "log2": logarithmic(1e-300, 1e300), "log10": logarithmic(1e-300, 1e300),
         "sinh": uniform(-20, 20), "cosh": uniform(-20, 20), "tanh": uniform(-10, 10),
@@ -147,7 +154,23 @@ def samples(rng):
     records += [("atan2", y, x) for y, x in zip(uniform(-10, 10), uniform(-10, 10))]
     records += [("hypot", x, y) for x, y in zip(logarithmic(1e-150, 1e150), logarithmic(1e-150, 1e150))]
     records += [("pow", x, y) for x, y in zip(logarithmic(0.1, 100), uniform(-10, 10))]
+    # Huge arguments (Payne-Hanek reduction) and multiples of pi/2.
+    for name in ("sin", "cos", "tan"):
+        records += [(name, x, 0.0) for x in logarithmic(1e6, 1e300, 200)]
+        records += [(name, k * math.pi / 2, 0.0) for k in range(1, 400)]
+    records += [(name, x, 0.0) for name, x in HARD]
     return records
+
+
+# Inputs that defeated earlier implementations (review of 2026-11-10).
+HARD = [
+    ("sin", 1e300), ("sin", 1e22), ("cos", 1e22), ("tan", 1e300), ("cos", 1e15), ("sin", 1e10),
+    ("cos", 45.553093477052), ("sin", 91.106186954104), ("tan", 182.212373908208),
+    ("cos", 321307.9594422229), ("tan", 321307.9594422229), ("tan", 1.5707963267948966),
+    ("sin", math.pi), ("cos", math.pi / 2), ("cbrt", 1.7976931348623157e308),
+    ("cbrt", -1.7976931348623157e308), ("sinh", 710.0), ("cosh", 710.0), ("sinh", -710.0),
+    ("round", 0.49999999999999994), ("round", -0.5), ("round", 4503599627370495.5),
+]
 
 
 # Special values: (function, x, y, expected) where expected may be nan/inf/signed zero.

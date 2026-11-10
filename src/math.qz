@@ -187,6 +187,12 @@ pub fn cbrt(value: f64) f64 {
         x = x * 18014398509481984.0;
         scale = 1.0 / 262144.0;
     }
+    // Newton approaches from above, so cube near DBL_MAX would overflow:
+    // scale by 2^-999 = (2^-333)^3 first.
+    if (x > 1.0e300) {
+        x = x * math.__power_of_two(-999.0);
+        scale = math.__power_of_two(333.0);
+    }
     // Dividing the bit pattern by three approximates the cube root's exponent
     // and leading bits (within about 5%); Newton steps then converge.
     var estimate: f64 = math.__from_bits(math.__to_bits(x) / 3 + 3071306043645493248);
@@ -211,36 +217,286 @@ pub fn hypot(x: f64, y: f64) f64 {
     ret largest * math.sqrt(sx * sx + sy * sy);
 }
 
-// sin and cos on [-pi/4, pi/4] (fdlibm kernels, about 1 ULP).
-fn __sin_kernel(x: f64) f64 {
+// sin and cos of x + y on [-pi/4, pi/4], where y is the low part of a
+// reduced angle (fdlibm kernels, about 1 ULP).
+fn __sin_kernel(x: f64, y: f64) f64 {
     const z: f64 = x * x;
+    const v: f64 = z * x;
     const r: f64 = 8.33333333332248946124e-03 + z * (-1.98412698298579493134e-04
         + z * (2.75573137070700676789e-06 + z * (-2.50507602534068634195e-08
         + z * 1.58969099521155010221e-10)));
-    ret x + z * x * (-1.66666666666666324348e-01 + z * r);
+    ret x - ((z * (0.5 * y - v * r) - y) - v * -1.66666666666666324348e-01);
 }
 
-fn __cos_kernel(x: f64) f64 {
+fn __cos_kernel(x: f64, y: f64) f64 {
     const z: f64 = x * x;
     const r: f64 = z * (4.16666666666666019037e-02 + z * (-1.38888888888741095749e-03
         + z * (2.48015872894767294178e-05 + z * (-2.75573143513906633035e-07
         + z * (2.08757232129817482790e-09 + z * -1.13596475577881948265e-11)))));
     const half: f64 = 0.5 * z;
     const w: f64 = 1.0 - half;
-    ret w + (((1.0 - w) - half) + z * r);
+    ret w + (((1.0 - w) - half) + (z * r - x * y));
 }
 
-// value = n * pi/2 + reduced with |reduced| <= pi/4. pi/2 is split into three
-// parts (Cody-Waite), exact for |n| < 2^20 (|value| up to about 1.6e6);
-// beyond that accuracy degrades gradually.
-struct __Reduced { quadrant: f64, angle: f64, }
+// value = n * pi/2 + (high + low) with |high| <= pi/4 (fdlibm __rem_pio2);
+// `quadrant` is n modulo 4.
+struct __Reduced { quadrant: f64, high: f64, low: f64, }
 
 fn __reduce_half_pi(value: f64) __Reduced {
-    const n: f64 = math.round(value * 0.63661977236758134308);
-    const angle: f64 = ((value - n * 1.57079632673412561417)
-        - n * 6.07710050630396597660e-11) - n * 2.02226624871116645580e-21;
-    const quadrant: f64 = n - 4.0 * math.floor(n / 4.0);
-    __Reduced { quadrant: quadrant, angle: angle }
+    const magnitude: f64 = value.abs();
+    var n: f64 = 0.0;
+    var high: f64 = 0.0;
+    var low: f64 = 0.0;
+    if (magnitude < 1647099.3291652855) {
+        // Medium arguments: pi/2 in three parts with tails; the second and
+        // third steps run only when cancellation leaves too few bits.
+        n = math.round(value * 6.36619772367581382433e-01);
+        var r: f64 = value - n * 1.57079632673412561417e+00;
+        var w: f64 = n * 6.07710050650619224932e-11;
+        high = r - w;
+        const exponent: i64 = math.__exponent_field(value);
+        if (exponent - math.__exponent_field(high) > 16) {
+            var t: f64 = r;
+            w = n * 6.07710050630396597660e-11;
+            r = t - w;
+            w = n * 2.02226624879595063154e-21 - ((t - r) - w);
+            high = r - w;
+            if (exponent - math.__exponent_field(high) > 49) {
+                t = r;
+                w = n * 2.02226624871116645580e-21;
+                r = t - w;
+                w = n * 8.47842766036889956997e-32 - ((t - r) - w);
+                high = r - w;
+            }
+        }
+        low = (r - high) - w;
+    } else {
+        const large = math.__reduce_large(magnitude);
+        n = large.quadrant;
+        high = large.high;
+        low = large.low;
+        if (value < 0.0) {
+            n = -n;
+            high = -high;
+            low = -low;
+        }
+    }
+    __Reduced { quadrant: n - 4.0 * math.floor(n / 4.0), high: high, low: low }
+}
+
+// 24-bit chunks of 2/pi (fdlibm ipio2) and pi/2 split into 24-bit parts.
+fn __two_over_pi() Array[f64] {
+    var values: Array[f64] = Array.new();
+    values.push(10680707.0); values.push(7228996.0); values.push(1387004.0); values.push(2578385.0);
+    values.push(16069853.0); values.push(12639074.0); values.push(9804092.0); values.push(4427841.0);
+    values.push(16666979.0); values.push(11263675.0); values.push(12935607.0); values.push(2387514.0);
+    values.push(4345298.0); values.push(14681673.0); values.push(3074569.0); values.push(13734428.0);
+    values.push(16653803.0); values.push(1880361.0); values.push(10960616.0); values.push(8533493.0);
+    values.push(3062596.0); values.push(8710556.0); values.push(7349940.0); values.push(6258241.0);
+    values.push(3772886.0); values.push(3769171.0); values.push(3798172.0); values.push(8675211.0);
+    values.push(12450088.0); values.push(3874808.0); values.push(9961438.0); values.push(366607.0);
+    values.push(15675153.0); values.push(9132554.0); values.push(7151469.0); values.push(3571407.0);
+    values.push(2607881.0); values.push(12013382.0); values.push(4155038.0); values.push(6285869.0);
+    values.push(7677882.0); values.push(13102053.0); values.push(15825725.0); values.push(473591.0);
+    values.push(9065106.0); values.push(15363067.0); values.push(6271263.0); values.push(9264392.0);
+    values.push(5636912.0); values.push(4652155.0); values.push(7056368.0); values.push(13614112.0);
+    values.push(10155062.0); values.push(1944035.0); values.push(9527646.0); values.push(15080200.0);
+    values.push(6658437.0); values.push(6231200.0); values.push(6832269.0); values.push(16767104.0);
+    values.push(5075751.0); values.push(3212806.0); values.push(1398474.0); values.push(7579849.0);
+    values.push(6349435.0); values.push(12618859.0);
+    values
+}
+
+fn __half_pi_parts() Array[f64] {
+    var values: Array[f64] = Array.new();
+    values.push(1.570796251296997); values.push(7.549789415861596e-08); values.push(5.390302529957765e-15); values.push(3.282003415807913e-22);
+    values.push(1.270655753080676e-29); values.push(1.2293330898111133e-36); values.push(2.7337005381646456e-44); values.push(2.1674168387780482e-51);
+    values
+}
+
+fn __zeros(count: usize) Array[f64] {
+    var values: Array[f64] = Array.new();
+    for i : 0..count { values.push(0.0); }
+    values
+}
+
+// Payne-Hanek reduction of a large positive finite x (fdlibm
+// __kernel_rem_pio2 for double precision), with every integer held in an
+// integral f64 of at most 24 bits.
+fn __reduce_large(x: f64) __Reduced {
+    const two24: f64 = 16777216.0;
+    const ipio2 = math.__two_over_pi();
+    const pio2 = math.__half_pi_parts();
+    // x = (chunk0 + chunk1 * 2^-24 + chunk2 * 2^-48) * 2^e0, chunks of 24 bits.
+    const e0: f64 = math.__from_count(math.__exponent_field(x) as u64) - 1046.0;
+    var z: f64 = x * math.__power_of_two(-e0);
+    var tx = math.__zeros(3);
+    for i : 0..2 {
+        const chunk: f64 = math.trunc(z);
+        tx.set(i, chunk);
+        z = (z - chunk) * two24;
+    }
+    tx.set(2, z);
+    var nx: usize = 3;
+    for (nx > 1 && tx[nx - 1] == 0.0) { nx = nx - 1; }
+
+    const jk: usize = 4;
+    const jx: usize = nx - 1;
+    var jv: f64 = math.trunc((e0 - 3.0) / 24.0);
+    if (jv < 0.0) { jv = 0.0; }
+    var q0: f64 = e0 - 24.0 * (jv + 1.0);
+    var f = math.__zeros(20);
+    var q = math.__zeros(20);
+    var iq = math.__zeros(20);
+    var fq = math.__zeros(20);
+    // f[i] = ipio2[jv - jx + i] (zero before the table starts).
+    for i : 0..(jx + jk + 1) {
+        const index: f64 = jv - math.__from_count(jx as u64) + math.__from_count(i as u64);
+        if (index >= 0.0) { f.set(i, ipio2[math.__index(index)]); }
+    }
+    for i : 0..(jk + 1) {
+        var sum: f64 = 0.0;
+        for j : 0..(jx + 1) { sum = sum + tx[j] * f[jx + i - j]; }
+        q.set(i, sum);
+    }
+    var jz: usize = jk;
+    var n: f64 = 0.0;
+    var ih: f64 = 0.0;
+    var carry: bool = false;
+    for (true) {
+        // Distill q[] into 24-bit integers iq[], most significant first.
+        z = q[jz];
+        var i: usize = 0;
+        var j: usize = jz;
+        for (j > 0) {
+            const upper: f64 = math.trunc(z / two24);
+            iq.set(i, math.trunc(z - two24 * upper));
+            z = q[j - 1] + upper;
+            i = i + 1;
+            j = j - 1;
+        }
+        z = z * math.__power_of_two(q0);
+        z = z - 8.0 * math.floor(z * 0.125);
+        n = math.trunc(z);
+        z = z - n;
+        ih = 0.0;
+        if (q0 > 0.0) {
+            const unit: f64 = math.__power_of_two(24.0 - q0);
+            const top: f64 = math.floor(iq[jz - 1] / unit);
+            n = n + top;
+            const remaining: f64 = iq[jz - 1] - top * unit;
+            iq.set(jz - 1, remaining);
+            ih = math.floor(iq[jz - 1] / math.__power_of_two(23.0 - q0));
+        } else if (q0 == 0.0) {
+            ih = math.floor(iq[jz - 1] / 8388608.0);
+        } else if (z >= 0.5) {
+            ih = 2.0;
+        }
+        carry = false;
+        if (ih > 0.0) {
+            n = n + 1.0;
+            for k : 0..jz {
+                const digit: f64 = iq[k];
+                if (!carry) {
+                    if (digit != 0.0) {
+                        carry = true;
+                        iq.set(k, two24 - digit);
+                    }
+                } else {
+                    iq.set(k, two24 - 1.0 - digit);
+                }
+            }
+            // Keep only the bits below the integer part already taken.
+            const last: f64 = iq[jz - 1];
+            if (q0 == 1.0) { iq.set(jz - 1, last - 8388608.0 * math.floor(last / 8388608.0)); }
+            if (q0 == 2.0) { iq.set(jz - 1, last - 4194304.0 * math.floor(last / 4194304.0)); }
+            if (ih == 2.0) {
+                z = 1.0 - z;
+                if (carry) { z = z - math.__power_of_two(q0); }
+            }
+        }
+        if (z != 0.0) { break; }
+        // All fraction bits cancelled: pull in more of 2/pi and retry.
+        var nonzero: bool = false;
+        var k: usize = jz;
+        for (k > jk) {
+            k = k - 1;
+            if (iq[k] != 0.0) { nonzero = true; }
+        }
+        if (nonzero) { break; }
+        var extra: usize = 1;
+        for (iq[jk - extra] == 0.0) { extra = extra + 1; }
+        for index : (jz + 1)..(jz + extra + 1) {
+            f.set(jx + index, ipio2[math.__index(jv + math.__from_count(index as u64))]);
+            var sum: f64 = 0.0;
+            for m : 0..(jx + 1) { sum = sum + tx[m] * f[jx + index - m]; }
+            q.set(index, sum);
+        }
+        jz = jz + extra;
+    }
+    // Chop off zero terms and append the remaining fraction.
+    if (z == 0.0) {
+        jz = jz - 1;
+        q0 = q0 - 24.0;
+        for (iq[jz] == 0.0) {
+            jz = jz - 1;
+            q0 = q0 - 24.0;
+        }
+    } else {
+        z = z * math.__power_of_two(-q0);
+        if (z >= two24) {
+            const upper: f64 = math.trunc(z / two24);
+            iq.set(jz, z - two24 * upper);
+            jz = jz + 1;
+            q0 = q0 + 24.0;
+            iq.set(jz, upper);
+        } else {
+            iq.set(jz, z);
+        }
+    }
+    // The bit string as doubles, then multiplied by pi/2.
+    var scale: f64 = math.__power_of_two(q0);
+    var i: usize = jz + 1;
+    for (i > 0) {
+        i = i - 1;
+        q.set(i, scale * iq[i]);
+        scale = scale / two24;
+    }
+    i = jz + 1;
+    for (i > 0) {
+        i = i - 1;
+        var sum: f64 = 0.0;
+        var k: usize = 0;
+        for (k <= jk && k <= jz - i) {
+            sum = sum + pio2[k] * q[i + k];
+            k = k + 1;
+        }
+        fq.set(jz - i, sum);
+    }
+    var high: f64 = 0.0;
+    i = jz + 1;
+    for (i > 0) {
+        i = i - 1;
+        high = high + fq[i];
+    }
+    var low: f64 = fq[0] - high;
+    for k : 1..(jz + 1) { low = low + fq[k]; }
+    if (ih != 0.0) {
+        high = -high;
+        low = -low;
+    }
+    __Reduced { quadrant: n, high: high, low: low }
+}
+
+// A non-negative integer below 2^51 as an f64 (the inverse trick).
+fn __from_count(count: u64) f64 {
+    ret math.__from_bits(math.__to_bits(6755399441055744.0) + count) - 6755399441055744.0;
+}
+
+// A small non-negative integral f64 as an index (adds 1.5 * 2^52 so the
+// value lands in the low fraction bits).
+fn __index(value: f64) usize {
+    ret (math.__to_bits(value + 6755399441055744.0) & 4294967295) as usize;
 }
 
 pub fn sin(value: f64) f64 {
@@ -249,28 +505,28 @@ pub fn sin(value: f64) f64 {
     if (value.abs() < 7.450580596923828e-09) { ret value; }
     const reduced = math.__reduce_half_pi(value);
     const q: f64 = reduced.quadrant;
-    if (q == 0.0) { ret math.__sin_kernel(reduced.angle); }
-    if (q == 1.0) { ret math.__cos_kernel(reduced.angle); }
-    if (q == 2.0) { ret -math.__sin_kernel(reduced.angle); }
-    -math.__cos_kernel(reduced.angle)
+    if (q == 0.0) { ret math.__sin_kernel(reduced.high, reduced.low); }
+    if (q == 1.0) { ret math.__cos_kernel(reduced.high, reduced.low); }
+    if (q == 2.0) { ret -math.__sin_kernel(reduced.high, reduced.low); }
+    -math.__cos_kernel(reduced.high, reduced.low)
 }
 
 pub fn cos(value: f64) f64 {
     if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
     const reduced = math.__reduce_half_pi(value);
     const q: f64 = reduced.quadrant;
-    if (q == 0.0) { ret math.__cos_kernel(reduced.angle); }
-    if (q == 1.0) { ret -math.__sin_kernel(reduced.angle); }
-    if (q == 2.0) { ret -math.__cos_kernel(reduced.angle); }
-    math.__sin_kernel(reduced.angle)
+    if (q == 0.0) { ret math.__cos_kernel(reduced.high, reduced.low); }
+    if (q == 1.0) { ret -math.__sin_kernel(reduced.high, reduced.low); }
+    if (q == 2.0) { ret -math.__cos_kernel(reduced.high, reduced.low); }
+    math.__sin_kernel(reduced.high, reduced.low)
 }
 
 pub fn tan(value: f64) f64 {
     if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
     if (value.abs() < 7.450580596923828e-09) { ret value; }
     const reduced = math.__reduce_half_pi(value);
-    const s: f64 = math.__sin_kernel(reduced.angle);
-    const c: f64 = math.__cos_kernel(reduced.angle);
+    const s: f64 = math.__sin_kernel(reduced.high, reduced.low);
+    const c: f64 = math.__cos_kernel(reduced.high, reduced.low);
     if (reduced.quadrant == 0.0 || reduced.quadrant == 2.0) { ret s / c; }
     -c / s
 }
@@ -423,10 +679,21 @@ fn __small_sinh(x: f64) f64 {
 
 pub fn sinh(value: f64) f64 {
     if (value.abs() < 0.5) { ret math.__small_sinh(value); }
+    // exp(|x|) / 2 as (exp(|x| / 2) / 2) * exp(|x| / 2) stays finite up to
+    // |x| = 710.47 although exp(|x|) alone overflows above 709.78.
+    if (value.abs() > 700.0) {
+        const half: f64 = math.exp(0.5 * value.abs());
+        const result: f64 = (0.5 * half) * half;
+        ret if (value < 0.0) { -result } else { result };
+    }
     const positive: f64 = math.exp(value);
     ret (positive - 1.0 / positive) * 0.5;
 }
 pub fn cosh(value: f64) f64 {
+    if (value.abs() > 700.0) {
+        const half: f64 = math.exp(0.5 * value.abs());
+        ret (0.5 * half) * half;
+    }
     const positive: f64 = math.exp(value);
     ret (positive + 1.0 / positive) * 0.5;
 }
