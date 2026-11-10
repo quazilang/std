@@ -655,6 +655,111 @@ pub fn count_entries(path: str) Result[usize, FsError] {
     ret Err(FsError.Unsupported);
 }
 
+// Names of the immediate entries of a directory, excluding `.` and `..`, in
+// the order the operating system reports them. Names are copied into owned
+// strings; the scan buffer and OS enumeration handle are closed on success
+// and errors.
+pub fn read_dir_names(path: str) Result[Array[String], FsError] {
+    const capacity: usize = 4096;
+    var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(capacity); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
+    var names: Array[String] = Array.new();
+
+    @cfg(target_os = "linux") {
+        var fd: i32 = -1;
+        unsafe { fd = unix.open(path, 65536, 0); }
+        if (fd < 0) { ret Err(fs_error(fd)); }
+        var scan_data: *u8 = 0;
+        unsafe { scan_data = buffer.take(); }
+        const scan: DirectoryScan = DirectoryScan {
+            handle: fd as isize,
+            data: scan_data,
+        };
+        for (true) {
+            var batch_size: isize = -1;
+            unsafe { batch_size = unix.getdents64(fd, scan.data, capacity); }
+            if (batch_size < 0) { ret Err(fs_error(batch_size as i32)); }
+            if (batch_size == 0) { break; }
+            var offset: usize = 0;
+            for (offset < batch_size as usize) {
+                var record_length: usize = 0;
+                unsafe {
+                    record_length = (*(scan.data + offset + 16)) as usize;
+                    record_length = record_length
+                        + (((*(scan.data + offset + 17)) as usize) << 8);
+                }
+                if (record_length < 20 || offset + record_length > batch_size as usize) {
+                    ret Err(FsError.InvalidData);
+                }
+                unsafe {
+                    const name: *u8 = scan.data + offset + 19;
+                    if (!is_dot_entry(name)) { names.push(String.from(core.str_from_ptr(name))); }
+                }
+                offset = offset + record_length;
+            }
+        }
+        ret Ok(names);
+    }
+
+    @cfg(target_os = "netbsd") {
+        var raw_dir: *u8 = 0;
+        unsafe { raw_dir = netbsd.opendir(path); }
+        if (raw_dir == 0) {
+            var error: i32 = 0;
+            unsafe { error = netbsd.errno_value(); }
+            ret Err(fs_error(-error));
+        }
+        for (true) {
+            var entry: *u8 = 0;
+            unsafe { entry = netbsd.readdir(raw_dir); }
+            if (entry == 0) { break; }
+            // d_name at byte offset 13 (see count_entries).
+            var name: *u8 = entry + 13;
+            unsafe {
+                if (!is_dot_entry(name)) { names.push(String.from(core.str_from_ptr(name))); }
+            }
+        }
+        unsafe { netbsd.closedir(raw_dir); }
+        ret Ok(names);
+    }
+
+    @cfg(target_os = "windows") {
+        var pattern: String = String.from(path);
+        pattern = pattern.push_str("\\*");
+        var raw_handle: usize = 0;
+        unsafe {
+            raw_handle = win32_core.find_first(
+                core.str_as_ptr(pattern.as_str()), buffer.data
+            );
+        }
+        const handle: isize = raw_handle as isize;
+        if (handle == -1) {
+            var error: u32 = 0;
+            unsafe { error = win32_core.last_error(); }
+            if (error == 2 || error == 18) { ret Ok(names); }
+            ret Err(fs_error(error as i32));
+        }
+        var scan_data: *u8 = 0;
+        unsafe { scan_data = buffer.take(); }
+        const scan: DirectoryScan = DirectoryScan {
+            handle: handle,
+            data: scan_data,
+        };
+        for (true) {
+            unsafe {
+                // WIN32_FIND_DATAA.cFileName starts at byte offset 44.
+                const name: *u8 = scan.data + 44;
+                if (!is_dot_entry(name)) { names.push(String.from(core.str_from_ptr(name))); }
+                if (win32_core.find_next(raw_handle, scan.data) == 0) { break; }
+            }
+        }
+        ret Ok(names);
+    }
+
+    ret Err(FsError.Unsupported);
+}
+
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
@@ -818,4 +923,35 @@ fn read_to_string_with_limit_rejects_larger_files() void {
     if (!too_large) { panic("oversized file was not rejected with TooLarge"); }
     if (read_to_string(path).unwrap().as_str() != "hello world") { panic("unbounded read changed"); }
     remove(path).unwrap();
+}
+
+@test
+fn read_dir_names_lists_entries_without_dot_links() void {
+    const directory = "/tmp/quazi_fs_read_dir_test";
+    mkdir(directory).unwrap();
+    var first = File.create("/tmp/quazi_fs_read_dir_test/alpha.txt").unwrap();
+    first.close();
+    var second = File.create("/tmp/quazi_fs_read_dir_test/λ🙂.qz").unwrap();
+    second.close();
+    mkdir("/tmp/quazi_fs_read_dir_test/nested").unwrap();
+    var names: Array[String] = read_dir_names(directory).unwrap();
+    const total: usize = names.len();
+    var seen: usize = 0;
+    // Owned elements are moved out until borrowed element access exists.
+    for (names.len() > 0) {
+        const last: usize = names.len() - 1;
+        const name: String = names.remove(last);
+        const text = name.as_str();
+        if (text == "alpha.txt" || text == "λ🙂.qz" || text == "nested") { seen = seen + 1; }
+        if (text == "." || text == "..") { panic("dot links must be skipped"); }
+    }
+    if (total != 3 || seen != 3) { panic("unexpected directory entries"); }
+    if (count_entries(directory).unwrap() != total) { panic("count_entries disagrees"); }
+    const missing = read_dir_names("/tmp/quazi_fs_read_dir_test/absent");
+    const not_found: bool = match missing { Err(FsError.NotFound) => true, _ => false };
+    if (!not_found) { panic("a missing directory must report NotFound"); }
+    remove("/tmp/quazi_fs_read_dir_test/alpha.txt").unwrap();
+    remove("/tmp/quazi_fs_read_dir_test/λ🙂.qz").unwrap();
+    rmdir("/tmp/quazi_fs_read_dir_test/nested").unwrap();
+    rmdir(directory).unwrap();
 }

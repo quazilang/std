@@ -59,7 +59,8 @@ Evidence: [src/fs.qz](../src/fs.qz).
 - [ ] Common streaming reader/writer interfaces.
 - [ ] Structured path abstraction.
 - [ ] Structured metadata API.
-- [ ] Directory iterator/traversal API.
+- [ ] Directory iterator/traversal API (`read_dir_names` lists one directory as owned
+  names since 2026-11-10; no streaming iterator or recursive traversal yet).
 - [x] Bounded large-file reads.
 - [ ] Complete target-native large-file/partial-I/O matrix.
 
