@@ -45,15 +45,29 @@ pub fn gcd(a: i64, b: i64) i64 {
     ret value as i64;
 }
 
+// Integer results that do not fit their type panic, like integer `**`
+// (D-016), instead of wrapping silently.
+fn __checked_mul_u64(a: u64, b: u64, operation: str) u64 {
+    const product: u64 = a * b;
+    if (a != 0 && product / a != b) { panic("{} overflows u64", operation); }
+    product
+}
+
 pub fn lcm(a: i64, b: i64) i64 {
     if (a == 0 || b == 0) { ret 0; }
-    ret (a / math.gcd(a, b) * b).abs();
+    const divisor: u64 = math.__gcd_u64(math.__magnitude(a), math.__magnitude(b));
+    const value: u64 = math.__checked_mul_u64(math.__magnitude(a) / divisor, math.__magnitude(b), "lcm");
+    if (value > 9223372036854775807) { panic("lcm result does not fit i64"); }
+    ret value as i64;
 }
 
 pub fn factorial(value: u32) u64 {
     var result: u64 = 1;
     var factor: u32 = 2;
-    for (factor <= value) { result = result * (factor as u64); factor++; }
+    for (factor <= value) {
+        result = math.__checked_mul_u64(result, factor as u64, "factorial");
+        factor++;
+    }
     ret result;
 }
 
@@ -61,7 +75,10 @@ pub fn permutations(n: u32, r: u32) u64 {
     if (r > n) { ret 0; }
     var result: u64 = 1;
     var offset: u32 = 0;
-    for (offset < r) { result = result * ((n - offset) as u64); offset++; }
+    for (offset < r) {
+        result = math.__checked_mul_u64(result, (n - offset) as u64, "permutations");
+        offset++;
+    }
     ret result;
 }
 
@@ -72,7 +89,12 @@ pub fn combinations(n: u32, r: u32) u64 {
     var result: u64 = 1;
     var index: u32 = 1;
     for (index <= count) {
-        result = result * ((n - count + index) as u64) / (index as u64);
+        // result * factor / index is exact; dividing out their common factors
+        // first keeps the intermediate product from overflowing early.
+        const factor: u64 = (n - count + index) as u64;
+        const divisor: u64 = math.__gcd_u64(result, index as u64);
+        result = math.__checked_mul_u64(result / divisor, factor / ((index as u64) / divisor),
+            "combinations");
         index++;
     }
     ret result;
@@ -550,4 +572,13 @@ fn special_values_and_reductions_hold() {
     if ((math.exp(1.0) - 2.718281828459045).abs() > 1.4e-15 || math.exp(-745.2) != 0.0) { panic("exp"); }
     if (math.cbrt(-27.0) != -3.0 || math.cbrt(8e-300) != 2e-100) { panic("cbrt"); }
     if (math.atan(1.0) != 0.7853981633974483 || math.acos(-1.0) != 3.141592653589793) { panic("atan/acos"); }
+}
+
+@test
+fn combinatorics_are_exact_up_to_u64() {
+    if (math.factorial(20) != 2432902008176640000) { panic("factorial(20)"); }
+    // The final value fits u64 although result * factor would not.
+    if (math.combinations(67, 33) != 14226520737620288370) { panic("combinations(67, 33)"); }
+    if (math.permutations(20, 15) != 20274183401472000) { panic("permutations(20, 15)"); }
+    if (math.lcm(9223372036854775806, 3) != 9223372036854775806 || math.lcm(-4, 6) != 12) { panic("lcm"); }
 }
