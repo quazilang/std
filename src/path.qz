@@ -12,6 +12,9 @@ pub struct Path {
     text: String,
 }
 
+// `Path` owns its text, so the owned and borrowed spellings are one type.
+pub type PathBuf = Path;
+
 fn is_separator(text: str, index: usize) bool {
     const piece: String = text[index:index + 1];
     if (piece.as_str() == "/") { ret true; }
@@ -70,6 +73,40 @@ impl Path {
     pub fn new(text: str) Path { Path { text: String.from(text) } }
 
     pub fn as_str(self: &Path) str { ret self.text.as_str(); }
+
+    // An owned copy of the text.
+    pub fn to_string(self: &Path) String { String.from(self.text.as_str()) }
+
+    // The path with its extension replaced (or added; empty removes it).
+    pub fn with_extension(self: &Path, extension: str) Path {
+        const text = self.text.as_str();
+        var stem_end: usize = text.len();
+        const name = self.file_name();
+        if (name.is_some()) {
+            const file: String = name.unwrap();
+            const file_text = file.as_str();
+            var dot: usize = file_text.len();
+            for (dot > 0 && file_text[dot - 1:dot].as_str() != ".") { dot = dot - 1; }
+            if (dot > 1) { stem_end = text.len() - (file_text.len() - dot + 1); }
+        }
+        var result: String = text[0:stem_end];
+        if (!extension.is_empty()) {
+            result = result.push_str(".");
+            result = result.push_str(extension);
+        }
+        Path { text: result }
+    }
+
+    // Whether the path starts with all components of `base`.
+    pub fn starts_with(self: &Path, base: str) bool {
+        const mine = self.normalize();
+        const other = Path.new(base).normalize();
+        const text = mine.as_str();
+        const prefix = other.as_str();
+        if (!text.starts_with(prefix)) { ret false; }
+        text.len() == prefix.len() || prefix.ends_with("/") || prefix.ends_with("\\")
+            || path.is_separator(text, prefix.len())
+    }
 
     // A rooted path: `/x`, and on Windows also `\x`, `C:\x` and `\\host\x`.
     pub fn is_absolute(self: &Path) bool {

@@ -8,6 +8,8 @@ import std.unix;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 import std.win32_core;
+pub import std.path.Path;
+pub import std.path.PathBuf;
 
 pub enum FsError {
     NotFound,
@@ -761,7 +763,7 @@ pub fn read_dir_names(path: str) Result[Array[String], FsError] {
 }
 
 // What a path names, as reported by the operating system.
-pub enum FileKind {
+pub enum FileType {
     File,
     Directory,
     Symlink,
@@ -779,12 +781,7 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn len(self: &Metadata) u64 { ret self.size; }
-    pub fn kind(self: &Metadata) FileKind {
-        if (self.kind_code == 0) { ret FileKind.File; }
-        if (self.kind_code == 1) { ret FileKind.Directory; }
-        if (self.kind_code == 2) { ret FileKind.Symlink; }
-        FileKind.Other
-    }
+    pub fn file_type(self: &Metadata) FileType { file_type_of(self.kind_code) }
     pub fn is_file(self: &Metadata) bool { ret self.kind_code == 0; }
     pub fn is_dir(self: &Metadata) bool { ret self.kind_code == 1; }
     pub fn is_symlink(self: &Metadata) bool { ret self.kind_code == 2; }
@@ -798,7 +795,7 @@ impl Metadata {
 // Metadata of the entry `path` names, following symbolic links.
 pub fn metadata(path: str) Result[Metadata, FsError] { ret fs_metadata(path, true); }
 
-// Metadata of `path` itself: a symbolic link reports FileKind.Symlink.
+// Metadata of `path` itself: a symbolic link reports FileType.Symlink.
 pub fn symlink_metadata(path: str) Result[Metadata, FsError] { ret fs_metadata(path, false); }
 
 fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
@@ -1114,6 +1111,315 @@ impl BufferedWriter {
     }
 }
 
+fn file_type_of(code: u8) FileType {
+    if (code == 0) { ret FileType.File; }
+    if (code == 1) { ret FileType.Directory; }
+    if (code == 2) { ret FileType.Symlink; }
+    FileType.Other
+}
+
+// ── Directory entries ───────────────────────────────────────────────────────
+
+// One entry of a directory listing: its name, its path (the listed
+// directory joined with the name) and its type as the listing reported it.
+pub struct DirEntry {
+    name: String,
+    path: String,
+    // 0 file, 1 directory, 2 symbolic link, 3 other (see Metadata).
+    kind_code: u8,
+}
+
+impl DirEntry {
+    pub fn name(self: &DirEntry) str { ret self.name.as_str(); }
+    pub fn path(self: &DirEntry) Path { Path.new(self.path.as_str()) }
+    pub fn path_str(self: &DirEntry) str { ret self.path.as_str(); }
+    pub fn file_type(self: &DirEntry) FileType { file_type_of(self.kind_code) }
+    pub fn is_file(self: &DirEntry) bool { ret self.kind_code == 0; }
+    pub fn is_dir(self: &DirEntry) bool { ret self.kind_code == 1; }
+    pub fn is_symlink(self: &DirEntry) bool { ret self.kind_code == 2; }
+    // Metadata of the entry itself (a link is not followed).
+    pub fn metadata(self: &DirEntry) Result[Metadata, FsError] {
+        symlink_metadata(self.path.as_str())
+    }
+}
+
+// The entries of one directory, in operating-system order; iterate it with
+// `for entry : fs.read_dir(path)? { ... }`.
+pub struct ReadDir {
+    // Stored last-first so `next` removes from the end.
+    pending: Array[DirEntry],
+}
+
+impl ReadDir {
+    pub fn has_next(self: &ReadDir) bool { ret self.pending.len() > 0; }
+
+    pub fn next(self: &ReadDir!) Option[DirEntry] {
+        if (self.pending.len() == 0) { ret None; }
+        const last: usize = self.pending.len() - 1;
+        Some(self.pending.remove(last))
+    }
+
+    // Entries not yet returned.
+    pub fn len(self: &ReadDir) usize { ret self.pending.len(); }
+}
+
+fn entry_path(directory: str, name: str) String {
+    var text: String = String.from(directory);
+    if (!directory.is_empty() && !directory.ends_with("/") && !directory.ends_with("\\")) {
+        var separator: str = "/";
+        @cfg(target_os = "windows") { separator = "\\"; }
+        text = text.push_str(separator);
+    }
+    text.push_str(name)
+}
+
+// Maps a `d_type` value (Linux/NetBSD) to the entry kind code; 0 (unknown)
+// asks the file system.
+fn dirent_kind(d_type: u8, path: str) u8 {
+    if (d_type == 8) { ret 0; }
+    if (d_type == 4) { ret 1; }
+    if (d_type == 10) { ret 2; }
+    if (d_type != 0) { ret 3; }
+    const info = symlink_metadata(path);
+    if (info.is_err()) { ret 3; }
+    if (info.unwrap().is_symlink()) { ret 2; }
+    const followed = symlink_metadata(path);
+    if (followed.is_err()) { ret 3; }
+    const resolved: Metadata = followed.unwrap();
+    if (resolved.is_dir()) { ret 1; }
+    if (resolved.is_file()) { ret 0; }
+    3
+}
+
+// The immediate entries of a directory (without `.` and `..`).
+pub fn read_dir(path: str) Result[ReadDir, FsError] {
+    const directory: str = if (path.is_empty()) { "." } else { path };
+    const capacity: usize = 4096;
+    var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(capacity); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
+    var entries: Array[DirEntry] = Array.new();
+
+    @cfg(target_os = "linux") {
+        var fd: i32 = -1;
+        unsafe { fd = unix.open(directory, 65536, 0); }
+        if (fd < 0) { ret Err(fs_error(fd)); }
+        var scan_data: *u8 = 0;
+        unsafe { scan_data = buffer.take(); }
+        const scan: DirectoryScan = DirectoryScan { handle: fd as isize, data: scan_data };
+        for (true) {
+            var batch_size: isize = -1;
+            unsafe { batch_size = unix.getdents64(fd, scan.data, capacity); }
+            if (batch_size < 0) { ret Err(fs_error(batch_size as i32)); }
+            if (batch_size == 0) { break; }
+            var offset: usize = 0;
+            for (offset < batch_size as usize) {
+                var record_length: usize = 0;
+                var d_type: u8 = 0;
+                unsafe {
+                    record_length = (*(scan.data + offset + 16)) as usize;
+                    record_length = record_length + (((*(scan.data + offset + 17)) as usize) << 8);
+                    d_type = *(scan.data + offset + 18);
+                }
+                if (record_length < 20 || offset + record_length > batch_size as usize) {
+                    ret Err(FsError.InvalidData);
+                }
+                unsafe {
+                    const name: *u8 = scan.data + offset + 19;
+                    if (!is_dot_entry(name)) {
+                        const text: str = core.str_from_ptr(name);
+                        const full: String = entry_path(directory, text);
+                        const kind: u8 = dirent_kind(d_type, full.as_str());
+                        entries.push(DirEntry { name: String.from(text), path: full, kind_code: kind });
+                    }
+                }
+                offset = offset + record_length;
+            }
+        }
+    }
+
+    @cfg(target_os = "netbsd") {
+        var raw_dir: *u8 = 0;
+        unsafe { raw_dir = netbsd.opendir(directory); }
+        if (raw_dir == 0) {
+            var error: i32 = 0;
+            unsafe { error = netbsd.errno_value(); }
+            ret Err(fs_error(-error));
+        }
+        for (true) {
+            var entry: *u8 = 0;
+            unsafe { entry = netbsd.readdir(raw_dir); }
+            if (entry == 0) { break; }
+            unsafe {
+                // NetBSD 11 sys/dirent.h: d_type at byte 12, d_name at 13.
+                const name: *u8 = entry + 13;
+                if (!is_dot_entry(name)) {
+                    const text: str = core.str_from_ptr(name);
+                    const full: String = entry_path(directory, text);
+                    const kind: u8 = dirent_kind(*(entry + 12), full.as_str());
+                    entries.push(DirEntry { name: String.from(text), path: full, kind_code: kind });
+                }
+            }
+        }
+        unsafe { netbsd.closedir(raw_dir); }
+    }
+
+    @cfg(target_os = "windows") {
+        var pattern: String = String.from(directory);
+        pattern = pattern.push_str("\\*");
+        var raw_handle: usize = 0;
+        unsafe {
+            raw_handle = win32_core.find_first(core.str_as_ptr(pattern.as_str()), buffer.data);
+        }
+        const handle: isize = raw_handle as isize;
+        if (handle == -1) {
+            var error: u32 = 0;
+            unsafe { error = win32_core.last_error(); }
+            if (error != 2 && error != 18) { ret Err(fs_error(error as i32)); }
+        } else {
+            var scan_data: *u8 = 0;
+            unsafe { scan_data = buffer.take(); }
+            const scan: DirectoryScan = DirectoryScan { handle: handle, data: scan_data };
+            for (true) {
+                unsafe {
+                    // WIN32_FIND_DATAA: attributes at 0, cFileName at 44.
+                    const name: *u8 = scan.data + 44;
+                    if (!is_dot_entry(name)) {
+                        const attributes: u32 = *(scan.data as *u32);
+                        var kind: u8 = 0;
+                        if ((attributes & 1024) != 0) { kind = 2; }
+                        else if ((attributes & 16) != 0) { kind = 1; }
+                        const text: str = core.str_from_ptr(name);
+                        entries.push(DirEntry {
+                            name: String.from(text),
+                            path: entry_path(directory, text),
+                            kind_code: kind,
+                        });
+                    }
+                    if (win32_core.find_next(raw_handle, scan.data) == 0) { break; }
+                }
+            }
+        }
+    }
+
+    // Reverse into last-first order for ReadDir.next.
+    var pending: Array[DirEntry] = Array.new();
+    for (entries.len() > 0) {
+        const last: usize = entries.len() - 1;
+        pending.push(entries.remove(last));
+    }
+    Ok(ReadDir { pending: pending })
+}
+
+pub fn is_dir(path: str) bool {
+    const info = metadata(path);
+    if (info.is_err()) { ret false; }
+    info.unwrap().is_dir()
+}
+
+pub fn is_file(path: str) bool {
+    const info = metadata(path);
+    if (info.is_err()) { ret false; }
+    info.unwrap().is_file()
+}
+
+pub fn is_symlink(path: str) bool {
+    const info = symlink_metadata(path);
+    if (info.is_err()) { ret false; }
+    info.unwrap().is_symlink()
+}
+
+// Creates `path` and every missing parent; an existing directory is fine.
+pub fn create_dir_all(path: str) Result[bool, FsError] {
+    if (path.is_empty()) { ret Err(FsError.InvalidPath); }
+    if (is_dir(path)) { ret Ok(false); }
+    const length: usize = path.len();
+    var index: usize = 1;
+    for (index <= length) {
+        const at_end: bool = index == length;
+        var boundary: bool = at_end;
+        if (!at_end) {
+            const piece: String = path[index:index + 1];
+            boundary = piece.as_str() == "/" || piece.as_str() == "\\";
+        }
+        if (boundary) {
+            const prefix: String = path[0:index];
+            const text = prefix.as_str();
+            // Skip roots and drive prefixes (`/`, `C:`).
+            if (!text.ends_with(":") && !is_dir(text)) {
+                const made = mkdir(text);
+                if (made.is_err() && !is_dir(text)) { ret Err(made.unwrap_err()); }
+            }
+        }
+        index = index + 1;
+    }
+    Ok(true)
+}
+
+// The absolute path with symbolic links, `.` and `..` resolved; the path
+// must exist.
+pub fn canonicalize(path: str) Result[Path, FsError] {
+    @cfg(target_os = "linux") {
+        // O_PATH | O_CLOEXEC opens without reading; /proc names the target.
+        var fd: i32 = -1;
+        unsafe { fd = unix.open(path, 2621440, 0); }
+        if (fd < 0) { ret Err(fs_error(fd)); }
+        const link: String = "/proc/self/fd/{fd}";
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(4097); }
+        if (buffer == 0) {
+            unsafe { unix.close(fd); }
+            ret Err(FsError.AllocationFailed);
+        }
+        var length: isize = 0;
+        unsafe {
+            core.memset(buffer, 0, 4097);
+            length = unix.readlink(link.as_str(), core.str_from_ptr(buffer), 4096);
+            unix.close(fd);
+        }
+        if (length <= 0) {
+            unsafe { core.free(buffer); }
+            ret Err(fs_error(length as i32));
+        }
+        var text: String = String.new();
+        unsafe {
+            *(buffer + (length as usize)) = 0;
+            text = String.from_raw(buffer, length as usize, 4097);
+        }
+        ret Ok(Path.new(text.as_str()));
+    }
+    @cfg(target_os = "windows") {
+        if (!exists(path)) { ret Err(FsError.NotFound); }
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(32768); }
+        if (buffer == 0) { ret Err(FsError.AllocationFailed); }
+        const text: String = String.from(path);
+        var length: u32 = 0;
+        unsafe {
+            length = win32_core.full_path_name(core.str_as_ptr(text.as_str()), 32767, buffer, 0);
+        }
+        if (length == 0 || length >= 32767) {
+            unsafe { core.free(buffer); }
+            ret Err(FsError.InvalidPath);
+        }
+        var full: String = String.new();
+        unsafe {
+            *(buffer + (length as usize)) = 0;
+            full = String.from_raw(buffer, length as usize, 32768);
+        }
+        ret Ok(Path.new(full.as_str()));
+    }
+    Err(FsError.Unsupported)
+}
+
+// Creates or truncates `path` and writes `contents`.
+pub fn write(path: str, contents: str) Result[usize, FsError] {
+    var file = File.create(path)?;
+    const written: usize = file.write_str(contents)?;
+    file.close()?;
+    Ok(written)
+}
+
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
         unsafe { ret unix.access(path, 2) == 0; }
@@ -1388,4 +1694,42 @@ fn buffered_writer_and_line_reader_round_trip() {
     if (count != 20002) { panic("line count {count}"); }
     if (last.as_str() != "last without newline") { panic("last line {last}"); }
     remove(path).unwrap();
+}
+
+@test
+fn read_dir_entries_iterate_with_types_and_paths() {
+    const root = "/tmp/quazi_fs_read_dir_entries/a/b";
+    create_dir_all(root).unwrap();
+    if (!create_dir_all(root).is_ok()) { panic("create_dir_all must accept an existing tree"); }
+    write("/tmp/quazi_fs_read_dir_entries/a/notes.txt", "hello").unwrap();
+    symlink("/tmp/quazi_fs_read_dir_entries/a/notes.txt", "/tmp/quazi_fs_read_dir_entries/a/link").unwrap();
+    var files: usize = 0;
+    var dirs: usize = 0;
+    var links: usize = 0;
+    var seen: usize = 0;
+    for entry : read_dir("/tmp/quazi_fs_read_dir_entries/a").unwrap() {
+        seen = seen + 1;
+        if (entry.is_file()) {
+            files = files + 1;
+            if (entry.name() != "notes.txt") { panic("file name"); }
+            if (entry.path().as_str() != "/tmp/quazi_fs_read_dir_entries/a/notes.txt") { panic("entry path"); }
+            if (entry.metadata().unwrap().len() != 5) { panic("entry metadata"); }
+        }
+        if (entry.is_dir()) { dirs = dirs + 1; }
+        if (entry.is_symlink()) { links = links + 1; }
+    }
+    if (seen != 3 || files != 1 || dirs != 1 || links != 1) { panic("entry kinds"); }
+    if (!is_dir("/tmp/quazi_fs_read_dir_entries/a/b") || is_file("/tmp/quazi_fs_read_dir_entries/a/b")) { panic("is_dir"); }
+    if (!is_file("/tmp/quazi_fs_read_dir_entries/a/link") || !is_symlink("/tmp/quazi_fs_read_dir_entries/a/link")) { panic("link checks"); }
+    const real = canonicalize("/tmp/quazi_fs_read_dir_entries/a/b/../link").unwrap();
+    if (real.as_str() != "/tmp/quazi_fs_read_dir_entries/a/notes.txt") { panic("canonicalize {real.as_str()}"); }
+    if (canonicalize("/tmp/quazi_fs_read_dir_entries/missing").is_ok()) { panic("canonicalize of a missing path"); }
+    const renamed = Path.new("/tmp/report.tar.gz").with_extension("zip");
+    if (renamed.as_str() != "/tmp/report.tar.zip") { panic("with_extension"); }
+    if (!Path.new("/tmp/a/b").starts_with("/tmp/a") || Path.new("/tmp/ab").starts_with("/tmp/a")) { panic("starts_with"); }
+    remove("/tmp/quazi_fs_read_dir_entries/a/link").unwrap();
+    remove("/tmp/quazi_fs_read_dir_entries/a/notes.txt").unwrap();
+    rmdir("/tmp/quazi_fs_read_dir_entries/a/b").unwrap();
+    rmdir("/tmp/quazi_fs_read_dir_entries/a").unwrap();
+    rmdir("/tmp/quazi_fs_read_dir_entries").unwrap();
 }

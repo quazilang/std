@@ -168,3 +168,7 @@ pub unsafe fn wide_to_multi_byte(code_page: u32, flags: u32, wide: *u8, wide_len
 @api("LocalFree")
 pub unsafe fn local_free(memory: *u8) *u8;
 
+// Absolute form of a path (does not require it to exist or resolve links).
+@api("GetFullPathNameA")
+pub unsafe fn full_path_name(path: *u8, length: u32, buffer: *u8, file_part: *u8) u32;
+
