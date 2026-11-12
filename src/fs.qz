@@ -897,15 +897,13 @@ pub fn walk(root_path: str) Result[Array[String], FsError] {
         const last: usize = pending.len() - 1;
         const relative: String = pending.remove(last);
         const directory: String = joined(root, relative.as_str());
-        const listed = read_dir_names(directory.as_str());
+        const listed = read_dir(directory.as_str());
         if (listed.is_err()) {
             if (relative.is_empty()) { ret Err(listed.unwrap_err()); }
             continue;
         }
-        var names: Array[String] = listed.unwrap();
-        for (names.len() > 0) {
-            const name: String = names.remove(0);
-            const child: String = joined(relative.as_str(), name.as_str());
+        for entry : listed.unwrap() {
+            const child: String = joined(relative.as_str(), entry.name());
             const full: String = joined(root, child.as_str());
             const info: Metadata = symlink_metadata(full.as_str())?;
             if (info.is_dir()) { pending.push(String.from(child.as_str())); }
