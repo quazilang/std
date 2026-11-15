@@ -87,10 +87,10 @@ pub fn range(bounds: Range) Result[i64, RandomError] {
     }
 
     var width: u64 = end - start;
-    if (bounds.inclusive) { width = width + 1; }
+    if (bounds.inclusive) { width = width.wrapping_add(1); }
     if (width == 0) { ret Ok((next_u64()? ^ sign_bit) as i64); }
 
-    const threshold: u64 = (0 - width) % width;
+    const threshold: u64 = width.wrapping_neg() % width;
     var value: u64 = next_u64()?;
     for (value < threshold) { value = next_u64()?; }
     const selected: u64 = start + (value % width);

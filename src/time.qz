@@ -82,12 +82,12 @@ impl Duration {
     pub fn subsec_nanoseconds(self: &Duration) u32 { ret self.nanoseconds; }
 
     pub fn checked_add(self: &Duration, other: Duration) Option[Duration] {
-        var seconds: u64 = self.seconds + other.seconds;
+        var seconds: u64 = self.seconds.wrapping_add(other.seconds);
         if seconds < self.seconds { ret None; }
         var nanoseconds: u32 = self.nanoseconds + other.nanoseconds;
         if nanoseconds >= 1000000000 {
             nanoseconds = nanoseconds - 1000000000;
-            seconds = seconds + 1;
+            seconds = seconds.wrapping_add(1);
             if seconds == 0 { ret None; }
         }
         ret Some(Duration { seconds: seconds, nanoseconds: nanoseconds });
@@ -798,7 +798,7 @@ fn duration_checked_arithmetic_carries_and_rejects_negative_results() void {
         panic("negative duration subtraction must fail");
     }
     const zero_seconds: u64 = 0;
-    const maximum_seconds: u64 = zero_seconds - 1;
+    const maximum_seconds: u64 = zero_seconds.wrapping_sub(1);
     const literal_maximum_seconds: u64 = 18446744073709551615;
     if literal_maximum_seconds != maximum_seconds {
         panic("the largest u64 literal did not retain its value");

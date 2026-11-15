@@ -41,7 +41,7 @@ impl Set {
 
     @ignore
     fn __hash(self: &Set, key: usize) usize {
-        ret (key * 2654435761) % self.cap;
+        ret key.wrapping_mul(2654435761) % self.cap;
     }
 
     // Mutating methods require an exclusive loan; returning a second Set
@@ -167,7 +167,7 @@ impl Set {
             var f: usize = __set_load(self.flags, i);
             if (f == 1) {
                 var k: usize = __set_load(self.keys, i);
-                var idx: usize = (k * 2654435761) % new_cap;
+                var idx: usize = k.wrapping_mul(2654435761) % new_cap;
                 for (__set_load(new_flags, idx) == 1) {
                     idx = (idx + 1) % new_cap;
                 }
