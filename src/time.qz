@@ -794,7 +794,8 @@ fn duration_checked_arithmetic_carries_and_rejects_negative_results() void {
     if negative.is_some() {
         panic("negative duration subtraction must fail");
     }
-    const maximum_seconds: u64 = 0 - 1;
+    const zero_seconds: u64 = 0;
+    const maximum_seconds: u64 = zero_seconds - 1;
     const literal_maximum_seconds: u64 = 18446744073709551615;
     if literal_maximum_seconds != maximum_seconds {
         panic("the largest u64 literal did not retain its value");
