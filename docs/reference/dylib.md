@@ -21,7 +21,7 @@ pub enum DynamicLibraryError {
 }
 ```
 
-_Undocumented._
+Why a shared library could not be loaded or used.
 
 ### `DynamicLibraryError.message`
 
@@ -29,7 +29,7 @@ _Undocumented._
 pub fn message(self: DynamicLibraryError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.
 
 ## `DynamicLibrary`
 
@@ -37,7 +37,7 @@ _Undocumented._
 pub struct DynamicLibrary { /* internal fields */ }
 ```
 
-_Undocumented._
+A loaded shared library (`.so`/`.dll`); unloaded at the end of scope.
 
 ### `DynamicLibrary.open`
 
@@ -45,7 +45,7 @@ _Undocumented._
 pub fn open(path: str) Result[DynamicLibrary, DynamicLibraryError]
 ```
 
-_Undocumented._
+Loads the shared library at `path`.
 
 ### `DynamicLibrary.symbol`
 
@@ -62,7 +62,7 @@ exact @repr(C) callback signature before invoking it.
 pub fn close(self: DynamicLibrary) Result[bool, DynamicLibraryError]
 ```
 
-_Undocumented._
+Unloads the library now.
 
 ### `DynamicLibrary.free`
 
@@ -70,7 +70,7 @@ _Undocumented._
 pub fn free(self: DynamicLibrary) void
 ```
 
-_Undocumented._
+Unloads the library; called automatically at the end of scope.
 
 ### `DynamicLibrary.raw_handle`
 
@@ -78,4 +78,4 @@ _Undocumented._
 pub fn raw_handle(self: &DynamicLibrary) usize
 ```
 
-_Undocumented._
+The native library handle.

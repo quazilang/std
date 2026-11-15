@@ -27,7 +27,7 @@ flags slot values: 0 = empty, 1 = used, 2 = tombstone
 pub struct Map { /* internal fields */ }
 ```
 
-_Undocumented._
+A hash map from `usize` keys to `usize` values (open addressing).
 
 ### `Map.new`
 
@@ -35,7 +35,7 @@ _Undocumented._
 pub fn new() Result[Map, MapError]
 ```
 
-_Undocumented._
+An empty map; `AllocationFailed` when memory is exhausted.
 
 ### `Map.insert`
 
@@ -52,7 +52,7 @@ would duplicate this allocation owner.
 pub fn get(self: &Map, key: usize) Option[usize]
 ```
 
-_Undocumented._
+The value stored for `key`, or `None`.
 
 ### `Map.contains`
 
@@ -60,7 +60,7 @@ _Undocumented._
 pub fn contains(self: &Map, key: usize) bool
 ```
 
-_Undocumented._
+Whether `key` has a value.
 
 ### `Map.remove`
 
@@ -68,7 +68,7 @@ _Undocumented._
 pub fn remove(self: &Map!, key: usize) bool
 ```
 
-_Undocumented._
+Removes `key`; returns whether it was present.
 
 ### `Map.len`
 
@@ -76,7 +76,7 @@ _Undocumented._
 pub fn len(self: &Map) usize
 ```
 
-_Undocumented._
+The number of entries.
 
 ### `Map.clear`
 
@@ -84,7 +84,7 @@ _Undocumented._
 pub fn clear(self: &Map!) void
 ```
 
-_Undocumented._
+Removes every entry.
 
 ### `Map.free`
 
@@ -92,4 +92,4 @@ _Undocumented._
 pub fn free(self: Map) void
 ```
 
-_Undocumented._
+Frees the storage; called automatically at the end of scope.

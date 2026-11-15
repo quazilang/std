@@ -52,7 +52,7 @@ confined to Quazi's unsafe system.
 pub type c_char = i8;
 ```
 
-_Undocumented._
+The C type `char`.
 
 ## `c_schar`
 
@@ -60,7 +60,7 @@ _Undocumented._
 pub type c_schar = i8;
 ```
 
-_Undocumented._
+The C type `signed char`.
 
 ## `c_uchar`
 
@@ -68,7 +68,7 @@ _Undocumented._
 pub type c_uchar = u8;
 ```
 
-_Undocumented._
+The C type `unsigned char`.
 
 ## `c_short`
 
@@ -76,7 +76,7 @@ _Undocumented._
 pub type c_short = i16;
 ```
 
-_Undocumented._
+The C type `short`.
 
 ## `c_ushort`
 
@@ -84,7 +84,7 @@ _Undocumented._
 pub type c_ushort = u16;
 ```
 
-_Undocumented._
+The C type `unsigned short`.
 
 ## `c_int`
 
@@ -92,7 +92,7 @@ _Undocumented._
 pub type c_int = i32;
 ```
 
-_Undocumented._
+The C type `int`.
 
 ## `c_uint`
 
@@ -100,7 +100,7 @@ _Undocumented._
 pub type c_uint = u32;
 ```
 
-_Undocumented._
+The C type `unsigned int`.
 
 ## `c_long`
 
@@ -108,7 +108,7 @@ _Undocumented._
 pub type c_long = i64;
 ```
 
-_Undocumented._
+The C type `long (64-bit on Linux/NetBSD x86_64; Windows `long` is 32-bit, use `c_int`)`.
 
 ## `c_ulong`
 
@@ -116,7 +116,7 @@ _Undocumented._
 pub type c_ulong = u64;
 ```
 
-_Undocumented._
+The C type `unsigned long (see `c_long`)`.
 
 ## `c_long_long`
 
@@ -124,7 +124,7 @@ _Undocumented._
 pub type c_long_long = i64;
 ```
 
-_Undocumented._
+The C type `long long`.
 
 ## `c_ulong_long`
 
@@ -132,7 +132,7 @@ _Undocumented._
 pub type c_ulong_long = u64;
 ```
 
-_Undocumented._
+The C type `unsigned long long`.
 
 ## `c_float`
 
@@ -140,7 +140,7 @@ _Undocumented._
 pub type c_float = f32;
 ```
 
-_Undocumented._
+The C type `float`.
 
 ## `c_double`
 
@@ -148,7 +148,7 @@ _Undocumented._
 pub type c_double = f64;
 ```
 
-_Undocumented._
+The C type `double`.
 
 ## `c_size`
 
@@ -156,7 +156,7 @@ _Undocumented._
 pub type c_size = usize;
 ```
 
-_Undocumented._
+The C type `size_t`.
 
 ## `c_ssize`
 
@@ -164,7 +164,7 @@ _Undocumented._
 pub type c_ssize = isize;
 ```
 
-_Undocumented._
+The C type `ssize_t`.
 
 ## `c_ptrdiff`
 
@@ -172,7 +172,7 @@ _Undocumented._
 pub type c_ptrdiff = isize;
 ```
 
-_Undocumented._
+The C type `ptrdiff_t`.
 
 ## `c_intptr`
 
@@ -180,7 +180,7 @@ _Undocumented._
 pub type c_intptr = isize;
 ```
 
-_Undocumented._
+The C type `intptr_t`.
 
 ## `c_uintptr`
 
@@ -188,7 +188,7 @@ _Undocumented._
 pub type c_uintptr = usize;
 ```
 
-_Undocumented._
+The C type `uintptr_t`.
 
 ## `c_bool`
 
@@ -196,7 +196,7 @@ _Undocumented._
 pub type c_bool = bool;
 ```
 
-_Undocumented._
+The C type `_Bool`.
 
 ## `c_void`
 
@@ -204,7 +204,7 @@ _Undocumented._
 pub type c_void = void;
 ```
 
-_Undocumented._
+The C type `void`.
 
 ## `va_list`
 
@@ -230,7 +230,7 @@ foreign API that supplied the pointer controls its lifetime.
 pub fn from_ptr(ptr: *c_char) CStr
 ```
 
-_Undocumented._
+A view of the NUL-terminated C string at `ptr` (not copied, not freed).
 
 ### `CStr.as_ptr`
 
@@ -238,7 +238,7 @@ _Undocumented._
 pub fn as_ptr(self: &CStr) *c_char
 ```
 
-_Undocumented._
+The pointer to the first character.
 
 ## `CString`
 
@@ -282,7 +282,7 @@ Keep this constructor explicit and unsafe rather than claiming it is checked.
 pub fn as_ptr(self: &CString) *c_char
 ```
 
-_Undocumented._
+The pointer to the NUL-terminated copy, valid while the CString lives.
 
 ### `CString.len`
 
@@ -290,7 +290,7 @@ _Undocumented._
 pub fn len(self: &CString) usize
 ```
 
-_Undocumented._
+The length in bytes without the terminating NUL.
 
 ### `CString.as_c_str`
 
@@ -298,7 +298,7 @@ _Undocumented._
 pub fn as_c_str(self: &CString) CStr
 ```
 
-_Undocumented._
+A borrowed `CStr` view.
 
 ### `CString.clear`
 
@@ -314,7 +314,7 @@ Release the allocation while retaining an empty, reusable owner.
 pub fn free(self: CString) void
 ```
 
-_Undocumented._
+Frees the copy; called automatically at the end of scope.
 
 ## `CStringError`
 
@@ -325,4 +325,5 @@ pub enum CStringError {
 }
 ```
 
-_Undocumented._
+Why text could not become a C string (an interior NUL byte, or no
+memory).

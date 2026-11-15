@@ -90,7 +90,8 @@ Returns the kernel thread ID of the calling thread (Linux only).
 pub type ThreadCallback = fn(*u8) u32;
 ```
 
-_Undocumented._
+A native thread entry point: receives the argument pointer and returns
+the exit code.
 
 ## `ThreadError`
 
@@ -98,7 +99,7 @@ _Undocumented._
 pub enum ThreadError { CreationFailed, }
 ```
 
-_Undocumented._
+Why a thread could not be started.
 
 ## `Thread`
 
@@ -106,7 +107,7 @@ _Undocumented._
 pub struct Thread { /* internal fields */ }
 ```
 
-_Undocumented._
+A native thread started with a `ThreadCallback`; join it with `join`.
 
 ### `Thread.spawn`
 
@@ -138,7 +139,8 @@ Returns the opaque thread handle.
 pub struct JoinHandle[T] { /* internal fields */ }
 ```
 
-_Undocumented._
+A thread running a Quazi closure; `join()` waits for it and returns its
+result.
 
 ### `JoinHandle.join`
 
@@ -162,7 +164,7 @@ A 64-bit integer whose operations are atomic and sequentially consistent.
 pub fn new(value: i64) AtomicI64
 ```
 
-_Undocumented._
+An atomic integer with initial `value`.
 
 ### `AtomicI64.at`
 
@@ -179,7 +181,7 @@ A non-owning view of a cell created elsewhere; the caller guarantees
 pub fn as_ptr(self: &AtomicI64) *u8
 ```
 
-_Undocumented._
+The address of the value, for sharing with native threads.
 
 ### `AtomicI64.load`
 
@@ -187,7 +189,7 @@ _Undocumented._
 pub fn load(self: &AtomicI64) i64
 ```
 
-_Undocumented._
+The current value (sequentially consistent).
 
 ### `AtomicI64.store`
 
@@ -195,7 +197,7 @@ _Undocumented._
 pub fn store(self: &AtomicI64, value: i64) void
 ```
 
-_Undocumented._
+Sets the value.
 
 ### `AtomicI64.swap`
 
@@ -203,7 +205,7 @@ _Undocumented._
 pub fn swap(self: &AtomicI64, value: i64) i64
 ```
 
-_Undocumented._
+Sets the value and returns the previous one.
 
 ### `AtomicI64.fetch_add`
 
@@ -227,7 +229,7 @@ Store `desired` only if the value equals `expected`; return the value seen.
 pub fn free(self: AtomicI64) void
 ```
 
-_Undocumented._
+Frees the storage; called automatically at the end of scope.
 
 ## `AtomicI64View`
 
@@ -243,7 +245,7 @@ Borrowed access to an AtomicI64 owned by another scope or thread.
 pub fn load(self: &AtomicI64View) i64
 ```
 
-_Undocumented._
+The current value.
 
 ### `AtomicI64View.store`
 
@@ -251,7 +253,7 @@ _Undocumented._
 pub fn store(self: &AtomicI64View, value: i64) void
 ```
 
-_Undocumented._
+Sets the value.
 
 ### `AtomicI64View.swap`
 
@@ -259,7 +261,7 @@ _Undocumented._
 pub fn swap(self: &AtomicI64View, value: i64) i64
 ```
 
-_Undocumented._
+Sets the value and returns the previous one.
 
 ### `AtomicI64View.fetch_add`
 
@@ -267,7 +269,7 @@ _Undocumented._
 pub fn fetch_add(self: &AtomicI64View, delta: i64) i64
 ```
 
-_Undocumented._
+Adds `delta` and returns the previous value.
 
 ### `AtomicI64View.compare_exchange`
 
@@ -275,7 +277,8 @@ _Undocumented._
 pub fn compare_exchange(self: &AtomicI64View, expected: i64, desired: i64) i64
 ```
 
-_Undocumented._
+Sets the value to `desired` if it equals `expected`; returns the value
+found.
 
 ## `Mutex`
 
@@ -292,7 +295,7 @@ processor between attempts; it is not reentrant and not fair.
 pub fn new() Mutex
 ```
 
-_Undocumented._
+An unlocked mutex.
 
 ### `Mutex.at`
 
@@ -308,7 +311,7 @@ A non-owning view of a lock created elsewhere (see AtomicI64.at).
 pub fn as_ptr(self: &Mutex) *u8
 ```
 
-_Undocumented._
+The address of the lock, for sharing with native threads.
 
 ### `Mutex.lock`
 
@@ -316,7 +319,7 @@ _Undocumented._
 pub fn lock(self: &Mutex) void
 ```
 
-_Undocumented._
+Waits until the lock is free and takes it.
 
 ### `Mutex.try_lock`
 
@@ -332,7 +335,7 @@ Acquire the lock only if it is free; true on success.
 pub fn unlock(self: &Mutex) void
 ```
 
-_Undocumented._
+Releases the lock.
 
 ### `Mutex.free`
 
@@ -340,7 +343,7 @@ _Undocumented._
 pub fn free(self: Mutex) void
 ```
 
-_Undocumented._
+Frees the lock; called automatically at the end of scope.
 
 ## `MutexView`
 
@@ -348,7 +351,7 @@ _Undocumented._
 pub struct MutexView { /* internal fields */ }
 ```
 
-_Undocumented._
+A borrowed view of a `Mutex` shared with another thread.
 
 ### `MutexView.lock`
 
@@ -356,7 +359,7 @@ _Undocumented._
 pub fn lock(self: &MutexView) void
 ```
 
-_Undocumented._
+Waits until the lock is free and takes it.
 
 ### `MutexView.try_lock`
 
@@ -364,7 +367,7 @@ _Undocumented._
 pub fn try_lock(self: &MutexView) bool
 ```
 
-_Undocumented._
+Takes the lock if it is free; returns whether it did.
 
 ### `MutexView.unlock`
 
@@ -372,4 +375,4 @@ _Undocumented._
 pub fn unlock(self: &MutexView) void
 ```
 
-_Undocumented._
+Releases the lock.

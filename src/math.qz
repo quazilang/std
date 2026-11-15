@@ -39,6 +39,8 @@ fn __gcd_u64(a: u64, b: u64) u64 {
     ret left << shift;
 }
 
+// The greatest common divisor (non-negative); panics when the result does
+// not fit `i64`.
 pub fn gcd(a: i64, b: i64) i64 {
     const value: u64 = math.__gcd_u64(math.__magnitude(a), math.__magnitude(b));
     if (value > 9223372036854775807) { panic("gcd result does not fit i64"); }
@@ -53,6 +55,7 @@ fn __checked_mul_u64(a: u64, b: u64, operation: str) u64 {
     product
 }
 
+// The least common multiple; 0 when either operand is 0; panics on overflow.
 pub fn lcm(a: i64, b: i64) i64 {
     if (a == 0 || b == 0) { ret 0; }
     const divisor: u64 = math.__gcd_u64(math.__magnitude(a), math.__magnitude(b));
@@ -61,6 +64,7 @@ pub fn lcm(a: i64, b: i64) i64 {
     ret value as i64;
 }
 
+// `value!`; panics when the result does not fit `u64`.
 pub fn factorial(value: u32) u64 {
     var result: u64 = 1;
     var factor: u32 = 2;
@@ -71,6 +75,8 @@ pub fn factorial(value: u32) u64 {
     ret result;
 }
 
+// The number of ordered selections of `r` from `n`; 0 when `r > n`;
+// panics on overflow.
 pub fn permutations(n: u32, r: u32) u64 {
     if (r > n) { ret 0; }
     var result: u64 = 1;
@@ -82,6 +88,8 @@ pub fn permutations(n: u32, r: u32) u64 {
     ret result;
 }
 
+// The number of unordered selections of `r` from `n`; 0 when `r > n`;
+// exact for every result that fits `u64`.
 pub fn combinations(n: u32, r: u32) u64 {
     if (r > n) { ret 0; }
     var count: u32 = r;
@@ -100,9 +108,13 @@ pub fn combinations(n: u32, r: u32) u64 {
     ret result;
 }
 
+// The absolute value; `-0.0` becomes `0.0`.
 pub fn abs(value: f64) f64 { ret value.abs(); }
+// The smaller value (a NaN operand yields the other).
 pub fn min(a: f64, b: f64) f64 { ret a.min(b); }
+// The larger value (a NaN operand yields the other).
 pub fn max(a: f64, b: f64) f64 { ret a.max(b); }
+// The value limited to `low..=high`.
 pub fn clamp(value: f64, low: f64, high: f64) f64 { ret value.clamp(low, high); }
 
 // The IEEE-754 bits of an f64 and back, and the correctly rounded SSE2
@@ -135,12 +147,14 @@ pub fn trunc(value: f64) f64 {
     ret math.__from_bits(bits & (fraction ^ 18446744073709551615));
 }
 
+// The largest integer value not greater than the value.
 pub fn floor(value: f64) f64 {
     const whole: f64 = math.trunc(value);
     if (whole > value) { ret whole - 1.0; }
     ret whole;
 }
 
+// The smallest integer value not less than the value.
 pub fn ceil(value: f64) f64 {
     const whole: f64 = math.trunc(value);
     if (whole < value) { ret whole + 1.0; }
@@ -157,25 +171,34 @@ pub fn round(value: f64) f64 {
     ret whole;
 }
 
+// The fractional part: `value - trunc(value)`.
 pub fn fract(value: f64) f64 { ret value - math.trunc(value); }
+// 1.0 for positive values, -1.0 for negative values, the value itself for
+// zeros and NaN.
 pub fn sign(value: f64) f64 {
     if (value < 0.0) { ret -1.0; }
     if (value > 0.0) { ret 1.0; }
     ret value;
 }
+// Linear interpolation: `start + (end - start) * amount` (amount is not
+// limited to 0..=1).
 pub fn lerp(start: f64, end: f64, amount: f64) f64 {
     ret start + (end - start) * amount;
 }
+// Maps `value` from the range `from_low..from_high` to `to_low..to_high`.
 pub fn map_range(value: f64, from_low: f64, from_high: f64,
     to_low: f64, to_high: f64) f64 {
     ret to_low + (value - from_low) * (to_high - to_low) / (from_high - from_low);
 }
+// Degrees converted to radians.
 pub fn radians(degrees: f64) f64 { ret degrees * 0.0174532925199432958; }
+// Radians converted to degrees.
 pub fn degrees(radians: f64) f64 { ret radians * 57.2957795130823208768; }
 
 // Correctly rounded (sqrtsd); NaN below zero, -0.0 stays -0.0.
 pub fn sqrt(value: f64) f64 { ret math.__hardware_sqrt(value); }
 
+// The cube root; keeps the sign.
 pub fn cbrt(value: f64) f64 {
     if (value == 0.0 || value != value) { ret value; }
     if (value < 0.0) { ret -math.cbrt(-value); }
@@ -204,6 +227,8 @@ pub fn cbrt(value: f64) f64 {
     ret estimate * scale;
 }
 
+// `sqrt(x*x + y*y)` without avoidable overflow; infinity if either input is
+// infinite.
 pub fn hypot(x: f64, y: f64) f64 {
     const ax: f64 = x.abs();
     const ay: f64 = y.abs();
@@ -499,6 +524,7 @@ fn __index(value: f64) usize {
     ret (math.__to_bits(value + 6755399441055744.0) & 4294967295) as usize;
 }
 
+// The sine of an angle in radians.
 pub fn sin(value: f64) f64 {
     if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
     // Tiny inputs (and signed zeros) are their own sine.
@@ -511,6 +537,7 @@ pub fn sin(value: f64) f64 {
     -math.__cos_kernel(reduced.high, reduced.low)
 }
 
+// The cosine of an angle in radians.
 pub fn cos(value: f64) f64 {
     if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
     const reduced = math.__reduce_half_pi(value);
@@ -521,6 +548,7 @@ pub fn cos(value: f64) f64 {
     math.__sin_kernel(reduced.high, reduced.low)
 }
 
+// The tangent of an angle in radians.
 pub fn tan(value: f64) f64 {
     if (value != value || value.abs() == 1.0 / 0.0) { ret 0.0 / 0.0; }
     if (value.abs() < 7.450580596923828e-09) { ret value; }
@@ -545,6 +573,7 @@ fn __atan_polynomial(x: f64) f64 {
     ret x * (odd + even);
 }
 
+// The arctangent in radians, in -pi/2..=pi/2.
 pub fn atan(value: f64) f64 {
     // Zeros (keeping their sign) and NaN pass through unchanged.
     if (value == 0.0 || value != value) { ret value; }
@@ -577,8 +606,11 @@ pub fn atan(value: f64) f64 {
     ret high - ((math.__atan_polynomial(x) - low) - x);
 }
 
+// Same as `atan`.
 pub fn arctan(value: f64) f64 { ret math.atan(value); }
 
+// The angle in radians of the point (x, y), in -pi..=pi (C99 rules for
+// zeros and infinities).
 pub fn atan2(y: f64, x: f64) f64 {
     if (y != y || x != x) { ret 0.0 / 0.0; }
     const infinity: f64 = 1.0 / 0.0;
@@ -599,8 +631,10 @@ pub fn atan2(y: f64, x: f64) f64 {
     y
 }
 
+// Same as `atan2`.
 pub fn arctan2(y: f64, x: f64) f64 { ret math.atan2(y, x); }
 
+// The arcsine in radians; NaN outside -1..=1.
 pub fn asin(value: f64) f64 {
     if (value != value || value < -1.0 || value > 1.0) { ret 0.0 / 0.0; }
     // (1 - v)(1 + v) keeps the digits that 1 - v * v cancels near |v| = 1.
@@ -616,6 +650,7 @@ pub fn acos(value: f64) f64 {
     1.5707963267948966192 - math.asin(value)
 }
 
+// e raised to the value.
 pub fn exp(value: f64) f64 {
     if (value != value) { ret value; }
     if (value > 709.782712893384) { ret 1.0 / 0.0; }
@@ -641,6 +676,7 @@ pub fn exp(value: f64) f64 {
     sum * math.__power_of_two(k)
 }
 
+// The natural logarithm; -infinity at 0, NaN for negative values.
 pub fn ln(value: f64) f64 {
     if (value != value) { ret value; }
     if (value < 0.0) { ret 0.0 / 0.0; }
@@ -665,7 +701,9 @@ pub fn ln(value: f64) f64 {
     ret 2.0 * sum + scale * 0.6931471805599453094;
 }
 
+// The base-2 logarithm.
 pub fn log2(value: f64) f64 { ret math.ln(value) / 0.6931471805599453094; }
+// The base-10 logarithm.
 pub fn log10(value: f64) f64 { ret math.ln(value) / 2.3025850929940456840; }
 
 // sinh by its odd Taylor series below 1/2, where exp(x) - exp(-x) would
@@ -677,6 +715,7 @@ fn __small_sinh(x: f64) f64 {
         + z * (1.0 / 1307674368000.0)))))));
 }
 
+// The hyperbolic sine.
 pub fn sinh(value: f64) f64 {
     if (value.abs() < 0.5) { ret math.__small_sinh(value); }
     // exp(|x|) / 2 as (exp(|x| / 2) / 2) * exp(|x| / 2) stays finite up to
@@ -689,6 +728,7 @@ pub fn sinh(value: f64) f64 {
     const positive: f64 = math.exp(value);
     ret (positive - 1.0 / positive) * 0.5;
 }
+// The hyperbolic cosine.
 pub fn cosh(value: f64) f64 {
     if (value.abs() > 700.0) {
         const half: f64 = math.exp(0.5 * value.abs());
@@ -697,6 +737,7 @@ pub fn cosh(value: f64) f64 {
     const positive: f64 = math.exp(value);
     ret (positive + 1.0 / positive) * 0.5;
 }
+// The hyperbolic tangent.
 pub fn tanh(value: f64) f64 {
     if (value != value) { ret value; }
     if (value > 20.0) { ret 1.0; }
@@ -780,6 +821,8 @@ fn __pow_positive(base: f64, exponent: f64) f64 {
     scaled + scaled * low
 }
 
+// `base` raised to `exponent`; a negative base needs an integral exponent
+// (otherwise NaN).
 pub fn pow(base: f64, exponent: f64) f64 {
     // pow(x, 0) and pow(1, y) are 1 even for NaN operands (C99 Annex F).
     if (exponent == 0.0 || base == 1.0) { ret 1.0; }
@@ -809,32 +852,60 @@ pub fn pow(base: f64, exponent: f64) f64 {
 }
 
 impl f64 {
+    // The value with its fraction removed (toward zero).
     pub fn trunc(self: f64) f64 { ret math.trunc(self); }
+    // The largest integer value not greater than the value.
     pub fn floor(self: f64) f64 { ret math.floor(self); }
+    // The smallest integer value not less than the value.
     pub fn ceil(self: f64) f64 { ret math.ceil(self); }
+    // The nearest integer value; halves round away from zero.
     pub fn round(self: f64) f64 { ret math.round(self); }
+    // The fractional part: `value - trunc(value)`.
     pub fn fract(self: f64) f64 { ret math.fract(self); }
+    // 1.0 for positive values, -1.0 for negative values, the value itself for
+    // zeros and NaN.
     pub fn sign(self: f64) f64 { ret math.sign(self); }
+    // The square root (correctly rounded); NaN for negative values.
     pub fn sqrt(self: f64) f64 { ret math.sqrt(self); }
+    // The cube root; keeps the sign.
     pub fn cbrt(self: f64) f64 { ret math.cbrt(self); }
+    // The sine of an angle in radians.
     pub fn sin(self: f64) f64 { ret math.sin(self); }
+    // The cosine of an angle in radians.
     pub fn cos(self: f64) f64 { ret math.cos(self); }
+    // The tangent of an angle in radians.
     pub fn tan(self: f64) f64 { ret math.tan(self); }
+    // The arctangent in radians, in -pi/2..=pi/2.
     pub fn atan(self: f64) f64 { ret math.atan(self); }
+    // Same as `atan`.
     pub fn arctan(self: f64) f64 { ret math.atan(self); }
+    // The angle in radians of the point (x, self), in -pi..=pi.
     pub fn atan2(self: f64, x: f64) f64 { ret math.atan2(self, x); }
+    // Same as `atan2`.
     pub fn arctan2(self: f64, x: f64) f64 { ret math.atan2(self, x); }
+    // The arcsine in radians; NaN outside -1..=1.
     pub fn asin(self: f64) f64 { ret math.asin(self); }
+    // The arccosine in radians; NaN outside -1..=1.
     pub fn acos(self: f64) f64 { ret math.acos(self); }
+    // e raised to the value.
     pub fn exp(self: f64) f64 { ret math.exp(self); }
+    // The natural logarithm; -infinity at 0, NaN for negative values.
     pub fn ln(self: f64) f64 { ret math.ln(self); }
+    // The base-2 logarithm.
     pub fn log2(self: f64) f64 { ret math.log2(self); }
+    // The base-10 logarithm.
     pub fn log10(self: f64) f64 { ret math.log10(self); }
+    // The hyperbolic sine.
     pub fn sinh(self: f64) f64 { ret math.sinh(self); }
+    // The hyperbolic cosine.
     pub fn cosh(self: f64) f64 { ret math.cosh(self); }
+    // The hyperbolic tangent.
     pub fn tanh(self: f64) f64 { ret math.tanh(self); }
+    // Radians converted to degrees.
     pub fn degrees(self: f64) f64 { ret math.degrees(self); }
+    // Degrees converted to radians.
     pub fn radians(self: f64) f64 { ret math.radians(self); }
+    // The value raised to `exponent` (see `math.pow`).
     pub fn pow(self: f64, exponent: f64) f64 { ret math.pow(self, exponent); }
 }
 

@@ -15,6 +15,7 @@ pub enum SetError {
     CapacityOverflow,
 }
 
+// A hash set of `usize` values.
 pub struct Set {
     keys:  *u8,
     flags: *u8,
@@ -23,6 +24,7 @@ pub struct Set {
 }
 
 impl Set {
+    // An empty set; `AllocationFailed` when memory is exhausted.
     pub fn new() Result[Set, SetError] {
         var keys:  *u8 = 0;
         var flags: *u8 = 0;
@@ -88,6 +90,7 @@ impl Set {
         ret Ok(false);
     }
 
+    // Whether `key` is in the set.
     pub fn contains(self: &Set, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
@@ -104,6 +107,7 @@ impl Set {
         ret false;
     }
 
+    // Removes `key`; returns whether it was present.
     pub fn remove(self: &Set!, key: usize) bool {
         var idx: usize = self.__hash(key);
         var probe: usize = 0;
@@ -124,10 +128,12 @@ impl Set {
         ret false;
     }
 
+    // The number of values.
     pub fn len(self: &Set) usize {
         ret self.len;
     }
 
+    // Removes every value.
     pub fn clear(self: &Set!) void {
         if (self.keys != 0) {
             unsafe {
@@ -141,6 +147,7 @@ impl Set {
         }
     }
 
+    // Frees the storage; called automatically at the end of scope.
     pub fn free(self: Set) void { self.clear(); }
 
     @ignore

@@ -14,7 +14,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 COMPLETE = {"fs.md", "path.md", "process.md", "io.md", "time.md", "random.md", "os.md",
-            "json.md", "codec.md", "ini.md"}
+            "json.md", "codec.md", "ini.md", "math.md", "thread.md", "core.md", "dylib.md",
+            "ffi.md", "net.md", "collections/map.md", "collections/set.md"}
 
 
 def main():

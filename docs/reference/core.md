@@ -45,7 +45,8 @@ Read raw bytes from fd into buf. Unsafe — caller must validate UTF-8 if conver
 pub fn stderr_write(buf: str, len: usize) isize
 ```
 
-_Undocumented._
+Writes `len` bytes of `buf` to standard error; returns the count or a
+negative error.
 
 ### `exit`
 
@@ -53,7 +54,7 @@ _Undocumented._
 pub fn exit(code: i32) i32
 ```
 
-_Undocumented._
+Ends the process with status `code`.
 
 ### `sleep_ms`
 
@@ -61,7 +62,7 @@ _Undocumented._
 pub fn sleep_ms(ms: u64) void
 ```
 
-_Undocumented._
+Pauses the calling thread for `ms` milliseconds.
 
 ### `process_spawn`
 
@@ -79,7 +80,7 @@ A zero return is success; -1 leaves the platform error in `error_out`.
 pub fn process_wait(handle: usize, kind_out: *i32, value_out: *i32, error_out: *i32) i32
 ```
 
-_Undocumented._
+Low-level: waits for a child process (used by `std.process`).
 
 ### `process_try_wait`
 
@@ -87,7 +88,8 @@ _Undocumented._
 pub fn process_try_wait(handle: usize, exited_out: *i32, kind_out: *i32, value_out: *i32, error_out: *i32) i32
 ```
 
-_Undocumented._
+Low-level: checks a child process without waiting (used by
+`std.process`).
 
 ### `process_terminate`
 
@@ -95,7 +97,7 @@ _Undocumented._
 pub fn process_terminate(handle: usize, error_out: *i32) i32
 ```
 
-_Undocumented._
+Low-level: kills a child process (used by `std.process`).
 
 ### `process_close`
 
@@ -103,7 +105,7 @@ _Undocumented._
 pub fn process_close(handle: usize, error_out: *i32) i32
 ```
 
-_Undocumented._
+Low-level: releases a child process handle (used by `std.process`).
 
 ### `getenv`
 
@@ -137,7 +139,7 @@ the host query failed.
 pub fn memory_available() u64
 ```
 
-_Undocumented._
+Available memory in bytes reported by the kernel.
 
 ### `cpu_name`
 
@@ -162,7 +164,7 @@ Windows release metadata. Non-Windows targets return zero.
 pub fn windows_product() u32
 ```
 
-_Undocumented._
+The Windows product type code (0 elsewhere).
 
 ### `malloc`
 
@@ -178,7 +180,7 @@ Returns pointer to allocated heap block, or null on failure.
 pub fn free(ptr: *u8) void
 ```
 
-_Undocumented._
+Frees memory from `malloc`.
 
 ### `realloc`
 
@@ -194,7 +196,7 @@ Returns pointer to resized block (may differ from ptr), or null on failure.
 pub fn memcpy(dst: *u8, src: *u8, n: usize) *u8
 ```
 
-_Undocumented._
+Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
 
 ### `memset`
 
@@ -202,7 +204,7 @@ _Undocumented._
 pub fn memset(ptr: *u8, val: i32, n: usize) *u8
 ```
 
-_Undocumented._
+Fills `n` bytes at `ptr` with `val`; returns `ptr`.
 
 ### `memmove`
 
@@ -210,7 +212,7 @@ _Undocumented._
 pub fn memmove(dst: *u8, src: *u8, n: usize) *u8
 ```
 
-_Undocumented._
+Copies `n` bytes from `src` to `dst`, allowing overlap; returns `dst`.
 
 ### `memcmp`
 
@@ -218,7 +220,7 @@ _Undocumented._
 pub fn memcmp(a: *u8, b: *u8, n: usize) i32
 ```
 
-_Undocumented._
+Compares `n` bytes: negative, zero or positive like C `memcmp`.
 
 ### `strlen`
 
@@ -243,7 +245,7 @@ through String; callers never adopt raw formatter allocations themselves.
 pub fn int_to_str(n: i64) String
 ```
 
-_Undocumented._
+The decimal text of `n`.
 
 ### `float_to_str`
 
@@ -251,7 +253,7 @@ _Undocumented._
 pub fn float_to_str(f: f64) String
 ```
 
-_Undocumented._
+The decimal text of `f`.
 
 ### `atomic_add`
 
@@ -269,7 +271,8 @@ if the current value equals `expected` and returns the value it observed.
 pub fn atomic_cas(target: *i64, expected: i64, desired: i64) i64
 ```
 
-_Undocumented._
+Atomically sets `*target` to `desired` if it equals `expected`; returns
+the value found.
 
 ### `context_switch`
 

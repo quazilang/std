@@ -25,6 +25,7 @@ unsafe fn __netbsd_getaddrinfo(node: *c_char, service: *c_char, hints: *u8, resu
 unsafe fn __netbsd_freeaddrinfo(result: *u8) void;
 
 
+// Why a network operation failed.
 pub enum NetError {
     InvalidAddress,
     InvalidPort,
@@ -53,6 +54,7 @@ pub enum NetError {
 }
 
 impl NetError {
+    // A short English description of the error, for display.
     pub fn message(self: NetError) str {
         ret match self {
             NetError.InvalidAddress => "invalid network address",
@@ -417,6 +419,7 @@ fn __resolve_ipv4(host: str) Result[String, NetError] {
     ret Ok(ip);
 }
 
+// A host name or IPv4 address with a port.
 pub struct SocketAddress {
     host: String,
     port: i32,
@@ -450,13 +453,17 @@ fn __parse_ipv4_literal(host: str) Option[u32] {
 }
 
 impl SocketAddress {
+    // An address for `host` and `port` (checked, not yet resolved).
     pub fn new(host: str, port: i32) Result[SocketAddress, NetError] {
         if (host.is_empty()) { ret Err(NetError.InvalidAddress); }
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         ret Ok(SocketAddress { host: String.from(host), port: port });
     }
+    // The host text.
     pub fn host(self: &SocketAddress) str { ret self.host.as_str(); }
+    // The port.
     pub fn port(self: &SocketAddress) i32 { ret self.port; }
+    // The address with the host resolved to an IPv4 address (DNS).
     pub fn resolve(self: &SocketAddress) Result[SocketAddress, NetError] {
         if (__parse_ipv4_literal(self.host.as_str()).is_some()) {
             ret Ok(SocketAddress { host: String.from(self.host.as_str()), port: self.port });
@@ -491,11 +498,14 @@ fn __sockaddr(address: SocketAddress) Result[*u8, NetError] {
     ret Ok(raw);
 }
 
+// Which direction of a TCP connection `shutdown` closes.
 pub enum Shutdown { Read, Write, Both }
 
+// A TCP connection; closed automatically at the end of scope.
 pub struct TcpStream { socket: isize, }
 
 impl TcpStream {
+    // Connects to `host:port` (the host is resolved first).
     pub fn connect(host: str, port: i32) Result[TcpStream, NetError] {
         const requested: Result[SocketAddress, NetError] = SocketAddress.new(host, port);
         if (requested.is_err()) { ret Err(requested.unwrap_err()); }
@@ -516,6 +526,7 @@ impl TcpStream {
         ret Ok(TcpStream { socket: socket });
     }
 
+    // Sends `text`; returns the number of bytes sent.
     pub fn send(self: &TcpStream!, text: str) Result[usize, NetError] {
         var data: *u8 = 0;
         var result: Result[usize, NetError] = Err(NetError.Unsupported);
@@ -526,12 +537,14 @@ impl TcpStream {
         ret result;
     }
 
+    // Sends `data`; returns the number of bytes sent.
     pub fn send_bytes(self: &TcpStream!, data: bytes) Result[usize, NetError] {
         var result: Result[usize, NetError] = Err(NetError.Unsupported);
         unsafe { result = self.send_raw(data.as_ptr(), data.len()); }
         ret result;
     }
 
+    // Unsafe-style raw send of `length` bytes at `data`.
     pub unsafe fn send_raw(self: &TcpStream!, data: *u8, length: usize) Result[usize, NetError] {
         var sent: usize = 0;
         for (sent < length) {
@@ -542,10 +555,13 @@ impl TcpStream {
         ret Ok(sent);
     }
 
+    // Raw receive into `data`; returns the byte count, 0 at end, negative on
+    // error.
     pub unsafe fn recv(self: &TcpStream!, data: *u8, length: usize) isize {
         ret __recv(self.socket, data, length);
     }
 
+    // Receives what is available, at most `limit` bytes, as UTF-8 text.
     pub fn receive(self: &TcpStream!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
@@ -591,6 +607,7 @@ impl TcpStream {
         ret Ok(text);
     }
 
+    // Receives until the peer closes the connection, at most `limit` bytes.
     pub fn receive_all(self: &TcpStream!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
@@ -633,6 +650,7 @@ impl TcpStream {
         __set_timeout(self.socket, false, timeout)
     }
 
+    // Closes reading, writing or both directions.
     pub fn shutdown(self: &TcpStream!, how: Shutdown) Result[bool, NetError] {
         // SHUT_RD/SD_RECEIVE = 0, SHUT_WR/SD_SEND = 1, SHUT_RDWR/SD_BOTH = 2.
         const mode: i32 = match how {
@@ -648,21 +666,27 @@ impl TcpStream {
         ret Ok(true);
     }
 
+    // Closes the connection now.
     pub fn close(self: &TcpStream!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
+    // Closes the connection; called automatically at the end of scope.
     pub fn free(self: TcpStream) void { self.close(); }
+    // The native socket handle.
     pub fn handle(self: &TcpStream) isize { ret self.socket; }
 }
 
+// A TCP server socket listening on a port.
 pub struct TcpListener { socket: isize, }
 
 impl TcpListener {
+    // Listens on `port` on all IPv4 interfaces.
     pub fn bind(port: i32) Result[TcpListener, NetError] { ret TcpListener.bind_with_backlog(port, 128); }
 
+    // Like `bind`, with a pending-connection queue of `backlog`.
     pub fn bind_with_backlog(port: i32, backlog: i32) Result[TcpListener, NetError] {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         const created: Result[isize, NetError] = __socket(1, 6);
@@ -683,6 +707,7 @@ impl TcpListener {
         ret Ok(TcpListener { socket: socket });
     }
 
+    // Waits for the next connection.
     pub fn accept(self: &TcpListener!) Result[TcpStream, NetError] {
         const accepted: Result[isize, NetError] = __accept(self.socket);
         if (accepted.is_err()) { ret Err(accepted.unwrap_err()); }
@@ -690,19 +715,24 @@ impl TcpListener {
         ret Ok(TcpStream { socket: socket });
     }
 
+    // Stops listening now.
     pub fn close(self: &TcpListener!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
+    // Stops listening; called automatically at the end of scope.
     pub fn free(self: TcpListener) void { self.close(); }
+    // The native socket handle.
     pub fn handle(self: &TcpListener) isize { ret self.socket; }
 }
 
+// A received datagram with its sender.
 pub struct UdpDatagram { data: String, address: SocketAddress, }
 
 impl UdpDatagram {
+    // The datagram contents as text.
     pub fn text(self: &UdpDatagram) str { ret self.data.as_str(); }
     // Return a copy of the sender address; the datagram stays usable.
     pub fn address(self: &UdpDatagram) SocketAddress {
@@ -710,9 +740,11 @@ impl UdpDatagram {
     }
 }
 
+// A UDP socket.
 pub struct UdpSocket { socket: isize, }
 
 impl UdpSocket {
+    // A socket receiving on `port`.
     pub fn bind(port: i32) Result[UdpSocket, NetError] {
         if (port < 0 || port > 65535) { ret Err(NetError.InvalidPort); }
         const created: Result[isize, NetError] = __socket(2, 17);
@@ -726,6 +758,7 @@ impl UdpSocket {
         ret Ok(UdpSocket { socket: socket });
     }
 
+    // A socket whose `send` and `receive` use `host:port`.
     pub fn connect(host: str, port: i32) Result[UdpSocket, NetError] {
         const requested: Result[SocketAddress, NetError] = SocketAddress.new(host, port);
         if (requested.is_err()) { ret Err(requested.unwrap_err()); }
@@ -744,6 +777,7 @@ impl UdpSocket {
         ret Ok(UdpSocket { socket: socket });
     }
 
+    // Sends `text` to the connected address.
     pub fn send(self: &UdpSocket!, text: str) Result[usize, NetError] {
         var result: isize = 0;
         unsafe { result = __send(self.socket, core.str_as_ptr(text), text.bytes_len()); }
@@ -751,6 +785,7 @@ impl UdpSocket {
         ret Ok(result as usize);
     }
 
+    // Sends `text` to `address`.
     pub fn send_to(self: &UdpSocket!, text: str, address: SocketAddress) Result[usize, NetError] {
         const encoded: Result[*u8, NetError] = __sockaddr(address);
         if (encoded.is_err()) { ret Err(encoded.unwrap_err()); }
@@ -772,14 +807,17 @@ impl UdpSocket {
         ret Ok(result as usize);
     }
 
+    // Limits how long `receive` waits (`None`: forever).
     pub fn set_read_timeout(self: &UdpSocket!, timeout: Option[Duration]) Result[bool, NetError] {
         __set_timeout(self.socket, true, timeout)
     }
 
+    // Limits how long sending waits (`None`: forever).
     pub fn set_write_timeout(self: &UdpSocket!, timeout: Option[Duration]) Result[bool, NetError] {
         __set_timeout(self.socket, false, timeout)
     }
 
+    // Receives one datagram, at most `limit` bytes, as text.
     pub fn receive(self: &UdpSocket!, limit: usize) Result[String, NetError] {
         if (limit == 0) { ret Ok(String.new()); }
         var data: *u8 = 0;
@@ -801,6 +839,7 @@ impl UdpSocket {
         ret Ok(text);
     }
 
+    // Receives one datagram together with its sender.
     pub fn receive_from(self: &UdpSocket!, limit: usize) Result[UdpDatagram, NetError] {
         if (limit == 0) { ret Err(NetError.MessageTooLarge); }
         var data: *u8 = 0;
@@ -851,13 +890,16 @@ impl UdpSocket {
         ret Ok(UdpDatagram { data: text, address: SocketAddress { host: host, port: port } });
     }
 
+    // Closes the socket now.
     pub fn close(self: &UdpSocket!) void {
         if (self.socket == -1) { ret; }
         const socket: isize = self.socket;
         self.socket = -1;
         __close(socket);
     }
+    // Closes the socket; called automatically at the end of scope.
     pub fn free(self: UdpSocket) void { self.close(); }
+    // The native socket handle.
     pub fn handle(self: &UdpSocket) isize { ret self.socket; }
 }
 
@@ -895,13 +937,17 @@ fn tcp_listener_close_invalidates_once_then_consumes_on_free() void {
     listener.free();
 }
 
+// One HTTP header line (name and value).
 pub struct Header { name: String, value: String, }
 
 impl Header {
+    // A header `name: value`.
     pub fn new(name: str, value: str) Header {
         ret Header { name: String.from(name), value: String.from(value) };
     }
+    // The header name.
     pub fn name(self: &Header) str { ret self.name.as_str(); }
+    // The header value.
     pub fn value(self: &Header) str { ret self.value.as_str(); }
 }
 
@@ -928,7 +974,9 @@ fn network_value_accessors_support_shared_owners() void {
 pub struct Headers { encoded: String, count: usize, }
 
 impl Headers {
+    // An empty header list.
     pub fn new() Headers { ret Headers { encoded: String.new(), count: 0 }; }
+    // Adds a header (repeated names are kept).
     pub fn append(self: &Headers!, name: str, value: str) void {
         self.encoded = __append_header_line(self.encoded.as_str(), name, value);
         self.count = self.count + 1;
@@ -956,7 +1004,9 @@ impl Headers {
         const header: Header = self.get_at(index.unwrap());
         ret Some(String.from(header.value()));
     }
+    // Whether a header `name` exists (case-insensitive).
     pub fn contains(self: &Headers, name: str) bool { ret self.__index_of(name).is_some(); }
+    // The number of headers.
     pub fn len(self: &Headers) usize { ret self.count; }
     // Return a copy of the field at `index`; panics when `index >= len()`.
     pub fn get_at(self: &Headers, index: usize) Header {
@@ -974,9 +1024,11 @@ impl Headers {
         const value: String = line[(split + 2) as isize:];
         ret Header.new(name.as_str(), value.as_str());
     }
+    // An owned copy of the list.
     pub fn copy(self: &Headers) Headers {
         ret Headers { encoded: String.from(self.encoded.as_str()), count: self.count };
     }
+    // The headers as HTTP text lines.
     pub fn encode(self: &Headers) String { ret String.from(self.encoded.as_str()); }
     fn __index_of(self: &Headers, name: str) Option[usize] {
         const needle: String = name.to_lowercase();
@@ -1074,9 +1126,11 @@ fn __decode_chunked(body: str, limit: usize) Result[String, NetError] {
     ret Ok(output);
 }
 
+// An HTTP request method.
 pub enum HttpMethod { Get, Head, Post, Put, Patch, Delete, Options, Connect, Trace }
 
 impl HttpMethod {
+    // The method token, such as `GET`.
     pub fn name(self: HttpMethod) str {
         ret match self {
             HttpMethod.Get => "GET", HttpMethod.Head => "HEAD", HttpMethod.Post => "POST",
@@ -1086,9 +1140,12 @@ impl HttpMethod {
     }
 }
 
+// A parsed `http://host:port/path` (or `https`) URL.
 pub struct Url { scheme: String, host: String, port: i32, path: String, }
 
 impl Url {
+    // Parses an `http://` or `https://` URL (`https` only parses: requests
+// are plain TCP without TLS).
     pub fn parse(text: str) Result[Url, NetError] {
         const separator: Option[usize] = text.find("://");
         if (separator.is_none()) { ret Err(NetError.InvalidUrl); }
@@ -1132,12 +1189,17 @@ impl Url {
         if (host.is_empty() || port < 0 || port > 65535) { ret Err(NetError.InvalidUrl); }
         ret Ok(Url { scheme: scheme, host: host, port: port, path: path });
     }
+    // The scheme (`http` or `https`).
     pub fn scheme(self: &Url) str { ret self.scheme.as_str(); }
+    // The host.
     pub fn host(self: &Url) str { ret self.host.as_str(); }
+    // The port (80, or 443 for `https`, when not written).
     pub fn port(self: &Url) i32 { ret self.port; }
+    // The path with query (`/` when empty).
     pub fn path(self: &Url) str { ret self.path.as_str(); }
 }
 
+// An HTTP/1.1 request, built with chained setters and sent with `send`.
 pub struct HttpRequest {
     method: String,
     target: String,
@@ -1148,15 +1210,18 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
+    // A request with method text `method`, target path and `Host`.
     pub fn new(method: str, target: str, host: str) HttpRequest {
         ret HttpRequest {
             method: String.from(method), target: String.from(target), host: String.from(host),
             headers: Headers.new(), body: String.new(), response_limit: 16 * 1024 * 1024,
         };
     }
+    // A request with an `HttpMethod`.
     pub fn with_method(method: HttpMethod, target: str, host: str) HttpRequest {
         ret HttpRequest.new(method.name(), target, host);
     }
+    // A request for `url`'s host and path.
     pub fn from_url(method: HttpMethod, url: Url) HttpRequest {
         var request: HttpRequest = HttpRequest.with_method(method, url.path(), url.host());
         if (url.port() != 80 && url.scheme() == "http") {
@@ -1167,16 +1232,25 @@ impl HttpRequest {
         }
         ret request;
     }
+    // Adds a header.
     pub fn header(self: HttpRequest, name: str, value: str) HttpRequest {
         self.headers.set(name, value); ret self;
     }
+    // Sets the body (and `Content-Length`).
     pub fn body(self: HttpRequest, body: str) HttpRequest { self.body = String.from(body); ret self; }
+    // Limits the response size `send` accepts.
     pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest { self.response_limit = limit; ret self; }
+    // The method token.
     pub fn method(self: &HttpRequest) str { ret self.method.as_str(); }
+    // The request target (path).
     pub fn target(self: &HttpRequest) str { ret self.target.as_str(); }
+    // The host.
     pub fn host(self: &HttpRequest) str { ret self.host.as_str(); }
+    // A copy of the headers.
     pub fn headers(self: &HttpRequest) Headers { ret self.headers.copy(); }
+    // The body.
     pub fn body_text(self: &HttpRequest) str { ret self.body.as_str(); }
+    // The request as HTTP text.
     pub fn encode(self: &HttpRequest) String {
         var headers: Headers = self.headers.copy();
         if (!headers.contains("Host")) { headers.append("Host", self.host.as_str()); }
@@ -1190,6 +1264,8 @@ impl HttpRequest {
         output.push_str(self.body.as_str());
         ret output;
     }
+    // Sends the request to the host on `port` and reads the response (plain
+    // TCP, no TLS).
     pub fn send(self: HttpRequest, port: i32) Result[HttpResponse, NetError] {
         const response_limit: usize = self.response_limit;
         const connected: Result[TcpStream, NetError] = TcpStream.connect(self.host.as_str(), port);
@@ -1203,6 +1279,7 @@ impl HttpRequest {
         if (received.is_err()) { ret Err(received.unwrap_err()); }
         ret HttpResponse.parse(received.unwrap());
     }
+    // Sends the request to `url`'s host and port.
     pub fn send_url(self: HttpRequest, url: Url) Result[HttpResponse, NetError] {
         if (url.scheme() == "https") { ret Err(NetError.TlsUnavailable); }
         // `send_url` is the URL-targeted convenience operation. Preserve the
@@ -1221,6 +1298,7 @@ impl HttpRequest {
         }
         ret self.send(url.port());
     }
+    // Parses raw HTTP request text (server side).
     pub fn parse(raw: String) Result[HttpRequest, NetError] {
         const split: Option[usize] = raw.find("\r\n\r\n");
         if (split.is_none()) { ret Err(NetError.InvalidHttp); }
@@ -1256,6 +1334,7 @@ impl HttpRequest {
     }
 }
 
+// An HTTP/1.1 response.
 pub struct HttpResponse {
     status: i32,
     reason: String,
@@ -1264,9 +1343,11 @@ pub struct HttpResponse {
 }
 
 impl HttpResponse {
+    // A response with `status`, reason phrase and body.
     pub fn new(status: i32, reason: str, body: str) HttpResponse {
         ret HttpResponse { status: status, reason: String.from(reason), headers: Headers.new(), body: String.from(body) };
     }
+    // A `text/plain` response with the standard reason phrase.
     pub fn text(status: i32, body: str) HttpResponse {
         var reason: str = "OK";
         if (status == 201) { reason = "Created"; }
@@ -1280,11 +1361,17 @@ impl HttpResponse {
         response.headers.append("Content-Type", "text/plain; charset=utf-8");
         ret response;
     }
+    // Adds a header.
     pub fn header(self: HttpResponse, name: str, value: str) HttpResponse { self.headers.set(name, value); ret self; }
+    // The status code.
     pub fn status(self: &HttpResponse) i32 { ret self.status; }
+    // The reason phrase.
     pub fn reason(self: &HttpResponse) str { ret self.reason.as_str(); }
+    // A copy of the headers.
     pub fn headers(self: &HttpResponse) Headers { ret self.headers.copy(); }
+    // The body.
     pub fn body(self: &HttpResponse) str { ret self.body.as_str(); }
+    // The response as HTTP text.
     pub fn encode(self: &HttpResponse) String {
         var headers: Headers = self.headers.copy();
         if (!headers.contains("Content-Length")) { headers.append("Content-Length", self.body.bytes_len().to_str()); }
@@ -1297,6 +1384,7 @@ impl HttpResponse {
         output.push_str(self.body.as_str());
         ret output;
     }
+    // Parses raw HTTP response text.
     pub fn parse(raw: String) Result[HttpResponse, NetError] {
         const split: Option[usize] = raw.find("\r\n\r\n");
         if (split.is_none()) { ret Err(NetError.InvalidHttp); }
@@ -1361,38 +1449,50 @@ fn __response_body(transfer: Option[String], content_length: Option[String], raw
     ret Ok(body);
 }
 
+// A client connection accepted by `HttpServer`.
 pub struct HttpConnection { stream: TcpStream, }
 
 impl HttpConnection {
+    // Reads and parses one request of at most `limit` bytes.
     pub fn read(self: &HttpConnection!, limit: usize) Result[HttpRequest, NetError] {
         const raw: Result[String, NetError] = self.stream.receive(limit);
         if (raw.is_err()) { ret Err(raw.unwrap_err()); }
         ret HttpRequest.parse(raw.unwrap());
     }
+    // Reads one raw request of at most `limit` bytes.
     pub fn read_request(self: &HttpConnection!, limit: usize) Result[String, NetError] { ret self.stream.receive(limit); }
+    // Sends `response`.
     pub fn respond(self: &HttpConnection!, response: HttpResponse) Result[usize, NetError] {
         const encoded: String = response.encode();
         const result: Result[usize, NetError] = self.stream.send(encoded.as_str());
         self.stream.close(); ret result;
     }
+    // Closes the connection.
     pub fn close(self: &HttpConnection!) void { self.stream.close(); }
 }
 
+// A minimal HTTP/1.1 server (one connection at a time, no TLS).
 pub struct HttpServer { listener: TcpListener, }
 
 impl HttpServer {
+    // Listens on `port`.
     pub fn bind(port: i32) Result[HttpServer, NetError] {
         const listener: Result[TcpListener, NetError] = TcpListener.bind(port);
         if (listener.is_err()) { ret Err(listener.unwrap_err()); }
         ret Ok(HttpServer { listener: listener.unwrap() });
     }
+    // Waits for the next client.
     pub fn accept(self: &HttpServer!) Result[HttpConnection, NetError] {
         const stream: Result[TcpStream, NetError] = self.listener.accept();
         if (stream.is_err()) { ret Err(stream.unwrap_err()); }
         ret Ok(HttpConnection { stream: stream.unwrap() });
     }
+    // Stops listening now.
     pub fn close(self: &HttpServer!) void { self.listener.close(); }
+    // Stops listening; called automatically at the end of scope.
     pub fn free(self: HttpServer) void { self.close(); }
+    // Accepts one client, reads its request (at most `limit` bytes), answers
+    // with `response` and returns the raw request.
     pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, NetError] {
         const connection: Result[HttpConnection, NetError] = self.accept();
         if (connection.is_err()) { self.close(); ret Err(connection.unwrap_err()); }
@@ -1416,10 +1516,13 @@ pub fn http_request(host: str, port: i32, method: str, path: str, body: str) Res
     ret Ok(String.from(completed.body()));
 }
 
+// Sends an HTTP/1.1 GET for `path` to `host:port` (plain TCP, no TLS) and
+// returns the response body.
 pub fn http_get(host: str, port: i32, path: str) Result[String, NetError] {
     ret http_request(host, port, "GET", path, "");
 }
 
+// Sends an HTTP/1.1 POST of `body` and returns the response body.
 pub fn http_post(host: str, port: i32, path: str, body: str) Result[String, NetError] {
     ret http_request(host, port, "POST", path, body);
 }

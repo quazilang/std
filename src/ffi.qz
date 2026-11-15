@@ -6,39 +6,65 @@
 
 import std.core;
 
+// The C type `char`.
 pub type c_char = i8;
+// The C type `signed char`.
 pub type c_schar = i8;
+// The C type `unsigned char`.
 pub type c_uchar = u8;
+// The C type `short`.
 pub type c_short = i16;
+// The C type `unsigned short`.
 pub type c_ushort = u16;
+// The C type `int`.
 pub type c_int = i32;
+// The C type `unsigned int`.
 pub type c_uint = u32;
+// The C type `long (64-bit on Linux/NetBSD x86_64; Windows `long` is 32-bit, use `c_int`)`.
 @cfg(target_os="windows")
 pub type c_long = i32;
+// The C type `unsigned long (see `c_long`)`.
 @cfg(target_os="windows")
 pub type c_ulong = u32;
+// The C type `long (64-bit on Linux/NetBSD x86_64; Windows `long` is 32-bit, use `c_int`)`.
 @cfg(target_os="linux")
 pub type c_long = i64;
+// The C type `long (64-bit on Linux/NetBSD x86_64; Windows `long` is 32-bit, use `c_int`)`.
 @cfg(target_os="netbsd")
 pub type c_long = i64;
+// The C type `unsigned long (see `c_long`)`.
 @cfg(target_os="linux")
 pub type c_ulong = u64;
+// The C type `unsigned long (see `c_long`)`.
 @cfg(target_os="netbsd")
 pub type c_ulong = u64;
+// The C type `long (64-bit on Linux/NetBSD x86_64; Windows `long` is 32-bit, use `c_int`)`.
 @cfg(target_os="macos")
 pub type c_long = i64;
+// The C type `unsigned long (see `c_long`)`.
 @cfg(target_os="macos")
 pub type c_ulong = u64;
+// The C type `long long`.
 pub type c_long_long = i64;
+// The C type `unsigned long long`.
 pub type c_ulong_long = u64;
+// The C type `float`.
 pub type c_float = f32;
+// The C type `double`.
 pub type c_double = f64;
+// The C type `size_t`.
 pub type c_size = usize;
+// The C type `ssize_t`.
 pub type c_ssize = isize;
+// The C type `ptrdiff_t`.
 pub type c_ptrdiff = isize;
+// The C type `intptr_t`.
 pub type c_intptr = isize;
+// The C type `uintptr_t`.
 pub type c_uintptr = usize;
+// The C type `_Bool`.
 pub type c_bool = bool;
+// The C type `void`.
 pub type c_void = void;
 
 // Opaque struct representing a C variadic argument list.
@@ -60,10 +86,12 @@ pub struct CStr {
 }
 
 impl CStr {
+    // A view of the NUL-terminated C string at `ptr` (not copied, not freed).
     pub unsafe fn from_ptr(ptr: *c_char) CStr {
         ret CStr { ptr: ptr };
     }
 
+    // The pointer to the first character.
     pub unsafe fn as_ptr(self: &CStr) *c_char {
         ret self.ptr;
     }
@@ -76,6 +104,8 @@ pub struct CString {
     len: usize,
 }
 
+// Why text could not become a C string (an interior NUL byte, or no
+// memory).
 pub enum CStringError {
     InteriorNul(usize),
     AllocationFailed,
@@ -141,14 +171,17 @@ impl CString {
         ret CString { ptr: raw, len: length };
     }
 
+    // The pointer to the NUL-terminated copy, valid while the CString lives.
     pub unsafe fn as_ptr(self: &CString) *c_char {
         ret self.ptr;
     }
 
+    // The length in bytes without the terminating NUL.
     pub fn len(self: &CString) usize {
         ret self.len;
     }
 
+    // A borrowed `CStr` view.
     pub fn as_c_str(self: &CString) CStr {
         ret CStr { ptr: self.ptr };
     }
@@ -162,6 +195,7 @@ impl CString {
         }
     }
 
+    // Frees the copy; called automatically at the end of scope.
     pub fn free(self: CString) void {
         self.clear();
     }

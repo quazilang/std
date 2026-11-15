@@ -26,7 +26,7 @@ flags slot values: 0 = empty, 1 = used, 2 = tombstone
 pub struct Set { /* internal fields */ }
 ```
 
-_Undocumented._
+A hash set of `usize` values.
 
 ### `Set.new`
 
@@ -34,7 +34,7 @@ _Undocumented._
 pub fn new() Result[Set, SetError]
 ```
 
-_Undocumented._
+An empty set; `AllocationFailed` when memory is exhausted.
 
 ### `Set.insert`
 
@@ -51,7 +51,7 @@ would duplicate this allocation owner.
 pub fn contains(self: &Set, key: usize) bool
 ```
 
-_Undocumented._
+Whether `key` is in the set.
 
 ### `Set.remove`
 
@@ -59,7 +59,7 @@ _Undocumented._
 pub fn remove(self: &Set!, key: usize) bool
 ```
 
-_Undocumented._
+Removes `key`; returns whether it was present.
 
 ### `Set.len`
 
@@ -67,7 +67,7 @@ _Undocumented._
 pub fn len(self: &Set) usize
 ```
 
-_Undocumented._
+The number of values.
 
 ### `Set.clear`
 
@@ -75,7 +75,7 @@ _Undocumented._
 pub fn clear(self: &Set!) void
 ```
 
-_Undocumented._
+Removes every value.
 
 ### `Set.free`
 
@@ -83,4 +83,4 @@ _Undocumented._
 pub fn free(self: Set) void
 ```
 
-_Undocumented._
+Frees the storage; called automatically at the end of scope.

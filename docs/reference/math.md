@@ -18,7 +18,8 @@ in libc or libm. Trigonometric inputs and outputs use radians.
 pub fn gcd(a: i64, b: i64) i64
 ```
 
-_Undocumented._
+The greatest common divisor (non-negative); panics when the result does
+not fit `i64`.
 
 ### `lcm`
 
@@ -26,7 +27,7 @@ _Undocumented._
 pub fn lcm(a: i64, b: i64) i64
 ```
 
-_Undocumented._
+The least common multiple; 0 when either operand is 0; panics on overflow.
 
 ### `factorial`
 
@@ -34,7 +35,7 @@ _Undocumented._
 pub fn factorial(value: u32) u64
 ```
 
-_Undocumented._
+`value!`; panics when the result does not fit `u64`.
 
 ### `permutations`
 
@@ -42,7 +43,8 @@ _Undocumented._
 pub fn permutations(n: u32, r: u32) u64
 ```
 
-_Undocumented._
+The number of ordered selections of `r` from `n`; 0 when `r > n`;
+panics on overflow.
 
 ### `combinations`
 
@@ -50,7 +52,8 @@ _Undocumented._
 pub fn combinations(n: u32, r: u32) u64
 ```
 
-_Undocumented._
+The number of unordered selections of `r` from `n`; 0 when `r > n`;
+exact for every result that fits `u64`.
 
 ### `abs`
 
@@ -58,7 +61,7 @@ _Undocumented._
 pub fn abs(value: f64) f64
 ```
 
-_Undocumented._
+The absolute value; `-0.0` becomes `0.0`.
 
 ### `min`
 
@@ -66,7 +69,7 @@ _Undocumented._
 pub fn min(a: f64, b: f64) f64
 ```
 
-_Undocumented._
+The smaller value (a NaN operand yields the other).
 
 ### `max`
 
@@ -74,7 +77,7 @@ _Undocumented._
 pub fn max(a: f64, b: f64) f64
 ```
 
-_Undocumented._
+The larger value (a NaN operand yields the other).
 
 ### `clamp`
 
@@ -82,7 +85,7 @@ _Undocumented._
 pub fn clamp(value: f64, low: f64, high: f64) f64
 ```
 
-_Undocumented._
+The value limited to `low..=high`.
 
 ### `trunc`
 
@@ -98,7 +101,7 @@ Clears the fraction bits below the units place; keeps the sign of zero.
 pub fn floor(value: f64) f64
 ```
 
-_Undocumented._
+The largest integer value not greater than the value.
 
 ### `ceil`
 
@@ -106,7 +109,7 @@ _Undocumented._
 pub fn ceil(value: f64) f64
 ```
 
-_Undocumented._
+The smallest integer value not less than the value.
 
 ### `round`
 
@@ -123,7 +126,7 @@ a half (0.49999999999999994) are not pushed over it.
 pub fn fract(value: f64) f64
 ```
 
-_Undocumented._
+The fractional part: `value - trunc(value)`.
 
 ### `sign`
 
@@ -131,7 +134,8 @@ _Undocumented._
 pub fn sign(value: f64) f64
 ```
 
-_Undocumented._
+1.0 for positive values, -1.0 for negative values, the value itself for
+zeros and NaN.
 
 ### `lerp`
 
@@ -139,7 +143,8 @@ _Undocumented._
 pub fn lerp(start: f64, end: f64, amount: f64) f64
 ```
 
-_Undocumented._
+Linear interpolation: `start + (end - start) * amount` (amount is not
+limited to 0..=1).
 
 ### `map_range`
 
@@ -148,7 +153,7 @@ pub fn map_range(value: f64, from_low: f64, from_high: f64,
     to_low: f64, to_high: f64) f64
 ```
 
-_Undocumented._
+Maps `value` from the range `from_low..from_high` to `to_low..to_high`.
 
 ### `radians`
 
@@ -156,7 +161,7 @@ _Undocumented._
 pub fn radians(degrees: f64) f64
 ```
 
-_Undocumented._
+Degrees converted to radians.
 
 ### `degrees`
 
@@ -164,7 +169,7 @@ _Undocumented._
 pub fn degrees(radians: f64) f64
 ```
 
-_Undocumented._
+Radians converted to degrees.
 
 ### `sqrt`
 
@@ -180,7 +185,7 @@ Correctly rounded (sqrtsd); NaN below zero, -0.0 stays -0.0.
 pub fn cbrt(value: f64) f64
 ```
 
-_Undocumented._
+The cube root; keeps the sign.
 
 ### `hypot`
 
@@ -188,7 +193,8 @@ _Undocumented._
 pub fn hypot(x: f64, y: f64) f64
 ```
 
-_Undocumented._
+`sqrt(x*x + y*y)` without avoidable overflow; infinity if either input is
+infinite.
 
 ### `sin`
 
@@ -196,7 +202,7 @@ _Undocumented._
 pub fn sin(value: f64) f64
 ```
 
-_Undocumented._
+The sine of an angle in radians.
 
 ### `cos`
 
@@ -204,7 +210,7 @@ _Undocumented._
 pub fn cos(value: f64) f64
 ```
 
-_Undocumented._
+The cosine of an angle in radians.
 
 ### `tan`
 
@@ -212,7 +218,7 @@ _Undocumented._
 pub fn tan(value: f64) f64
 ```
 
-_Undocumented._
+The tangent of an angle in radians.
 
 ### `atan`
 
@@ -220,7 +226,7 @@ _Undocumented._
 pub fn atan(value: f64) f64
 ```
 
-_Undocumented._
+The arctangent in radians, in -pi/2..=pi/2.
 
 ### `arctan`
 
@@ -228,7 +234,7 @@ _Undocumented._
 pub fn arctan(value: f64) f64
 ```
 
-_Undocumented._
+Same as `atan`.
 
 ### `atan2`
 
@@ -236,7 +242,8 @@ _Undocumented._
 pub fn atan2(y: f64, x: f64) f64
 ```
 
-_Undocumented._
+The angle in radians of the point (x, y), in -pi..=pi (C99 rules for
+zeros and infinities).
 
 ### `arctan2`
 
@@ -244,7 +251,7 @@ _Undocumented._
 pub fn arctan2(y: f64, x: f64) f64
 ```
 
-_Undocumented._
+Same as `atan2`.
 
 ### `asin`
 
@@ -252,7 +259,7 @@ _Undocumented._
 pub fn asin(value: f64) f64
 ```
 
-_Undocumented._
+The arcsine in radians; NaN outside -1..=1.
 
 ### `acos`
 
@@ -268,7 +275,7 @@ Near |v| = 1, pi/2 - asin(v) cancels; the half-angle forms keep the digits.
 pub fn exp(value: f64) f64
 ```
 
-_Undocumented._
+e raised to the value.
 
 ### `ln`
 
@@ -276,7 +283,7 @@ _Undocumented._
 pub fn ln(value: f64) f64
 ```
 
-_Undocumented._
+The natural logarithm; -infinity at 0, NaN for negative values.
 
 ### `log2`
 
@@ -284,7 +291,7 @@ _Undocumented._
 pub fn log2(value: f64) f64
 ```
 
-_Undocumented._
+The base-2 logarithm.
 
 ### `log10`
 
@@ -292,7 +299,7 @@ _Undocumented._
 pub fn log10(value: f64) f64
 ```
 
-_Undocumented._
+The base-10 logarithm.
 
 ### `sinh`
 
@@ -300,7 +307,7 @@ _Undocumented._
 pub fn sinh(value: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic sine.
 
 ### `cosh`
 
@@ -308,7 +315,7 @@ _Undocumented._
 pub fn cosh(value: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic cosine.
 
 ### `tanh`
 
@@ -316,7 +323,7 @@ _Undocumented._
 pub fn tanh(value: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic tangent.
 
 ### `pow`
 
@@ -324,7 +331,8 @@ _Undocumented._
 pub fn pow(base: f64, exponent: f64) f64
 ```
 
-_Undocumented._
+`base` raised to `exponent`; a negative base needs an integral exponent
+(otherwise NaN).
 
 ## `f64`
 
@@ -334,7 +342,7 @@ _Undocumented._
 pub fn trunc(self: f64) f64
 ```
 
-_Undocumented._
+The value with its fraction removed (toward zero).
 
 ### `f64.floor`
 
@@ -342,7 +350,7 @@ _Undocumented._
 pub fn floor(self: f64) f64
 ```
 
-_Undocumented._
+The largest integer value not greater than the value.
 
 ### `f64.ceil`
 
@@ -350,7 +358,7 @@ _Undocumented._
 pub fn ceil(self: f64) f64
 ```
 
-_Undocumented._
+The smallest integer value not less than the value.
 
 ### `f64.round`
 
@@ -358,7 +366,7 @@ _Undocumented._
 pub fn round(self: f64) f64
 ```
 
-_Undocumented._
+The nearest integer value; halves round away from zero.
 
 ### `f64.fract`
 
@@ -366,7 +374,7 @@ _Undocumented._
 pub fn fract(self: f64) f64
 ```
 
-_Undocumented._
+The fractional part: `value - trunc(value)`.
 
 ### `f64.sign`
 
@@ -374,7 +382,8 @@ _Undocumented._
 pub fn sign(self: f64) f64
 ```
 
-_Undocumented._
+1.0 for positive values, -1.0 for negative values, the value itself for
+zeros and NaN.
 
 ### `f64.sqrt`
 
@@ -382,7 +391,7 @@ _Undocumented._
 pub fn sqrt(self: f64) f64
 ```
 
-_Undocumented._
+The square root (correctly rounded); NaN for negative values.
 
 ### `f64.cbrt`
 
@@ -390,7 +399,7 @@ _Undocumented._
 pub fn cbrt(self: f64) f64
 ```
 
-_Undocumented._
+The cube root; keeps the sign.
 
 ### `f64.sin`
 
@@ -398,7 +407,7 @@ _Undocumented._
 pub fn sin(self: f64) f64
 ```
 
-_Undocumented._
+The sine of an angle in radians.
 
 ### `f64.cos`
 
@@ -406,7 +415,7 @@ _Undocumented._
 pub fn cos(self: f64) f64
 ```
 
-_Undocumented._
+The cosine of an angle in radians.
 
 ### `f64.tan`
 
@@ -414,7 +423,7 @@ _Undocumented._
 pub fn tan(self: f64) f64
 ```
 
-_Undocumented._
+The tangent of an angle in radians.
 
 ### `f64.atan`
 
@@ -422,7 +431,7 @@ _Undocumented._
 pub fn atan(self: f64) f64
 ```
 
-_Undocumented._
+The arctangent in radians, in -pi/2..=pi/2.
 
 ### `f64.arctan`
 
@@ -430,7 +439,7 @@ _Undocumented._
 pub fn arctan(self: f64) f64
 ```
 
-_Undocumented._
+Same as `atan`.
 
 ### `f64.atan2`
 
@@ -438,7 +447,7 @@ _Undocumented._
 pub fn atan2(self: f64, x: f64) f64
 ```
 
-_Undocumented._
+The angle in radians of the point (x, self), in -pi..=pi.
 
 ### `f64.arctan2`
 
@@ -446,7 +455,7 @@ _Undocumented._
 pub fn arctan2(self: f64, x: f64) f64
 ```
 
-_Undocumented._
+Same as `atan2`.
 
 ### `f64.asin`
 
@@ -454,7 +463,7 @@ _Undocumented._
 pub fn asin(self: f64) f64
 ```
 
-_Undocumented._
+The arcsine in radians; NaN outside -1..=1.
 
 ### `f64.acos`
 
@@ -462,7 +471,7 @@ _Undocumented._
 pub fn acos(self: f64) f64
 ```
 
-_Undocumented._
+The arccosine in radians; NaN outside -1..=1.
 
 ### `f64.exp`
 
@@ -470,7 +479,7 @@ _Undocumented._
 pub fn exp(self: f64) f64
 ```
 
-_Undocumented._
+e raised to the value.
 
 ### `f64.ln`
 
@@ -478,7 +487,7 @@ _Undocumented._
 pub fn ln(self: f64) f64
 ```
 
-_Undocumented._
+The natural logarithm; -infinity at 0, NaN for negative values.
 
 ### `f64.log2`
 
@@ -486,7 +495,7 @@ _Undocumented._
 pub fn log2(self: f64) f64
 ```
 
-_Undocumented._
+The base-2 logarithm.
 
 ### `f64.log10`
 
@@ -494,7 +503,7 @@ _Undocumented._
 pub fn log10(self: f64) f64
 ```
 
-_Undocumented._
+The base-10 logarithm.
 
 ### `f64.sinh`
 
@@ -502,7 +511,7 @@ _Undocumented._
 pub fn sinh(self: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic sine.
 
 ### `f64.cosh`
 
@@ -510,7 +519,7 @@ _Undocumented._
 pub fn cosh(self: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic cosine.
 
 ### `f64.tanh`
 
@@ -518,7 +527,7 @@ _Undocumented._
 pub fn tanh(self: f64) f64
 ```
 
-_Undocumented._
+The hyperbolic tangent.
 
 ### `f64.degrees`
 
@@ -526,7 +535,7 @@ _Undocumented._
 pub fn degrees(self: f64) f64
 ```
 
-_Undocumented._
+Radians converted to degrees.
 
 ### `f64.radians`
 
@@ -534,7 +543,7 @@ _Undocumented._
 pub fn radians(self: f64) f64
 ```
 
-_Undocumented._
+Degrees converted to radians.
 
 ### `f64.pow`
 
@@ -542,4 +551,4 @@ _Undocumented._
 pub fn pow(self: f64, exponent: f64) f64
 ```
 
-_Undocumented._
+The value raised to `exponent` (see `math.pow`).

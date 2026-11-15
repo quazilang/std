@@ -9,14 +9,20 @@ import std.unix;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 
+// A native thread entry point: receives the argument pointer and returns
+// the exit code.
 @cfg(target_os = "linux")
 @repr(C)
 pub type ThreadCallback = fn(*u8) *u8;
 
+// A native thread entry point: receives the argument pointer and returns
+// the exit code.
 @cfg(target_os = "netbsd")
 @repr(C)
 pub type ThreadCallback = fn(*u8) *u8;
 
+// A native thread entry point: receives the argument pointer and returns
+// the exit code.
 @cfg(target_os = "windows")
 @repr(C)
 pub type ThreadCallback = fn(*u8) u32;
@@ -44,8 +50,10 @@ pub unsafe fn thread_join(handle: usize) void;
 
 // ── Thread struct ─────────────────────────────────────────────────────────────
 
+// Why a thread could not be started.
 pub enum ThreadError { CreationFailed, }
 
+// A native thread started with a `ThreadCallback`; join it with `join`.
 pub struct Thread {
     handle: usize,
 }
@@ -80,6 +88,8 @@ impl Thread {
 //
 // Block (32 bytes): +0 closure, +8 type-erased runner, +16 result slot.
 
+// A thread running a Quazi closure; `join()` waits for it and returns its
+// result.
 pub struct JoinHandle[T] {
     block: *u8,
     handle: usize,
@@ -174,6 +184,7 @@ pub struct AtomicI64 {
 }
 
 impl AtomicI64 {
+    // An atomic integer with initial `value`.
     pub fn new(value: i64) AtomicI64 {
         var cell: *u8 = 0;
         unsafe { cell = __alloc_cell(value); }
@@ -184,9 +195,13 @@ impl AtomicI64 {
     // `ptr` came from `as_ptr()` and outlives the view.
     pub unsafe fn at(ptr: *u8) AtomicI64View { AtomicI64View { cell: ptr } }
 
+    // The address of the value, for sharing with native threads.
     pub unsafe fn as_ptr(self: &AtomicI64) *u8 { self.cell }
+    // The current value (sequentially consistent).
     pub fn load(self: &AtomicI64) i64 { unsafe { ret __atomic_load(self.cell); } }
+    // Sets the value.
     pub fn store(self: &AtomicI64, value: i64) void { unsafe { __atomic_swap(self.cell, value); } }
+    // Sets the value and returns the previous one.
     pub fn swap(self: &AtomicI64, value: i64) i64 { unsafe { ret __atomic_swap(self.cell, value); } }
     // Add `delta` and return the previous value.
     pub fn fetch_add(self: &AtomicI64, delta: i64) i64 { unsafe { ret __atomic_fetch_add(self.cell, delta); } }
@@ -196,6 +211,7 @@ impl AtomicI64 {
         unsafe { seen = __atomic_compare_exchange(self.cell, expected, desired); }
         seen
     }
+    // Frees the storage; called automatically at the end of scope.
     pub fn free(self: AtomicI64) void { unsafe { core.free(self.cell); } }
 }
 
@@ -205,10 +221,16 @@ pub struct AtomicI64View {
 }
 
 impl AtomicI64View {
+    // The current value.
     pub fn load(self: &AtomicI64View) i64 { unsafe { ret __atomic_load(self.cell); } }
+    // Sets the value.
     pub fn store(self: &AtomicI64View, value: i64) void { unsafe { __atomic_swap(self.cell, value); } }
+    // Sets the value and returns the previous one.
     pub fn swap(self: &AtomicI64View, value: i64) i64 { unsafe { ret __atomic_swap(self.cell, value); } }
+    // Adds `delta` and returns the previous value.
     pub fn fetch_add(self: &AtomicI64View, delta: i64) i64 { unsafe { ret __atomic_fetch_add(self.cell, delta); } }
+    // Sets the value to `desired` if it equals `expected`; returns the value
+    // found.
     pub fn compare_exchange(self: &AtomicI64View, expected: i64, desired: i64) i64 {
         var seen: i64 = 0;
         unsafe { seen = __atomic_compare_exchange(self.cell, expected, desired); }
@@ -251,6 +273,7 @@ pub struct Mutex {
 }
 
 impl Mutex {
+    // An unlocked mutex.
     pub fn new() Mutex {
         var state: *u8 = 0;
         unsafe { state = __alloc_cell(0); }
@@ -260,21 +283,29 @@ impl Mutex {
     // A non-owning view of a lock created elsewhere (see AtomicI64.at).
     pub unsafe fn at(ptr: *u8) MutexView { MutexView { state: ptr } }
 
+    // The address of the lock, for sharing with native threads.
     pub unsafe fn as_ptr(self: &Mutex) *u8 { self.state }
+    // Waits until the lock is free and takes it.
     pub fn lock(self: &Mutex) void { unsafe { __lock(self.state); } }
     // Acquire the lock only if it is free; true on success.
     pub fn try_lock(self: &Mutex) bool { unsafe { ret __atomic_compare_exchange(self.state, 0, 1) == 0; } }
+    // Releases the lock.
     pub fn unlock(self: &Mutex) void { unsafe { __unlock(self.state); } }
+    // Frees the lock; called automatically at the end of scope.
     pub fn free(self: Mutex) void { unsafe { core.free(self.state); } }
 }
 
+// A borrowed view of a `Mutex` shared with another thread.
 pub struct MutexView {
     state: *u8,
 }
 
 impl MutexView {
+    // Waits until the lock is free and takes it.
     pub fn lock(self: &MutexView) void { unsafe { __lock(self.state); } }
+    // Takes the lock if it is free; returns whether it did.
     pub fn try_lock(self: &MutexView) bool { unsafe { ret __atomic_compare_exchange(self.state, 0, 1) == 0; } }
+    // Releases the lock.
     pub fn unlock(self: &MutexView) void { unsafe { __unlock(self.state); } }
 }
 

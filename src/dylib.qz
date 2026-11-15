@@ -25,6 +25,7 @@ unsafe fn __linux_close(library: usize) i32;
 @api("dlclose")
 unsafe fn __netbsd_close(library: usize) i32;
 
+// Why a shared library could not be loaded or used.
 pub enum DynamicLibraryError {
     InvalidName(usize),
     AllocationFailed,
@@ -34,6 +35,7 @@ pub enum DynamicLibraryError {
 }
 
 impl DynamicLibraryError {
+    // A short English description of the error, for display.
     pub fn message(self: DynamicLibraryError) str {
         ret match self {
             DynamicLibraryError.InvalidName(_) => "dynamic library path or symbol contains NUL",
@@ -52,11 +54,13 @@ fn __name_error(error: CStringError) DynamicLibraryError {
     };
 }
 
+// A loaded shared library (`.so`/`.dll`); unloaded at the end of scope.
 pub struct DynamicLibrary {
     handle: usize,
 }
 
 impl DynamicLibrary {
+    // Loads the shared library at `path`.
     pub fn open(path: str) Result[DynamicLibrary, DynamicLibraryError] {
         const encoded: Result[CString, CStringError] = CString.try_from_str(path);
         if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
@@ -100,6 +104,7 @@ impl DynamicLibrary {
         ret Ok(address);
     }
 
+    // Unloads the library now.
     pub fn close(self: DynamicLibrary) Result[bool, DynamicLibraryError] {
         if (self.handle == 0) { ret Ok(false); }
         var result: i32 = 0;
@@ -125,9 +130,11 @@ impl DynamicLibrary {
         ret Ok(true);
     }
 
+    // Unloads the library; called automatically at the end of scope.
     pub fn free(self: DynamicLibrary) void {
         const ignored: Result[bool, DynamicLibraryError] = self.close();
     }
 
+    // The native library handle.
     pub fn raw_handle(self: &DynamicLibrary) usize { ret self.handle; }
 }

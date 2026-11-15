@@ -21,14 +21,18 @@ pub unsafe fn write_bytes(fd: i32, buf: *u8, count: usize) isize;
 @intrinsic("quazi.read")
 pub unsafe fn read(fd: i32, buf: *u8, count: usize) isize;
 
+// Writes `len` bytes of `buf` to standard error; returns the count or a
+// negative error.
 @intrinsic("quazi.stderr_write")
 pub unsafe fn stderr_write(buf: str, len: usize) isize;
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
+// Ends the process with status `code`.
 @intrinsic("quazi.exit")
 pub fn exit(code: i32) i32;
 
+// Pauses the calling thread for `ms` milliseconds.
 @intrinsic("quazi.sleep_ms")
 pub fn sleep_ms(ms: u64) void;
 
@@ -38,15 +42,20 @@ pub fn sleep_ms(ms: u64) void;
 @intrinsic("quazi.process.spawn")
 pub unsafe fn process_spawn(program: str, args: *str, args_len: usize, handle_out: *usize, error_out: *i32) i32;
 
+// Low-level: waits for a child process (used by `std.process`).
 @intrinsic("quazi.process.wait")
 pub unsafe fn process_wait(handle: usize, kind_out: *i32, value_out: *i32, error_out: *i32) i32;
 
+// Low-level: checks a child process without waiting (used by
+// `std.process`).
 @intrinsic("quazi.process.try_wait")
 pub unsafe fn process_try_wait(handle: usize, exited_out: *i32, kind_out: *i32, value_out: *i32, error_out: *i32) i32;
 
+// Low-level: kills a child process (used by `std.process`).
 @intrinsic("quazi.process.terminate")
 pub unsafe fn process_terminate(handle: usize, error_out: *i32) i32;
 
+// Low-level: releases a child process handle (used by `std.process`).
 @intrinsic("quazi.process.close")
 pub unsafe fn process_close(handle: usize, error_out: *i32) i32;
 
@@ -64,6 +73,7 @@ pub unsafe fn hostname(buf: *u8, capacity: usize) isize;
 @intrinsic("quazi.os.memory_total")
 pub fn memory_total() u64;
 
+// Available memory in bytes reported by the kernel.
 @intrinsic("quazi.os.memory_available")
 pub fn memory_available() u64;
 
@@ -76,6 +86,7 @@ pub unsafe fn cpu_name(buf: *u8, capacity: usize) isize;
 @intrinsic("quazi.os.windows_build")
 pub fn windows_build() u32;
 
+// The Windows product type code (0 elsewhere).
 @intrinsic("quazi.os.windows_product")
 pub fn windows_product() u32;
 
@@ -85,6 +96,7 @@ pub fn windows_product() u32;
 @intrinsic("quazi.malloc")
 pub unsafe fn malloc(size: usize) *u8;
 
+// Frees memory from `malloc`.
 @intrinsic("quazi.free")
 pub unsafe fn free(ptr: *u8) void;
 
@@ -92,15 +104,19 @@ pub unsafe fn free(ptr: *u8) void;
 @intrinsic("quazi.realloc")
 pub unsafe fn realloc(ptr: *u8, size: usize) *u8;
 
+// Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
 @intrinsic("quazi.memcpy")
 pub unsafe fn memcpy(dst: *u8, src: *u8, n: usize) *u8;
 
+// Fills `n` bytes at `ptr` with `val`; returns `ptr`.
 @intrinsic("quazi.memset")
 pub unsafe fn memset(ptr: *u8, val: i32, n: usize) *u8;
 
+// Copies `n` bytes from `src` to `dst`, allowing overlap; returns `dst`.
 @intrinsic("quazi.memmove")
 pub unsafe fn memmove(dst: *u8, src: *u8, n: usize) *u8;
 
+// Compares `n` bytes: negative, zero or positive like C `memcmp`.
 @intrinsic("quazi.memcmp")
 pub unsafe fn memcmp(a: *u8, b: *u8, n: usize) i32;
 
@@ -118,7 +134,9 @@ pub fn str_concat(s1: str, s2: str) String {
     ret result;
 }
 
+// The decimal text of `n`.
 pub fn int_to_str(n: i64) String { ret n.to_string(); }
+// The decimal text of `f`.
 pub fn float_to_str(f: f64) String { ret f.to_string(); }
 
 // Sequentially consistent atomic read-modify-write on an 8-byte aligned i64.
@@ -127,6 +145,8 @@ pub fn float_to_str(f: f64) String { ret f.to_string(); }
 @intrinsic("quazi.atomic.add")
 pub unsafe fn atomic_add(target: *i64, delta: i64) i64;
 
+// Atomically sets `*target` to `desired` if it equals `expected`; returns
+// the value found.
 @intrinsic("quazi.atomic.cas")
 pub unsafe fn atomic_cas(target: *i64, expected: i64, desired: i64) i64;
 

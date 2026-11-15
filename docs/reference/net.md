@@ -38,7 +38,8 @@ Compatibility helpers. New code should construct HttpRequest and inspect HttpRes
 pub fn http_get(host: str, port: i32, path: str) Result[String, NetError]
 ```
 
-_Undocumented._
+Sends an HTTP/1.1 GET for `path` to `host:port` (plain TCP, no TLS) and
+returns the response body.
 
 ### `http_post`
 
@@ -46,7 +47,7 @@ _Undocumented._
 pub fn http_post(host: str, port: i32, path: str, body: str) Result[String, NetError]
 ```
 
-_Undocumented._
+Sends an HTTP/1.1 POST of `body` and returns the response body.
 
 ## `NetError`
 
@@ -79,7 +80,7 @@ pub enum NetError {
 }
 ```
 
-_Undocumented._
+Why a network operation failed.
 
 ### `NetError.message`
 
@@ -87,7 +88,7 @@ _Undocumented._
 pub fn message(self: NetError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.
 
 ## `SocketAddress`
 
@@ -95,7 +96,7 @@ _Undocumented._
 pub struct SocketAddress { /* internal fields */ }
 ```
 
-_Undocumented._
+A host name or IPv4 address with a port.
 
 ### `SocketAddress.new`
 
@@ -103,7 +104,7 @@ _Undocumented._
 pub fn new(host: str, port: i32) Result[SocketAddress, NetError]
 ```
 
-_Undocumented._
+An address for `host` and `port` (checked, not yet resolved).
 
 ### `SocketAddress.host`
 
@@ -111,7 +112,7 @@ _Undocumented._
 pub fn host(self: &SocketAddress) str
 ```
 
-_Undocumented._
+The host text.
 
 ### `SocketAddress.port`
 
@@ -119,7 +120,7 @@ _Undocumented._
 pub fn port(self: &SocketAddress) i32
 ```
 
-_Undocumented._
+The port.
 
 ### `SocketAddress.resolve`
 
@@ -127,7 +128,7 @@ _Undocumented._
 pub fn resolve(self: &SocketAddress) Result[SocketAddress, NetError]
 ```
 
-_Undocumented._
+The address with the host resolved to an IPv4 address (DNS).
 
 ## `Shutdown`
 
@@ -135,7 +136,7 @@ _Undocumented._
 pub enum Shutdown { Read, Write, Both }
 ```
 
-_Undocumented._
+Which direction of a TCP connection `shutdown` closes.
 
 ## `TcpStream`
 
@@ -143,7 +144,7 @@ _Undocumented._
 pub struct TcpStream { /* internal fields */ }
 ```
 
-_Undocumented._
+A TCP connection; closed automatically at the end of scope.
 
 ### `TcpStream.connect`
 
@@ -151,7 +152,7 @@ _Undocumented._
 pub fn connect(host: str, port: i32) Result[TcpStream, NetError]
 ```
 
-_Undocumented._
+Connects to `host:port` (the host is resolved first).
 
 ### `TcpStream.send`
 
@@ -159,7 +160,7 @@ _Undocumented._
 pub fn send(self: &TcpStream!, text: str) Result[usize, NetError]
 ```
 
-_Undocumented._
+Sends `text`; returns the number of bytes sent.
 
 ### `TcpStream.send_bytes`
 
@@ -167,7 +168,7 @@ _Undocumented._
 pub fn send_bytes(self: &TcpStream!, data: bytes) Result[usize, NetError]
 ```
 
-_Undocumented._
+Sends `data`; returns the number of bytes sent.
 
 ### `TcpStream.send_raw`
 
@@ -175,7 +176,7 @@ _Undocumented._
 pub fn send_raw(self: &TcpStream!, data: *u8, length: usize) Result[usize, NetError]
 ```
 
-_Undocumented._
+Unsafe-style raw send of `length` bytes at `data`.
 
 ### `TcpStream.recv`
 
@@ -183,7 +184,8 @@ _Undocumented._
 pub fn recv(self: &TcpStream!, data: *u8, length: usize) isize
 ```
 
-_Undocumented._
+Raw receive into `data`; returns the byte count, 0 at end, negative on
+error.
 
 ### `TcpStream.receive`
 
@@ -191,7 +193,7 @@ _Undocumented._
 pub fn receive(self: &TcpStream!, limit: usize) Result[String, NetError]
 ```
 
-_Undocumented._
+Receives what is available, at most `limit` bytes, as UTF-8 text.
 
 ### `TcpStream.receive_all`
 
@@ -199,7 +201,7 @@ _Undocumented._
 pub fn receive_all(self: &TcpStream!, limit: usize) Result[String, NetError]
 ```
 
-_Undocumented._
+Receives until the peer closes the connection, at most `limit` bytes.
 
 ### `TcpStream.set_read_timeout`
 
@@ -223,7 +225,7 @@ Fail blocking sends with TimedOut after `timeout`; None waits forever.
 pub fn shutdown(self: &TcpStream!, how: Shutdown) Result[bool, NetError]
 ```
 
-_Undocumented._
+Closes reading, writing or both directions.
 
 ### `TcpStream.close`
 
@@ -231,7 +233,7 @@ _Undocumented._
 pub fn close(self: &TcpStream!) void
 ```
 
-_Undocumented._
+Closes the connection now.
 
 ### `TcpStream.free`
 
@@ -239,7 +241,7 @@ _Undocumented._
 pub fn free(self: TcpStream) void
 ```
 
-_Undocumented._
+Closes the connection; called automatically at the end of scope.
 
 ### `TcpStream.handle`
 
@@ -247,7 +249,7 @@ _Undocumented._
 pub fn handle(self: &TcpStream) isize
 ```
 
-_Undocumented._
+The native socket handle.
 
 ## `TcpListener`
 
@@ -255,7 +257,7 @@ _Undocumented._
 pub struct TcpListener { /* internal fields */ }
 ```
 
-_Undocumented._
+A TCP server socket listening on a port.
 
 ### `TcpListener.bind`
 
@@ -263,7 +265,7 @@ _Undocumented._
 pub fn bind(port: i32) Result[TcpListener, NetError]
 ```
 
-_Undocumented._
+Listens on `port` on all IPv4 interfaces.
 
 ### `TcpListener.bind_with_backlog`
 
@@ -271,7 +273,7 @@ _Undocumented._
 pub fn bind_with_backlog(port: i32, backlog: i32) Result[TcpListener, NetError]
 ```
 
-_Undocumented._
+Like `bind`, with a pending-connection queue of `backlog`.
 
 ### `TcpListener.accept`
 
@@ -279,7 +281,7 @@ _Undocumented._
 pub fn accept(self: &TcpListener!) Result[TcpStream, NetError]
 ```
 
-_Undocumented._
+Waits for the next connection.
 
 ### `TcpListener.close`
 
@@ -287,7 +289,7 @@ _Undocumented._
 pub fn close(self: &TcpListener!) void
 ```
 
-_Undocumented._
+Stops listening now.
 
 ### `TcpListener.free`
 
@@ -295,7 +297,7 @@ _Undocumented._
 pub fn free(self: TcpListener) void
 ```
 
-_Undocumented._
+Stops listening; called automatically at the end of scope.
 
 ### `TcpListener.handle`
 
@@ -303,7 +305,7 @@ _Undocumented._
 pub fn handle(self: &TcpListener) isize
 ```
 
-_Undocumented._
+The native socket handle.
 
 ## `UdpDatagram`
 
@@ -311,7 +313,7 @@ _Undocumented._
 pub struct UdpDatagram { /* internal fields */ }
 ```
 
-_Undocumented._
+A received datagram with its sender.
 
 ### `UdpDatagram.text`
 
@@ -319,7 +321,7 @@ _Undocumented._
 pub fn text(self: &UdpDatagram) str
 ```
 
-_Undocumented._
+The datagram contents as text.
 
 ### `UdpDatagram.address`
 
@@ -335,7 +337,7 @@ Return a copy of the sender address; the datagram stays usable.
 pub struct UdpSocket { /* internal fields */ }
 ```
 
-_Undocumented._
+A UDP socket.
 
 ### `UdpSocket.bind`
 
@@ -343,7 +345,7 @@ _Undocumented._
 pub fn bind(port: i32) Result[UdpSocket, NetError]
 ```
 
-_Undocumented._
+A socket receiving on `port`.
 
 ### `UdpSocket.connect`
 
@@ -351,7 +353,7 @@ _Undocumented._
 pub fn connect(host: str, port: i32) Result[UdpSocket, NetError]
 ```
 
-_Undocumented._
+A socket whose `send` and `receive` use `host:port`.
 
 ### `UdpSocket.send`
 
@@ -359,7 +361,7 @@ _Undocumented._
 pub fn send(self: &UdpSocket!, text: str) Result[usize, NetError]
 ```
 
-_Undocumented._
+Sends `text` to the connected address.
 
 ### `UdpSocket.send_to`
 
@@ -367,7 +369,7 @@ _Undocumented._
 pub fn send_to(self: &UdpSocket!, text: str, address: SocketAddress) Result[usize, NetError]
 ```
 
-_Undocumented._
+Sends `text` to `address`.
 
 ### `UdpSocket.set_read_timeout`
 
@@ -375,7 +377,7 @@ _Undocumented._
 pub fn set_read_timeout(self: &UdpSocket!, timeout: Option[Duration]) Result[bool, NetError]
 ```
 
-_Undocumented._
+Limits how long `receive` waits (`None`: forever).
 
 ### `UdpSocket.set_write_timeout`
 
@@ -383,7 +385,7 @@ _Undocumented._
 pub fn set_write_timeout(self: &UdpSocket!, timeout: Option[Duration]) Result[bool, NetError]
 ```
 
-_Undocumented._
+Limits how long sending waits (`None`: forever).
 
 ### `UdpSocket.receive`
 
@@ -391,7 +393,7 @@ _Undocumented._
 pub fn receive(self: &UdpSocket!, limit: usize) Result[String, NetError]
 ```
 
-_Undocumented._
+Receives one datagram, at most `limit` bytes, as text.
 
 ### `UdpSocket.receive_from`
 
@@ -399,7 +401,7 @@ _Undocumented._
 pub fn receive_from(self: &UdpSocket!, limit: usize) Result[UdpDatagram, NetError]
 ```
 
-_Undocumented._
+Receives one datagram together with its sender.
 
 ### `UdpSocket.close`
 
@@ -407,7 +409,7 @@ _Undocumented._
 pub fn close(self: &UdpSocket!) void
 ```
 
-_Undocumented._
+Closes the socket now.
 
 ### `UdpSocket.free`
 
@@ -415,7 +417,7 @@ _Undocumented._
 pub fn free(self: UdpSocket) void
 ```
 
-_Undocumented._
+Closes the socket; called automatically at the end of scope.
 
 ### `UdpSocket.handle`
 
@@ -423,7 +425,7 @@ _Undocumented._
 pub fn handle(self: &UdpSocket) isize
 ```
 
-_Undocumented._
+The native socket handle.
 
 ## `Header`
 
@@ -431,7 +433,7 @@ _Undocumented._
 pub struct Header { /* internal fields */ }
 ```
 
-_Undocumented._
+One HTTP header line (name and value).
 
 ### `Header.new`
 
@@ -439,7 +441,7 @@ _Undocumented._
 pub fn new(name: str, value: str) Header
 ```
 
-_Undocumented._
+A header `name: value`.
 
 ### `Header.name`
 
@@ -447,7 +449,7 @@ _Undocumented._
 pub fn name(self: &Header) str
 ```
 
-_Undocumented._
+The header name.
 
 ### `Header.value`
 
@@ -455,7 +457,7 @@ _Undocumented._
 pub fn value(self: &Header) str
 ```
 
-_Undocumented._
+The header value.
 
 ## `Headers`
 
@@ -473,7 +475,7 @@ into storage that a later `set` or `append` replaces.
 pub fn new() Headers
 ```
 
-_Undocumented._
+An empty header list.
 
 ### `Headers.append`
 
@@ -481,7 +483,7 @@ _Undocumented._
 pub fn append(self: &Headers!, name: str, value: str) void
 ```
 
-_Undocumented._
+Adds a header (repeated names are kept).
 
 ### `Headers.set`
 
@@ -505,7 +507,7 @@ Return a copy of the first value named `name` (ASCII case-insensitive).
 pub fn contains(self: &Headers, name: str) bool
 ```
 
-_Undocumented._
+Whether a header `name` exists (case-insensitive).
 
 ### `Headers.len`
 
@@ -513,7 +515,7 @@ _Undocumented._
 pub fn len(self: &Headers) usize
 ```
 
-_Undocumented._
+The number of headers.
 
 ### `Headers.get_at`
 
@@ -529,7 +531,7 @@ Return a copy of the field at `index`; panics when `index >= len()`.
 pub fn copy(self: &Headers) Headers
 ```
 
-_Undocumented._
+An owned copy of the list.
 
 ### `Headers.encode`
 
@@ -537,7 +539,7 @@ _Undocumented._
 pub fn encode(self: &Headers) String
 ```
 
-_Undocumented._
+The headers as HTTP text lines.
 
 ## `HttpMethod`
 
@@ -545,7 +547,7 @@ _Undocumented._
 pub enum HttpMethod { Get, Head, Post, Put, Patch, Delete, Options, Connect, Trace }
 ```
 
-_Undocumented._
+An HTTP request method.
 
 ### `HttpMethod.name`
 
@@ -553,7 +555,7 @@ _Undocumented._
 pub fn name(self: HttpMethod) str
 ```
 
-_Undocumented._
+The method token, such as `GET`.
 
 ## `Url`
 
@@ -561,7 +563,7 @@ _Undocumented._
 pub struct Url { /* internal fields */ }
 ```
 
-_Undocumented._
+A parsed `http://host:port/path` (or `https`) URL.
 
 ### `Url.parse`
 
@@ -569,7 +571,8 @@ _Undocumented._
 pub fn parse(text: str) Result[Url, NetError]
 ```
 
-_Undocumented._
+Parses an `http://` or `https://` URL (`https` only parses: requests
+are plain TCP without TLS).
 
 ### `Url.scheme`
 
@@ -577,7 +580,7 @@ _Undocumented._
 pub fn scheme(self: &Url) str
 ```
 
-_Undocumented._
+The scheme (`http` or `https`).
 
 ### `Url.host`
 
@@ -585,7 +588,7 @@ _Undocumented._
 pub fn host(self: &Url) str
 ```
 
-_Undocumented._
+The host.
 
 ### `Url.port`
 
@@ -593,7 +596,7 @@ _Undocumented._
 pub fn port(self: &Url) i32
 ```
 
-_Undocumented._
+The port (80, or 443 for `https`, when not written).
 
 ### `Url.path`
 
@@ -601,7 +604,7 @@ _Undocumented._
 pub fn path(self: &Url) str
 ```
 
-_Undocumented._
+The path with query (`/` when empty).
 
 ## `HttpRequest`
 
@@ -609,7 +612,7 @@ _Undocumented._
 pub struct HttpRequest { /* internal fields */ }
 ```
 
-_Undocumented._
+An HTTP/1.1 request, built with chained setters and sent with `send`.
 
 ### `HttpRequest.new`
 
@@ -617,7 +620,7 @@ _Undocumented._
 pub fn new(method: str, target: str, host: str) HttpRequest
 ```
 
-_Undocumented._
+A request with method text `method`, target path and `Host`.
 
 ### `HttpRequest.with_method`
 
@@ -625,7 +628,7 @@ _Undocumented._
 pub fn with_method(method: HttpMethod, target: str, host: str) HttpRequest
 ```
 
-_Undocumented._
+A request with an `HttpMethod`.
 
 ### `HttpRequest.from_url`
 
@@ -633,7 +636,7 @@ _Undocumented._
 pub fn from_url(method: HttpMethod, url: Url) HttpRequest
 ```
 
-_Undocumented._
+A request for `url`'s host and path.
 
 ### `HttpRequest.header`
 
@@ -641,7 +644,7 @@ _Undocumented._
 pub fn header(self: HttpRequest, name: str, value: str) HttpRequest
 ```
 
-_Undocumented._
+Adds a header.
 
 ### `HttpRequest.body`
 
@@ -649,7 +652,7 @@ _Undocumented._
 pub fn body(self: HttpRequest, body: str) HttpRequest
 ```
 
-_Undocumented._
+Sets the body (and `Content-Length`).
 
 ### `HttpRequest.max_response_bytes`
 
@@ -657,7 +660,7 @@ _Undocumented._
 pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest
 ```
 
-_Undocumented._
+Limits the response size `send` accepts.
 
 ### `HttpRequest.method`
 
@@ -665,7 +668,7 @@ _Undocumented._
 pub fn method(self: &HttpRequest) str
 ```
 
-_Undocumented._
+The method token.
 
 ### `HttpRequest.target`
 
@@ -673,7 +676,7 @@ _Undocumented._
 pub fn target(self: &HttpRequest) str
 ```
 
-_Undocumented._
+The request target (path).
 
 ### `HttpRequest.host`
 
@@ -681,7 +684,7 @@ _Undocumented._
 pub fn host(self: &HttpRequest) str
 ```
 
-_Undocumented._
+The host.
 
 ### `HttpRequest.headers`
 
@@ -689,7 +692,7 @@ _Undocumented._
 pub fn headers(self: &HttpRequest) Headers
 ```
 
-_Undocumented._
+A copy of the headers.
 
 ### `HttpRequest.body_text`
 
@@ -697,7 +700,7 @@ _Undocumented._
 pub fn body_text(self: &HttpRequest) str
 ```
 
-_Undocumented._
+The body.
 
 ### `HttpRequest.encode`
 
@@ -705,7 +708,7 @@ _Undocumented._
 pub fn encode(self: &HttpRequest) String
 ```
 
-_Undocumented._
+The request as HTTP text.
 
 ### `HttpRequest.send`
 
@@ -713,7 +716,8 @@ _Undocumented._
 pub fn send(self: HttpRequest, port: i32) Result[HttpResponse, NetError]
 ```
 
-_Undocumented._
+Sends the request to the host on `port` and reads the response (plain
+TCP, no TLS).
 
 ### `HttpRequest.send_url`
 
@@ -721,7 +725,7 @@ _Undocumented._
 pub fn send_url(self: HttpRequest, url: Url) Result[HttpResponse, NetError]
 ```
 
-_Undocumented._
+Sends the request to `url`'s host and port.
 
 ### `HttpRequest.parse`
 
@@ -729,7 +733,7 @@ _Undocumented._
 pub fn parse(raw: String) Result[HttpRequest, NetError]
 ```
 
-_Undocumented._
+Parses raw HTTP request text (server side).
 
 ## `HttpResponse`
 
@@ -737,7 +741,7 @@ _Undocumented._
 pub struct HttpResponse { /* internal fields */ }
 ```
 
-_Undocumented._
+An HTTP/1.1 response.
 
 ### `HttpResponse.new`
 
@@ -745,7 +749,7 @@ _Undocumented._
 pub fn new(status: i32, reason: str, body: str) HttpResponse
 ```
 
-_Undocumented._
+A response with `status`, reason phrase and body.
 
 ### `HttpResponse.text`
 
@@ -753,7 +757,7 @@ _Undocumented._
 pub fn text(status: i32, body: str) HttpResponse
 ```
 
-_Undocumented._
+A `text/plain` response with the standard reason phrase.
 
 ### `HttpResponse.header`
 
@@ -761,7 +765,7 @@ _Undocumented._
 pub fn header(self: HttpResponse, name: str, value: str) HttpResponse
 ```
 
-_Undocumented._
+Adds a header.
 
 ### `HttpResponse.status`
 
@@ -769,7 +773,7 @@ _Undocumented._
 pub fn status(self: &HttpResponse) i32
 ```
 
-_Undocumented._
+The status code.
 
 ### `HttpResponse.reason`
 
@@ -777,7 +781,7 @@ _Undocumented._
 pub fn reason(self: &HttpResponse) str
 ```
 
-_Undocumented._
+The reason phrase.
 
 ### `HttpResponse.headers`
 
@@ -785,7 +789,7 @@ _Undocumented._
 pub fn headers(self: &HttpResponse) Headers
 ```
 
-_Undocumented._
+A copy of the headers.
 
 ### `HttpResponse.body`
 
@@ -793,7 +797,7 @@ _Undocumented._
 pub fn body(self: &HttpResponse) str
 ```
 
-_Undocumented._
+The body.
 
 ### `HttpResponse.encode`
 
@@ -801,7 +805,7 @@ _Undocumented._
 pub fn encode(self: &HttpResponse) String
 ```
 
-_Undocumented._
+The response as HTTP text.
 
 ### `HttpResponse.parse`
 
@@ -809,7 +813,7 @@ _Undocumented._
 pub fn parse(raw: String) Result[HttpResponse, NetError]
 ```
 
-_Undocumented._
+Parses raw HTTP response text.
 
 ## `HttpConnection`
 
@@ -817,7 +821,7 @@ _Undocumented._
 pub struct HttpConnection { /* internal fields */ }
 ```
 
-_Undocumented._
+A client connection accepted by `HttpServer`.
 
 ### `HttpConnection.read`
 
@@ -825,7 +829,7 @@ _Undocumented._
 pub fn read(self: &HttpConnection!, limit: usize) Result[HttpRequest, NetError]
 ```
 
-_Undocumented._
+Reads and parses one request of at most `limit` bytes.
 
 ### `HttpConnection.read_request`
 
@@ -833,7 +837,7 @@ _Undocumented._
 pub fn read_request(self: &HttpConnection!, limit: usize) Result[String, NetError]
 ```
 
-_Undocumented._
+Reads one raw request of at most `limit` bytes.
 
 ### `HttpConnection.respond`
 
@@ -841,7 +845,7 @@ _Undocumented._
 pub fn respond(self: &HttpConnection!, response: HttpResponse) Result[usize, NetError]
 ```
 
-_Undocumented._
+Sends `response`.
 
 ### `HttpConnection.close`
 
@@ -849,7 +853,7 @@ _Undocumented._
 pub fn close(self: &HttpConnection!) void
 ```
 
-_Undocumented._
+Closes the connection.
 
 ## `HttpServer`
 
@@ -857,7 +861,7 @@ _Undocumented._
 pub struct HttpServer { /* internal fields */ }
 ```
 
-_Undocumented._
+A minimal HTTP/1.1 server (one connection at a time, no TLS).
 
 ### `HttpServer.bind`
 
@@ -865,7 +869,7 @@ _Undocumented._
 pub fn bind(port: i32) Result[HttpServer, NetError]
 ```
 
-_Undocumented._
+Listens on `port`.
 
 ### `HttpServer.accept`
 
@@ -873,7 +877,7 @@ _Undocumented._
 pub fn accept(self: &HttpServer!) Result[HttpConnection, NetError]
 ```
 
-_Undocumented._
+Waits for the next client.
 
 ### `HttpServer.close`
 
@@ -881,7 +885,7 @@ _Undocumented._
 pub fn close(self: &HttpServer!) void
 ```
 
-_Undocumented._
+Stops listening now.
 
 ### `HttpServer.free`
 
@@ -889,7 +893,7 @@ _Undocumented._
 pub fn free(self: HttpServer) void
 ```
 
-_Undocumented._
+Stops listening; called automatically at the end of scope.
 
 ### `HttpServer.serve_once`
 
@@ -897,4 +901,5 @@ _Undocumented._
 pub fn serve_once(self: HttpServer, response: HttpResponse, limit: usize) Result[String, NetError]
 ```
 
-_Undocumented._
+Accepts one client, reads its request (at most `limit` bytes), answers
+with `response` and returns the raw request.
