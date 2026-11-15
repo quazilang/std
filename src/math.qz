@@ -39,6 +39,22 @@ fn __gcd_u64(a: u64, b: u64) u64 {
     ret left << shift;
 }
 
+// Archimedes' constant (the ratio of a circle's circumference to its
+// diameter).
+pub const PI: f64 = 3.14159265358979323846;
+// 2 * PI, a full turn in radians.
+pub const TAU: f64 = 6.28318530717958647692;
+// PI / 2, a quarter turn in radians.
+pub const FRAC_PI_2: f64 = 1.57079632679489661923;
+// Euler's number, the base of natural logarithms.
+pub const E: f64 = 2.71828182845904523536;
+// The natural logarithm of 2.
+pub const LN_2: f64 = 0.693147180559945309417;
+// The natural logarithm of 10.
+pub const LN_10: f64 = 2.30258509299404568402;
+// The square root of 2.
+pub const SQRT_2: f64 = 1.41421356237309504880;
+
 // The greatest common divisor (non-negative); panics when the result does
 // not fit `i64`.
 pub fn gcd(a: i64, b: i64) i64 {
@@ -356,7 +372,7 @@ fn __reduce_large(x: f64) __Reduced {
     const e0: f64 = math.__from_count(math.__exponent_field(x) as u64) - 1046.0;
     var z: f64 = x * math.__power_of_two(-e0);
     var tx = math.__zeros(3);
-    for i : 0..2 {
+    for i : 0..(2 as usize) {
         const chunk: f64 = math.trunc(z);
         tx.set(i, chunk);
         z = (z - chunk) * two24;
@@ -614,7 +630,7 @@ pub fn arctan(value: f64) f64 { ret math.atan(value); }
 pub fn atan2(y: f64, x: f64) f64 {
     if (y != y || x != x) { ret 0.0 / 0.0; }
     const infinity: f64 = 1.0 / 0.0;
-    const pi: f64 = 3.1415926535897932385;
+    const pi: f64 = PI;
     // The sign of y, including -0.0, selects the half plane (C99 Annex F).
     const y_negative: bool = y < 0.0 || (y == 0.0 && 1.0 / y < 0.0);
     if (y.abs() == infinity && x.abs() == infinity) {
@@ -645,7 +661,7 @@ pub fn asin(value: f64) f64 {
 pub fn acos(value: f64) f64 {
     if (value > 0.5) { ret 2.0 * math.asin(math.sqrt((1.0 - value) * 0.5)); }
     if (value < -0.5) {
-        ret 3.1415926535897932385 - 2.0 * math.asin(math.sqrt((1.0 + value) * 0.5));
+        ret PI - 2.0 * math.asin(math.sqrt((1.0 + value) * 0.5));
     }
     1.5707963267948966192 - math.asin(value)
 }
@@ -698,11 +714,11 @@ pub fn ln(value: f64) f64 {
         denominator = denominator + 2.0;
         iteration++;
     }
-    ret 2.0 * sum + scale * 0.6931471805599453094;
+    ret 2.0 * sum + scale * LN_2;
 }
 
 // The base-2 logarithm.
-pub fn log2(value: f64) f64 { ret math.ln(value) / 0.6931471805599453094; }
+pub fn log2(value: f64) f64 { ret math.ln(value) / LN_2; }
 // The base-10 logarithm.
 pub fn log10(value: f64) f64 { ret math.ln(value) / 2.3025850929940456840; }
 
@@ -927,7 +943,7 @@ fn inverse_trigonometry_follows_annex_f() void {
     const nan: f64 = zero / zero;
     const inf: f64 = 1.0 / zero;
     if (!__is_nan(math.asin(nan)) || !__is_nan(math.asin(2.0)) || !__is_nan(math.acos(-2.0))) { panic("asin/acos domain"); }
-    const pi: f64 = 3.1415926535897932385;
+    const pi: f64 = PI;
     if (math.atan2(0.0, -1.0) != pi || math.atan2(-0.0, -1.0) != -pi) { panic("atan2 signed zero"); }
     if (math.atan2(inf, inf) != pi / 4.0 || math.atan2(-inf, -inf) != -3.0 * pi / 4.0) { panic("atan2 infinities"); }
     if (!__is_negative_zero(math.atan2(-0.0, 1.0)) || !__is_nan(math.atan2(nan, 1.0))) { panic("atan2 zero/NaN"); }

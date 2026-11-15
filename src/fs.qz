@@ -419,8 +419,8 @@ impl File {
         self.close();
     }
 
-    // Moves the read/write position by `offset` from `whence` (`seek_set()`,
-    // `seek_cur()` or `seek_end()`) and returns the new position from the start.
+    // Moves the read/write position by `offset` from `whence` (`SEEK_SET`,
+    // `SEEK_CUR` or `SEEK_END`) and returns the new position from the start.
     pub fn seek(self: &File!, offset: i64, whence: i32) Result[i64, FsError] {
         @cfg(target_os = "linux") {
             var position: i64 = -1;
@@ -496,11 +496,11 @@ impl File {
 }
 
 // `whence` for `File.seek`: the offset counts from the start of the file.
-pub fn seek_set() i32 { ret 0; }
+pub const SEEK_SET: i32 = 0;
 // `whence` for `File.seek`: the offset counts from the current position.
-pub fn seek_cur() i32 { ret 1; }
+pub const SEEK_CUR: i32 = 1;
 // `whence` for `File.seek`: the offset counts from the end of the file.
-pub fn seek_end() i32 { ret 2; }
+pub const SEEK_END: i32 = 2;
 
 // Read a UTF-8 text file into an owned String. File closure is automatic on
 // success and every error path; only the private raw staging allocation needs

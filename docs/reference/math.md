@@ -7,8 +7,68 @@ in libc or libm. Trigonometric inputs and outputs use radians.
 
 ## Contents
 
+- [Constants](#constants)
 - [Functions](#functions)
 - [`f64`](#f64) (methods)
+
+## Constants
+
+### `PI`
+
+```quazi
+pub const PI: f64 = 3.14159265358979323846;
+```
+
+Archimedes' constant (the ratio of a circle's circumference to its
+diameter).
+
+### `TAU`
+
+```quazi
+pub const TAU: f64 = 6.28318530717958647692;
+```
+
+2 * PI, a full turn in radians.
+
+### `FRAC_PI_2`
+
+```quazi
+pub const FRAC_PI_2: f64 = 1.57079632679489661923;
+```
+
+PI / 2, a quarter turn in radians.
+
+### `E`
+
+```quazi
+pub const E: f64 = 2.71828182845904523536;
+```
+
+Euler's number, the base of natural logarithms.
+
+### `LN_2`
+
+```quazi
+pub const LN_2: f64 = 0.693147180559945309417;
+```
+
+The natural logarithm of 2.
+
+### `LN_10`
+
+```quazi
+pub const LN_10: f64 = 2.30258509299404568402;
+```
+
+The natural logarithm of 10.
+
+### `SQRT_2`
+
+```quazi
+pub const SQRT_2: f64 = 1.41421356237309504880;
+```
+
+The square root of 2.
 
 ## Functions
 

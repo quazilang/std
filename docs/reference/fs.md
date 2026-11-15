@@ -8,6 +8,7 @@ Application code normally never calls close/free explicitly.
 
 ## Contents
 
+- [Constants](#constants)
 - [Functions](#functions)
 - [`FsError`](#fserror) (enum)
 - [`File`](#file) (struct)
@@ -17,6 +18,32 @@ Application code normally never calls close/free explicitly.
 - [`BufferedWriter`](#bufferedwriter) (struct)
 - [`DirEntry`](#direntry) (struct)
 - [`Path`](#path) (methods)
+
+## Constants
+
+### `SEEK_SET`
+
+```quazi
+pub const SEEK_SET: i32 = 0;
+```
+
+`whence` for `File.seek`: the offset counts from the start of the file.
+
+### `SEEK_CUR`
+
+```quazi
+pub const SEEK_CUR: i32 = 1;
+```
+
+`whence` for `File.seek`: the offset counts from the current position.
+
+### `SEEK_END`
+
+```quazi
+pub const SEEK_END: i32 = 2;
+```
+
+`whence` for `File.seek`: the offset counts from the end of the file.
 
 ## Functions
 
@@ -35,30 +62,6 @@ pub fn set_current_dir(path: str) Result[bool, FsError]
 ```
 
 Change the process's current working directory. This affects every thread.
-
-### `seek_set`
-
-```quazi
-pub fn seek_set() i32
-```
-
-`whence` for `File.seek`: the offset counts from the start of the file.
-
-### `seek_cur`
-
-```quazi
-pub fn seek_cur() i32
-```
-
-`whence` for `File.seek`: the offset counts from the current position.
-
-### `seek_end`
-
-```quazi
-pub fn seek_end() i32
-```
-
-`whence` for `File.seek`: the offset counts from the end of the file.
 
 ### `read_to_string`
 
@@ -397,8 +400,8 @@ Destructor discovered by whole-program analysis.
 pub fn seek(self: &File!, offset: i64, whence: i32) Result[i64, FsError]
 ```
 
-Moves the read/write position by `offset` from `whence` (`seek_set()`,
-`seek_cur()` or `seek_end()`) and returns the new position from the start.
+Moves the read/write position by `offset` from `whence` (`SEEK_SET`,
+`SEEK_CUR` or `SEEK_END`) and returns the new position from the start.
 
 ### `File.fd`
 
