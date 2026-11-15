@@ -63,8 +63,12 @@ unsafe fn __closedir(dir: *u8) i32;
 // O_TRUNC=0x400, O_APPEND=0x8, O_DIRECTORY=0x00200000.
 // Input flags use std.fs's existing Linux values; translate at boundary.
 unsafe fn __err() i32 { ret -*__errno_location(); }
+// NetBSD libc `errno_value`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn errno_value() i32 { ret *__errno_location(); }
 
+// NetBSD libc `open`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn open(path: str, flags: i32, mode: u32) i32 {
     var native: i32 = flags & 3;
     if ((flags & 64) != 0) { native = native | 512; }
@@ -76,104 +80,152 @@ pub unsafe fn open(path: str, flags: i32, mode: u32) i32 {
     ret fd;
 }
 
+// NetBSD libc `close`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn close(fd: i32) i32 {
     const code: i32 = __close(fd);
     if (code < 0) { ret __err(); }
     ret code;
 }
 
+// NetBSD libc `read`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn read(fd: i32, data: *u8, size: usize) isize {
     const count: isize = __read(fd, data, size);
     if (count < 0) { ret __err() as isize; }
     ret count;
 }
 
+// NetBSD libc `write`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn write(fd: i32, data: *u8, size: usize) isize {
     const count: isize = __write(fd, data, size);
     if (count < 0) { ret __err() as isize; }
     ret count;
 }
 
+// NetBSD libc `lseek`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn lseek(fd: i32, offset: i64, whence: i32) i64 {
     const result: i64 = __lseek(fd, offset, whence);
     if (result < 0) { ret __err() as i64; }
     ret result;
 }
 
+// NetBSD libc `fsync`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn fsync(fd: i32) i32 {
     const result: i32 = __fsync(fd);
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `ftruncate`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn ftruncate(fd: i32, len: i64) i32 {
     const result: i32 = __ftruncate(fd, len);
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `access`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn access(path: str, mode: i32) i32 {
     const result: i32 = __access(core.str_as_ptr(path), mode);
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `unlink`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn unlink(path: str) i32 {
     const result: i32 = __unlink(core.str_as_ptr(path));
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `mkdir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn mkdir(path: str, mode: u32) i32 {
     const result: i32 = __mkdir(core.str_as_ptr(path), mode);
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `rmdir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn rmdir(path: str) i32 {
     const result: i32 = __rmdir(core.str_as_ptr(path));
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `rename`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn rename(old: str, new: str) i32 {
     const result: i32 = __rename(core.str_as_ptr(old), core.str_as_ptr(new));
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `chdir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn chdir(path: str) i32 {
     const result: i32 = __chdir(core.str_as_ptr(path));
     if (result < 0) { ret __err(); }
     ret result;
 }
 
+// NetBSD libc `getcwd`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getcwd(buf: str, size: usize) isize {
     if (__getcwd(core.str_as_ptr(buf), size) == 0) { ret __err() as isize; }
     ret (core.strlen(buf) + 1) as isize;
 }
 
+// NetBSD libc `sched_yield`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn sched_yield() i32 { ret __sched_yield(); }
+// NetBSD libc `getuid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getuid() u32 { ret __getuid(); }
+// NetBSD libc `getgid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getgid() u32 { ret __getgid(); }
+// NetBSD libc `geteuid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn geteuid() u32 { ret __geteuid(); }
+// NetBSD libc `getegid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getegid() u32 { ret __getegid(); }
+// NetBSD libc `umask`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn umask(mask: u32) u32 { ret __umask(mask); }
 
+// NetBSD libc `kill`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn kill(pid: i32, sig: i32) i32 {
     const code: i32 = __kill(pid, sig);
     if (code < 0) { ret __err(); }
     ret code;
 }
 
+// NetBSD libc `clock_gettime`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn clock_gettime(clock_id: i32, result: *u8) i32 {
     const code: i32 = __clock_gettime(clock_id, result);
     if (code < 0) { ret __err(); }
     ret code;
 }
 
+// NetBSD libc `opendir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn opendir(path: str) *u8 { ret __opendir(core.str_as_ptr(path)); }
+// NetBSD libc `readdir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn readdir(handle: *u8) *u8 { ret __readdir(handle); }
+// NetBSD libc `closedir`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn closedir(handle: *u8) i32 { ret __closedir(handle); }
 
 @api("link")
@@ -187,22 +239,32 @@ unsafe fn __getpid() i32;
 @api("getppid")
 unsafe fn __getppid() i32;
 
+// NetBSD libc `link`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn link(old: str, new_path: str) i32 {
     const code: i32 = __link(core.str_as_ptr(old), core.str_as_ptr(new_path));
     if (code < 0) { ret __err(); }
     ret code;
 }
+// NetBSD libc `symlink`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn symlink(target: str, link_path: str) i32 {
     const code: i32 = __symlink(core.str_as_ptr(target), core.str_as_ptr(link_path));
     if (code < 0) { ret __err(); }
     ret code;
 }
+// NetBSD libc `chmod`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn chmod(path: str, mode: u32) i32 {
     const code: i32 = __chmod(core.str_as_ptr(path), mode);
     if (code < 0) { ret __err(); }
     ret code;
 }
+// NetBSD libc `getpid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getpid() i32 { ret __getpid(); }
+// NetBSD libc `getppid`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn getppid() i32 { ret __getppid(); }
 
 // Socket APIs: wrap libc errno in the existing negative-error convention.
@@ -221,26 +283,36 @@ unsafe fn __shutdown(socket: i32, how: i32) i32;
 @api("setsockopt")
 unsafe fn __setsockopt(socket: i32, level: i32, name: i32, value: *u8, length: u32) i32;
 
+// NetBSD libc `socket`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn socket(domain: i32, kind: i32, protocol: i32) i32 {
     const fd: i32 = __socket(domain, kind, protocol);
     if (fd < 0) { ret __err(); }
     ret fd;
 }
+// NetBSD libc `setsockopt`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn setsockopt(fd: i32, level: i32, name: i32, value: *u8, length: u32) i32 {
     const code: i32 = __setsockopt(fd, level, name, value, length);
     if (code < 0) { ret __err(); }
     ret code;
 }
+// NetBSD libc `listen`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn listen(fd: i32, backlog: i32) i32 {
     const code: i32 = __listen(fd, backlog);
     if (code < 0) { ret __err(); }
     ret code;
 }
+// NetBSD libc `accept`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn accept(fd: i32, addr: *u8, len: *u32) i32 {
     const accepted: i32 = __accept(fd, addr, len);
     if (accepted < 0) { ret __err(); }
     ret accepted;
 }
+// NetBSD libc `sendto`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn sendto(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: u32) isize {
     var native_flags: i32 = flags;
     // Linux MSG_NOSIGNAL=0x4000, NetBSD MSG_NOSIGNAL=0x0400.
@@ -249,11 +321,15 @@ pub unsafe fn sendto(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, 
     if (written < 0) { ret __err() as isize; }
     ret written;
 }
+// NetBSD libc `recvfrom`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn recvfrom(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: *u32) isize {
     const n: isize = __recvfrom(fd, buf, count, flags, address, address_size);
     if (n < 0) { ret __err() as isize; }
     ret n;
 }
+// NetBSD libc `shutdown`, returning a negative errno on failure like the
+// Linux system call of the same name.
 pub unsafe fn shutdown(fd: i32, mode: i32) i32 {
     const result: i32 = __shutdown(fd, mode);
     if (result < 0) { ret __err(); }

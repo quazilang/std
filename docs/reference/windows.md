@@ -43,7 +43,7 @@ STD_ERROR_HANDLE  = 0xFFFFFFF4 (4294967284)
 pub fn close_handle(object: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `CloseHandle` (see its Microsoft documentation).
 
 ### `duplicate_handle`
 
@@ -91,7 +91,7 @@ n_read: pointer to DWORD output; reserved: must be null
 pub fn flush_file_buffers(file: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FlushFileBuffers` (see its Microsoft documentation).
 
 ### `get_console_mode`
 
@@ -107,7 +107,7 @@ mode: pointer to DWORD output
 pub fn set_console_mode(console: usize, mode: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `SetConsoleMode` (see its Microsoft documentation).
 
 ### `set_console_title_a`
 
@@ -115,7 +115,7 @@ _Undocumented._
 pub fn set_console_title_a(title: str) i32
 ```
 
-_Undocumented._
+The Win32 function `SetConsoleTitleA` (see its Microsoft documentation).
 
 ### `set_console_text_attribute`
 
@@ -131,7 +131,7 @@ attr: combination of FOREGROUND_*/BACKGROUND_* constants
 pub fn alloc_console() i32
 ```
 
-_Undocumented._
+The Win32 function `AllocConsole` (see its Microsoft documentation).
 
 ### `free_console`
 
@@ -139,7 +139,7 @@ _Undocumented._
 pub fn free_console() i32
 ```
 
-_Undocumented._
+The Win32 function `FreeConsole` (see its Microsoft documentation).
 
 ### `get_console_window`
 
@@ -147,7 +147,7 @@ _Undocumented._
 pub fn get_console_window() usize
 ```
 
-_Undocumented._
+The Win32 function `GetConsoleWindow` (see its Microsoft documentation).
 
 ### `create_file_a`
 
@@ -200,7 +200,7 @@ new_ptr: pointer to LARGE_INTEGER output for new position (or null)
 pub fn delete_file_a(path: str) i32
 ```
 
-_Undocumented._
+The Win32 function `DeleteFileA` (see its Microsoft documentation).
 
 ### `move_file_a`
 
@@ -208,7 +208,7 @@ _Undocumented._
 pub fn move_file_a(existing: str, new_path: str) i32
 ```
 
-_Undocumented._
+The Win32 function `MoveFileA` (see its Microsoft documentation).
 
 ### `copy_file_a`
 
@@ -216,7 +216,7 @@ _Undocumented._
 pub fn copy_file_a(existing: str, new_path: str, fail_if_exists: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `CopyFileA` (see its Microsoft documentation).
 
 ### `create_directory_a`
 
@@ -232,7 +232,7 @@ security: pointer to SECURITY_ATTRIBUTES or null
 pub fn remove_directory_a(path: str) i32
 ```
 
-_Undocumented._
+The Win32 function `RemoveDirectoryA` (see its Microsoft documentation).
 
 ### `get_current_directory_a`
 
@@ -240,7 +240,7 @@ _Undocumented._
 pub fn get_current_directory_a(buf_len: u32, buf: str) u32
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentDirectoryA` (see its Microsoft documentation).
 
 ### `set_current_directory_a`
 
@@ -248,7 +248,7 @@ _Undocumented._
 pub fn set_current_directory_a(path: str) i32
 ```
 
-_Undocumented._
+The Win32 function `SetCurrentDirectoryA` (see its Microsoft documentation).
 
 ### `find_first_file_a`
 
@@ -264,7 +264,7 @@ data: pointer to WIN32_FIND_DATAA struct output; returns search handle
 pub fn find_next_file_a(handle: usize, data: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `FindNextFileA` (see its Microsoft documentation).
 
 ### `find_close`
 
@@ -272,7 +272,7 @@ _Undocumented._
 pub fn find_close(handle: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FindClose` (see its Microsoft documentation).
 
 ### `get_temp_path_a`
 
@@ -280,7 +280,7 @@ _Undocumented._
 pub fn get_temp_path_a(buf_len: u32, buf: str) u32
 ```
 
-_Undocumented._
+The Win32 function `GetTempPathA` (see its Microsoft documentation).
 
 ### `get_temp_file_name_a`
 
@@ -288,7 +288,7 @@ _Undocumented._
 pub fn get_temp_file_name_a(path: str, prefix: str, unique: u32, name: str) u32
 ```
 
-_Undocumented._
+The Win32 function `GetTempFileNameA` (see its Microsoft documentation).
 
 ### `get_file_attributes_a`
 
@@ -296,7 +296,7 @@ _Undocumented._
 pub fn get_file_attributes_a(path: str) u32
 ```
 
-_Undocumented._
+The Win32 function `GetFileAttributesA` (see its Microsoft documentation).
 
 ### `set_file_attributes_a`
 
@@ -304,7 +304,7 @@ _Undocumented._
 pub fn set_file_attributes_a(path: str, attrs: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `SetFileAttributesA` (see its Microsoft documentation).
 
 ### `get_current_process`
 
@@ -312,7 +312,7 @@ _Undocumented._
 pub fn get_current_process() usize
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentProcess` (see its Microsoft documentation).
 
 ### `get_current_process_id`
 
@@ -320,7 +320,7 @@ _Undocumented._
 pub fn get_current_process_id() u32
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentProcessId` (see its Microsoft documentation).
 
 ### `get_current_thread_id`
 
@@ -328,7 +328,7 @@ _Undocumented._
 pub fn get_current_thread_id() u32
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentThreadId` (see its Microsoft documentation).
 
 ### `exit_process`
 
@@ -336,7 +336,7 @@ _Undocumented._
 pub fn exit_process(exit_code: u32) void
 ```
 
-_Undocumented._
+The Win32 function `ExitProcess` (see its Microsoft documentation).
 
 ### `create_process_a`
 
@@ -363,7 +363,7 @@ access: PROCESS_ALL_ACCESS=0x1FFFFF, PROCESS_QUERY_INFORMATION=0x400
 pub fn terminate_process(proc: usize, exit_code: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `TerminateProcess` (see its Microsoft documentation).
 
 ### `get_exit_code_process`
 
@@ -379,7 +379,7 @@ exit_code: pointer to DWORD output
 pub fn get_exit_code_thread(thread: usize, exit_code: *u32) i32
 ```
 
-_Undocumented._
+The Win32 function `GetExitCodeThread` (see its Microsoft documentation).
 
 ### `wait_for_single_object`
 
@@ -415,7 +415,7 @@ creation_flags: 0 = run immediately, CREATE_SUSPENDED=4
 pub fn exit_thread(exit_code: u32) void
 ```
 
-_Undocumented._
+The Win32 function `ExitThread` (see its Microsoft documentation).
 
 ### `get_current_thread`
 
@@ -423,7 +423,7 @@ _Undocumented._
 pub fn get_current_thread() usize
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentThread` (see its Microsoft documentation).
 
 ### `resume_thread`
 
@@ -431,7 +431,7 @@ _Undocumented._
 pub fn resume_thread(thread: usize) u32
 ```
 
-_Undocumented._
+The Win32 function `ResumeThread` (see its Microsoft documentation).
 
 ### `suspend_thread`
 
@@ -439,7 +439,7 @@ _Undocumented._
 pub fn suspend_thread(thread: usize) u32
 ```
 
-_Undocumented._
+The Win32 function `SuspendThread` (see its Microsoft documentation).
 
 ### `terminate_thread`
 
@@ -447,7 +447,7 @@ _Undocumented._
 pub fn terminate_thread(thread: usize, exit_code: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `TerminateThread` (see its Microsoft documentation).
 
 ### `set_thread_priority`
 
@@ -463,7 +463,7 @@ priority: THREAD_PRIORITY_NORMAL=0, ABOVE_NORMAL=1, BELOW_NORMAL=-1, HIGHEST=2, 
 pub fn get_thread_priority(thread: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `GetThreadPriority` (see its Microsoft documentation).
 
 ### `tls_alloc`
 
@@ -471,7 +471,7 @@ _Undocumented._
 pub fn tls_alloc() u32
 ```
 
-_Undocumented._
+The Win32 function `TlsAlloc` (see its Microsoft documentation).
 
 ### `tls_get_value`
 
@@ -495,7 +495,7 @@ value: pointer to thread-local data
 pub fn tls_free(index: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `TlsFree` (see its Microsoft documentation).
 
 ### `sleep`
 
@@ -503,7 +503,7 @@ _Undocumented._
 pub fn sleep(ms: u32) void
 ```
 
-_Undocumented._
+The Win32 function `Sleep` (see its Microsoft documentation).
 
 ### `sleep_ex`
 
@@ -511,7 +511,7 @@ _Undocumented._
 pub fn sleep_ex(ms: u32, alertable: i32) u32
 ```
 
-_Undocumented._
+The Win32 function `SleepEx` (see its Microsoft documentation).
 
 ### `virtual_alloc`
 
@@ -593,7 +593,7 @@ Returns size of allocated block
 pub fn heap_create(options: u32, initial: usize, maximum: usize) usize
 ```
 
-_Undocumented._
+The Win32 function `HeapCreate` (see its Microsoft documentation).
 
 ### `heap_destroy`
 
@@ -601,7 +601,7 @@ _Undocumented._
 pub fn heap_destroy(heap: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `HeapDestroy` (see its Microsoft documentation).
 
 ### `local_alloc`
 
@@ -625,7 +625,7 @@ mem: pointer returned by LocalAlloc; returns null on success, mem on failure
 pub fn global_alloc(flags: u32, size: usize) *u8
 ```
 
-_Undocumented._
+The Win32 function `GlobalAlloc` (see its Microsoft documentation).
 
 ### `global_free`
 
@@ -633,7 +633,7 @@ _Undocumented._
 pub fn global_free(mem: *u8) *u8
 ```
 
-_Undocumented._
+The Win32 function `GlobalFree` (see its Microsoft documentation).
 
 ### `create_mutex_a`
 
@@ -649,7 +649,7 @@ security: pointer to SECURITY_ATTRIBUTES or null; initial_owner: TRUE=1
 pub fn open_mutex_a(access: u32, inherit: i32, name: str) usize
 ```
 
-_Undocumented._
+The Win32 function `OpenMutexA` (see its Microsoft documentation).
 
 ### `release_mutex`
 
@@ -657,7 +657,7 @@ _Undocumented._
 pub fn release_mutex(mutex: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `ReleaseMutex` (see its Microsoft documentation).
 
 ### `create_event_a`
 
@@ -673,7 +673,7 @@ security: pointer to SECURITY_ATTRIBUTES or null; manual_reset: TRUE=1 for manua
 pub fn open_event_a(access: u32, inherit: i32, name: str) usize
 ```
 
-_Undocumented._
+The Win32 function `OpenEventA` (see its Microsoft documentation).
 
 ### `set_event`
 
@@ -681,7 +681,7 @@ _Undocumented._
 pub fn set_event(event: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `SetEvent` (see its Microsoft documentation).
 
 ### `reset_event`
 
@@ -689,7 +689,7 @@ _Undocumented._
 pub fn reset_event(event: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `ResetEvent` (see its Microsoft documentation).
 
 ### `pulse_event`
 
@@ -697,7 +697,7 @@ _Undocumented._
 pub fn pulse_event(event: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `PulseEvent` (see its Microsoft documentation).
 
 ### `create_semaphore_a`
 
@@ -729,7 +729,7 @@ cs: pointer to CRITICAL_SECTION (40 bytes on x86-64)
 pub fn enter_critical_section(cs: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `EnterCriticalSection` (see its Microsoft documentation).
 
 ### `try_enter_critical_section`
 
@@ -737,7 +737,7 @@ _Undocumented._
 pub fn try_enter_critical_section(cs: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `TryEnterCriticalSection` (see its Microsoft documentation).
 
 ### `leave_critical_section`
 
@@ -745,7 +745,7 @@ _Undocumented._
 pub fn leave_critical_section(cs: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `LeaveCriticalSection` (see its Microsoft documentation).
 
 ### `delete_critical_section`
 
@@ -753,7 +753,7 @@ _Undocumented._
 pub fn delete_critical_section(cs: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `DeleteCriticalSection` (see its Microsoft documentation).
 
 ### `get_last_error`
 
@@ -761,7 +761,7 @@ _Undocumented._
 pub fn get_last_error() u32
 ```
 
-_Undocumented._
+The Win32 function `GetLastError` (see its Microsoft documentation).
 
 ### `set_last_error`
 
@@ -769,7 +769,7 @@ _Undocumented._
 pub fn set_last_error(err: u32) void
 ```
 
-_Undocumented._
+The Win32 function `SetLastError` (see its Microsoft documentation).
 
 ### `format_message_a`
 
@@ -787,7 +787,7 @@ flags: FORMAT_MESSAGE_FROM_SYSTEM=0x1000, FORMAT_MESSAGE_IGNORE_INSERTS=0x200
 pub fn load_library_a(name: str) usize
 ```
 
-_Undocumented._
+The Win32 function `LoadLibraryA` (see its Microsoft documentation).
 
 ### `load_library_ex_a`
 
@@ -811,7 +811,7 @@ Returns function pointer as usize (cast to fn type before calling)
 pub fn free_library(module: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FreeLibrary` (see its Microsoft documentation).
 
 ### `get_module_handle_a`
 
@@ -819,7 +819,7 @@ _Undocumented._
 pub fn get_module_handle_a(name: str) usize
 ```
 
-_Undocumented._
+The Win32 function `GetModuleHandleA` (see its Microsoft documentation).
 
 ### `get_module_file_name_a`
 
@@ -827,7 +827,7 @@ _Undocumented._
 pub fn get_module_file_name_a(module: usize, buf: str, size: u32) u32
 ```
 
-_Undocumented._
+The Win32 function `GetModuleFileNameA` (see its Microsoft documentation).
 
 ### `get_environment_variable_a`
 
@@ -835,7 +835,7 @@ _Undocumented._
 pub fn get_environment_variable_a(name: str, buf: str, size: u32) u32
 ```
 
-_Undocumented._
+The Win32 function `GetEnvironmentVariableA` (see its Microsoft documentation).
 
 ### `set_environment_variable_a`
 
@@ -843,7 +843,7 @@ _Undocumented._
 pub fn set_environment_variable_a(name: str, value: str) i32
 ```
 
-_Undocumented._
+The Win32 function `SetEnvironmentVariableA` (see its Microsoft documentation).
 
 ### `get_command_line_a`
 
@@ -851,7 +851,7 @@ _Undocumented._
 pub fn get_command_line_a() str
 ```
 
-_Undocumented._
+The Win32 function `GetCommandLineA` (see its Microsoft documentation).
 
 ### `get_environment_strings_a`
 
@@ -883,7 +883,7 @@ st: pointer to SYSTEMTIME { u16 year, month, dow, day, hour, min, sec, ms }
 pub fn get_local_time(st: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `GetLocalTime` (see its Microsoft documentation).
 
 ### `set_system_time`
 
@@ -891,7 +891,7 @@ _Undocumented._
 pub fn set_system_time(st: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `SetSystemTime` (see its Microsoft documentation).
 
 ### `set_local_time`
 
@@ -899,7 +899,7 @@ _Undocumented._
 pub fn set_local_time(st: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `SetLocalTime` (see its Microsoft documentation).
 
 ### `get_system_time_as_file_time`
 
@@ -915,7 +915,7 @@ ft: pointer to FILETIME { u32 low, u32 high } — 100-nanosecond intervals since
 pub fn file_time_to_system_time(ft: *u8, st: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `FileTimeToSystemTime` (see its Microsoft documentation).
 
 ### `system_time_to_file_time`
 
@@ -923,7 +923,7 @@ _Undocumented._
 pub fn system_time_to_file_time(st: *u8, ft: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `SystemTimeToFileTime` (see its Microsoft documentation).
 
 ### `file_time_to_local_file_time`
 
@@ -931,7 +931,7 @@ _Undocumented._
 pub fn file_time_to_local_file_time(utc: *u8, local: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `FileTimeToLocalFileTime` (see its Microsoft documentation).
 
 ### `query_performance_counter`
 
@@ -947,7 +947,7 @@ count/freq: pointer to LARGE_INTEGER (i64) output
 pub fn query_performance_frequency(freq: *i64) i32
 ```
 
-_Undocumented._
+The Win32 function `QueryPerformanceFrequency` (see its Microsoft documentation).
 
 ### `get_tick_count64`
 
@@ -955,7 +955,7 @@ _Undocumented._
 pub fn get_tick_count64() u64
 ```
 
-_Undocumented._
+The Win32 function `GetTickCount64` (see its Microsoft documentation).
 
 ### `reg_open_key_ex_a`
 
@@ -981,7 +981,7 @@ result: pointer to HKEY output; disposition: pointer to DWORD output (or null)
 pub fn reg_close_key(key: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `RegCloseKey` (see its Microsoft documentation).
 
 ### `reg_query_value_ex_a`
 
@@ -1007,7 +1007,7 @@ data: pointer to value buffer to write
 pub fn reg_delete_value_a(key: usize, value: str) i32
 ```
 
-_Undocumented._
+The Win32 function `RegDeleteValueA` (see its Microsoft documentation).
 
 ### `reg_delete_key_a`
 
@@ -1015,7 +1015,7 @@ _Undocumented._
 pub fn reg_delete_key_a(key: usize, sub_key: str) i32
 ```
 
-_Undocumented._
+The Win32 function `RegDeleteKeyA` (see its Microsoft documentation).
 
 ### `reg_enum_key_ex_a`
 
@@ -1082,7 +1082,7 @@ info: pointer to token information buffer; ret_len: pointer to DWORD output
 pub fn is_user_an_admin() i32
 ```
 
-_Undocumented._
+The Win32 function `IsUserAnAdmin` (see its Microsoft documentation).
 
 ### `get_system_info`
 
@@ -1098,7 +1098,7 @@ si: pointer to SYSTEM_INFO struct output
 pub fn get_native_system_info(si: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `GetNativeSystemInfo` (see its Microsoft documentation).
 
 ### `global_memory_status_ex`
 
@@ -1114,7 +1114,7 @@ stat: pointer to MEMORYSTATUSEX struct output (must set dwLength first)
 pub fn get_computer_name_a(buf: str, size: *u32) i32
 ```
 
-_Undocumented._
+The Win32 function `GetComputerNameA` (see its Microsoft documentation).
 
 ### `get_user_name_a`
 
@@ -1122,7 +1122,7 @@ _Undocumented._
 pub fn get_user_name_a(buf: str, size: *u32) i32
 ```
 
-_Undocumented._
+The Win32 function `GetUserNameA` (see its Microsoft documentation).
 
 ### `get_version_ex_a`
 
@@ -1138,7 +1138,7 @@ os_ver: pointer to OSVERSIONINFOEXA struct output (set dwOSVersionInfoSize first
 pub fn ws_startup(version: u16, data: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `WSAStartup` (see its Microsoft documentation).
 
 ### `ws_cleanup`
 
@@ -1146,7 +1146,7 @@ _Undocumented._
 pub fn ws_cleanup() i32
 ```
 
-_Undocumented._
+The Win32 function `WSACleanup` (see its Microsoft documentation).
 
 ### `ws_get_last_error`
 
@@ -1154,7 +1154,7 @@ _Undocumented._
 pub fn ws_get_last_error() i32
 ```
 
-_Undocumented._
+The Win32 function `WSAGetLastError` (see its Microsoft documentation).
 
 ### `socket`
 
@@ -1170,7 +1170,7 @@ af: AF_INET=2, AF_INET6=23; type: SOCK_STREAM=1, SOCK_DGRAM=2; proto: IPPROTO_TC
 pub fn closesocket(s: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `closesocket` (see its Microsoft documentation).
 
 ### `bind`
 
@@ -1186,7 +1186,7 @@ addr: pointer to sockaddr variant
 pub fn listen(s: usize, backlog: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `listen` (see its Microsoft documentation).
 
 ### `accept`
 
@@ -1202,7 +1202,7 @@ addr: pointer to sockaddr output; addrlen: pointer to i32 (in/out)
 pub fn connect(s: usize, addr: *u8, addrlen: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `connect` (see its Microsoft documentation).
 
 ### `send`
 
@@ -1210,7 +1210,7 @@ _Undocumented._
 pub fn send(s: usize, buf: *u8, len: i32, flags: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `send` (see its Microsoft documentation).
 
 ### `recv`
 
@@ -1218,7 +1218,7 @@ _Undocumented._
 pub fn recv(s: usize, buf: *u8, len: i32, flags: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `recv` (see its Microsoft documentation).
 
 ### `sendto`
 
@@ -1266,7 +1266,7 @@ addr: pointer to sockaddr output; addrlen: pointer to i32 (in/out)
 pub fn getpeername(s: usize, addr: *u8, addrlen: *i32) i32
 ```
 
-_Undocumented._
+The Win32 function `getpeername` (see its Microsoft documentation).
 
 ### `select`
 
@@ -1306,7 +1306,7 @@ info: pointer returned by getaddrinfo
 pub fn getnameinfo(addr: *u8, addrlen: i32, host: str, host_len: u32, serv: str, serv_len: u32, flags: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `getnameinfo` (see its Microsoft documentation).
 
 ### `inet_pton`
 
@@ -1338,7 +1338,7 @@ htons / ntohs — byte order conversion (no pointers)
 pub fn ntohs(netshort: u16) u16
 ```
 
-_Undocumented._
+The Win32 function `ntohs` (see its Microsoft documentation).
 
 ### `htonl`
 
@@ -1346,7 +1346,7 @@ _Undocumented._
 pub fn htonl(hostlong: u32) u32
 ```
 
-_Undocumented._
+The Win32 function `htonl` (see its Microsoft documentation).
 
 ### `ntohl`
 
@@ -1354,4 +1354,4 @@ _Undocumented._
 pub fn ntohl(netlong: u32) u32
 ```
 
-_Undocumented._
+The Win32 function `ntohl` (see its Microsoft documentation).

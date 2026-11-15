@@ -16,7 +16,7 @@ pub fn create_file(path: *u8, access: u32, share: u32, security: *u8,
     disposition: u32, flags: u32, template: usize) usize
 ```
 
-_Undocumented._
+The Win32 function `CreateFileA` (see its Microsoft documentation).
 
 ### `read_file`
 
@@ -25,7 +25,7 @@ pub fn read_file(file: usize, buf: *u8, count: u32,
     read: *u32, overlapped: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `ReadFile` (see its Microsoft documentation).
 
 ### `write_file`
 
@@ -34,7 +34,7 @@ pub fn write_file(file: usize, buf: *u8, count: u32,
     written: *u32, overlapped: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `WriteFile` (see its Microsoft documentation).
 
 ### `get_std_handle`
 
@@ -42,7 +42,7 @@ _Undocumented._
 pub fn get_std_handle(kind: u32) usize
 ```
 
-_Undocumented._
+The Win32 function `GetStdHandle` (see its Microsoft documentation).
 
 ### `get_console_mode`
 
@@ -50,7 +50,7 @@ _Undocumented._
 pub fn get_console_mode(console: usize, mode: *u32) i32
 ```
 
-_Undocumented._
+The Win32 function `GetConsoleMode` (see its Microsoft documentation).
 
 ### `set_console_mode`
 
@@ -58,7 +58,7 @@ _Undocumented._
 pub fn set_console_mode(console: usize, mode: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `SetConsoleMode` (see its Microsoft documentation).
 
 ### `utf8_to_utf16`
 
@@ -67,7 +67,7 @@ pub fn utf8_to_utf16(code_page: u32, flags: u32, input: *u8,
     input_len: i32, output: *u16, output_len: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `MultiByteToWideChar` (see its Microsoft documentation).
 
 ### `write_console_utf16`
 
@@ -76,7 +76,7 @@ pub fn write_console_utf16(console: usize, text: *u16, count: u32,
     written: *u32, reserved: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `WriteConsoleW` (see its Microsoft documentation).
 
 ### `close_handle`
 
@@ -84,7 +84,7 @@ _Undocumented._
 pub fn close_handle(handle: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `CloseHandle` (see its Microsoft documentation).
 
 ### `seek`
 
@@ -92,7 +92,7 @@ _Undocumented._
 pub fn seek(file: usize, distance: i64, position: *i64, method: u32) i32
 ```
 
-_Undocumented._
+The Win32 function `SetFilePointerEx` (see its Microsoft documentation).
 
 ### `set_socket_option`
 
@@ -100,7 +100,7 @@ _Undocumented._
 pub fn set_socket_option(socket: usize, level: i32, name: i32, value: *u8, length: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `setsockopt` (see its Microsoft documentation).
 
 ### `get_current_directory`
 
@@ -116,7 +116,7 @@ ANSI-path working directory APIs, matching the other *A file APIs here.
 pub fn set_current_directory(path: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `SetCurrentDirectoryA` (see its Microsoft documentation).
 
 ### `get_tick_count64`
 
@@ -124,7 +124,7 @@ _Undocumented._
 pub fn get_tick_count64() u64
 ```
 
-_Undocumented._
+The Win32 function `GetTickCount64` (see its Microsoft documentation).
 
 ### `get_system_time_as_file_time`
 
@@ -140,7 +140,7 @@ FILETIME: 100-nanosecond intervals since 1601-01-01 UTC.
 pub fn sync(file: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FlushFileBuffers` (see its Microsoft documentation).
 
 ### `file_attributes`
 
@@ -148,7 +148,7 @@ _Undocumented._
 pub fn file_attributes(path: *u8) u32
 ```
 
-_Undocumented._
+The Win32 function `GetFileAttributesA` (see its Microsoft documentation).
 
 ### `file_attribute_data`
 
@@ -165,7 +165,7 @@ at 0, creation/access/write FILETIMEs at 4/12/20, size high/low at 28/32.
 pub fn delete_file(path: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `DeleteFileA` (see its Microsoft documentation).
 
 ### `create_directory`
 
@@ -173,7 +173,7 @@ _Undocumented._
 pub fn create_directory(path: *u8, security: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `CreateDirectoryA` (see its Microsoft documentation).
 
 ### `remove_directory`
 
@@ -181,7 +181,7 @@ _Undocumented._
 pub fn remove_directory(path: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `RemoveDirectoryA` (see its Microsoft documentation).
 
 ### `move_file`
 
@@ -189,7 +189,7 @@ _Undocumented._
 pub fn move_file(from: *u8, to: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `MoveFileA` (see its Microsoft documentation).
 
 ### `environment`
 
@@ -197,7 +197,7 @@ _Undocumented._
 pub fn environment(name: *u8, buf: *u8, capacity: u32) u32
 ```
 
-_Undocumented._
+The Win32 function `GetEnvironmentVariableA` (see its Microsoft documentation).
 
 ### `find_first`
 
@@ -205,7 +205,7 @@ _Undocumented._
 pub fn find_first(pattern: *u8, data: *u8) usize
 ```
 
-_Undocumented._
+The Win32 function `FindFirstFileA` (see its Microsoft documentation).
 
 ### `find_next`
 
@@ -213,7 +213,7 @@ _Undocumented._
 pub fn find_next(handle: usize, data: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `FindNextFileA` (see its Microsoft documentation).
 
 ### `find_close`
 
@@ -221,7 +221,7 @@ _Undocumented._
 pub fn find_close(handle: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FindClose` (see its Microsoft documentation).
 
 ### `last_error`
 
@@ -229,7 +229,7 @@ _Undocumented._
 pub fn last_error() u32
 ```
 
-_Undocumented._
+The Win32 function `GetLastError` (see its Microsoft documentation).
 
 ### `process_snapshot`
 
@@ -237,7 +237,7 @@ _Undocumented._
 pub fn process_snapshot(flags: u32, process: u32) usize
 ```
 
-_Undocumented._
+The Win32 function `CreateToolhelp32Snapshot` (see its Microsoft documentation).
 
 ### `first_process`
 
@@ -245,7 +245,7 @@ _Undocumented._
 pub fn first_process(snapshot: usize, entry: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `Process32First` (see its Microsoft documentation).
 
 ### `next_process`
 
@@ -253,7 +253,7 @@ _Undocumented._
 pub fn next_process(snapshot: usize, entry: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `Process32Next` (see its Microsoft documentation).
 
 ### `current_process_id`
 
@@ -261,7 +261,7 @@ _Undocumented._
 pub fn current_process_id() u32
 ```
 
-_Undocumented._
+The Win32 function `GetCurrentProcessId` (see its Microsoft documentation).
 
 ### `winsock_startup`
 
@@ -277,7 +277,7 @@ Minimal pointer-correct Winsock2 substrate used by std.net.
 pub fn winsock_cleanup() i32
 ```
 
-_Undocumented._
+The Win32 function `WSACleanup` (see its Microsoft documentation).
 
 ### `winsock_last_error`
 
@@ -285,7 +285,7 @@ _Undocumented._
 pub fn winsock_last_error() i32
 ```
 
-_Undocumented._
+The Win32 function `WSAGetLastError` (see its Microsoft documentation).
 
 ### `socket`
 
@@ -293,7 +293,7 @@ _Undocumented._
 pub fn socket(af: i32, kind: i32, protocol: i32) usize
 ```
 
-_Undocumented._
+The Win32 function `socket` (see its Microsoft documentation).
 
 ### `close_socket`
 
@@ -301,7 +301,7 @@ _Undocumented._
 pub fn close_socket(socket: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `closesocket` (see its Microsoft documentation).
 
 ### `listen_socket`
 
@@ -309,7 +309,7 @@ _Undocumented._
 pub fn listen_socket(socket: usize, backlog: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `listen` (see its Microsoft documentation).
 
 ### `accept_socket`
 
@@ -317,7 +317,7 @@ _Undocumented._
 pub fn accept_socket(socket: usize, address: *u8, address_length: *i32) usize
 ```
 
-_Undocumented._
+The Win32 function `accept` (see its Microsoft documentation).
 
 ### `send_socket`
 
@@ -325,7 +325,7 @@ _Undocumented._
 pub fn send_socket(socket: usize, data: *u8, length: i32, flags: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `send` (see its Microsoft documentation).
 
 ### `receive_socket`
 
@@ -333,7 +333,7 @@ _Undocumented._
 pub fn receive_socket(socket: usize, data: *u8, length: i32, flags: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `recv` (see its Microsoft documentation).
 
 ### `send_to_socket`
 
@@ -341,7 +341,7 @@ _Undocumented._
 pub fn send_to_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `sendto` (see its Microsoft documentation).
 
 ### `receive_from_socket`
 
@@ -349,7 +349,7 @@ _Undocumented._
 pub fn receive_from_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: *i32) i32
 ```
 
-_Undocumented._
+The Win32 function `recvfrom` (see its Microsoft documentation).
 
 ### `shutdown_socket`
 
@@ -357,7 +357,7 @@ _Undocumented._
 pub fn shutdown_socket(socket: usize, how: i32) i32
 ```
 
-_Undocumented._
+The Win32 function `shutdown` (see its Microsoft documentation).
 
 ### `load_library`
 
@@ -365,7 +365,7 @@ _Undocumented._
 pub fn load_library(path: *i8) usize
 ```
 
-_Undocumented._
+The Win32 function `LoadLibraryA` (see its Microsoft documentation).
 
 ### `library_symbol`
 
@@ -373,7 +373,7 @@ _Undocumented._
 pub fn library_symbol(library: usize, name: *i8) usize
 ```
 
-_Undocumented._
+The Win32 function `GetProcAddress` (see its Microsoft documentation).
 
 ### `free_library`
 
@@ -381,7 +381,7 @@ _Undocumented._
 pub fn free_library(library: usize) i32
 ```
 
-_Undocumented._
+The Win32 function `FreeLibrary` (see its Microsoft documentation).
 
 ### `get_address_info`
 
@@ -389,7 +389,7 @@ _Undocumented._
 pub fn get_address_info(node: *i8, service: *i8, hints: *u8, result: **u8) i32
 ```
 
-_Undocumented._
+The Win32 function `getaddrinfo` (see its Microsoft documentation).
 
 ### `free_address_info`
 
@@ -397,7 +397,7 @@ _Undocumented._
 pub fn free_address_info(result: *u8) void
 ```
 
-_Undocumented._
+The Win32 function `freeaddrinfo` (see its Microsoft documentation).
 
 ### `command_line_w`
 
@@ -413,7 +413,7 @@ Process command line, split like the C runtime (UTF-16).
 pub fn command_line_to_argv_w(command_line: *u8, count: *i32) *u8
 ```
 
-_Undocumented._
+The Win32 function `CommandLineToArgvW` (see its Microsoft documentation).
 
 ### `wide_to_multi_byte`
 
@@ -422,7 +422,7 @@ pub fn wide_to_multi_byte(code_page: u32, flags: u32, wide: *u8, wide_length: i3
     output: *u8, output_length: i32, default_char: *u8, used_default: *u8) i32
 ```
 
-_Undocumented._
+The Win32 function `WideCharToMultiByte` (see its Microsoft documentation).
 
 ### `local_free`
 
@@ -430,7 +430,7 @@ _Undocumented._
 pub fn local_free(memory: *u8) *u8
 ```
 
-_Undocumented._
+The Win32 function `LocalFree` (see its Microsoft documentation).
 
 ### `full_path_name`
 

@@ -22,9 +22,11 @@
 
 // ── File I/O ─────────────────────────────────────────────────────────────────
 
+// The Linux `read` system call; returns a negative errno on failure.
 @syscall("read")
 pub unsafe fn read(fd: i32, buf: *u8, count: usize) isize;
 
+// The Linux `write` system call; returns a negative errno on failure.
 @syscall("write")
 pub unsafe fn write(fd: i32, buf: *u8, count: usize) isize;
 
@@ -32,6 +34,7 @@ pub unsafe fn write(fd: i32, buf: *u8, count: usize) isize;
 @syscall("open")
 pub fn open(path: str, flags: i32, mode: u32) i32;
 
+// The Linux `close` system call; returns a negative errno on failure.
 @syscall("close")
 pub fn close(fd: i32) i32;
 
@@ -39,9 +42,11 @@ pub fn close(fd: i32) i32;
 @syscall("stat")
 pub unsafe fn stat(path: str, statbuf: *u8) i32;
 
+// The Linux `fstat` system call; returns a negative errno on failure.
 @syscall("fstat")
 pub unsafe fn fstat(fd: i32, statbuf: *u8) i32;
 
+// The Linux `lstat` system call; returns a negative errno on failure.
 @syscall("lstat")
 pub unsafe fn lstat(path: str, statbuf: *u8) i32;
 
@@ -57,6 +62,7 @@ pub fn lseek(fd: i32, offset: i64, whence: i32) i64;
 @syscall("pread64")
 pub unsafe fn pread64(fd: i32, buf: str, count: usize, offset: i64) isize;
 
+// The Linux `pwrite64` system call; returns a negative errno on failure.
 @syscall("pwrite64")
 pub unsafe fn pwrite64(fd: i32, buf: str, count: usize, offset: i64) isize;
 
@@ -64,6 +70,7 @@ pub unsafe fn pwrite64(fd: i32, buf: str, count: usize, offset: i64) isize;
 @syscall("readv")
 pub unsafe fn readv(fd: i32, iov: *u8, iovcnt: i32) isize;
 
+// The Linux `writev` system call; returns a negative errno on failure.
 @syscall("writev")
 pub unsafe fn writev(fd: i32, iov: *u8, iovcnt: i32) isize;
 
@@ -75,6 +82,7 @@ pub fn access(path: str, mode: i32) i32;
 @syscall("pipe")
 pub unsafe fn pipe(pipefd: *u8) i32;
 
+// The Linux `pipe2` system call; returns a negative errno on failure.
 @syscall("pipe2")
 pub unsafe fn pipe2(pipefd: *u8, flags: i32) i32;
 
@@ -82,12 +90,15 @@ pub unsafe fn pipe2(pipefd: *u8, flags: i32) i32;
 @syscall("select")
 pub unsafe fn select(nfds: i32, readfds: *u8, writefds: *u8, exceptfds: *u8, timeout: *u8) i32;
 
+// The Linux `dup` system call; returns a negative errno on failure.
 @syscall("dup")
 pub fn dup(oldfd: i32) i32;
 
+// The Linux `dup2` system call; returns a negative errno on failure.
 @syscall("dup2")
 pub fn dup2(oldfd: i32, newfd: i32) i32;
 
+// The Linux `dup3` system call; returns a negative errno on failure.
 @syscall("dup3")
 pub fn dup3(oldfd: i32, newfd: i32, flags: i32) i32;
 
@@ -108,15 +119,19 @@ pub fn fcntl(fd: i32, cmd: i32, arg: i64) i32;
 @syscall("flock")
 pub fn flock(fd: i32, operation: i32) i32;
 
+// The Linux `fsync` system call; returns a negative errno on failure.
 @syscall("fsync")
 pub fn fsync(fd: i32) i32;
 
+// The Linux `fdatasync` system call; returns a negative errno on failure.
 @syscall("fdatasync")
 pub fn fdatasync(fd: i32) i32;
 
+// The Linux `truncate` system call; returns a negative errno on failure.
 @syscall("truncate")
 pub fn truncate(path: str, length: i64) i32;
 
+// The Linux `ftruncate` system call; returns a negative errno on failure.
 @syscall("ftruncate")
 pub fn ftruncate(fd: i32, length: i64) i32;
 
@@ -124,81 +139,107 @@ pub fn ftruncate(fd: i32, length: i64) i32;
 @syscall("getdents")
 pub unsafe fn getdents(fd: i32, dirp: *u8, count: usize) isize;
 
+// The Linux `getdents64` system call; returns a negative errno on failure.
 @syscall("getdents64")
 pub unsafe fn getdents64(fd: i32, dirp: *u8, count: usize) isize;
 
+// The Linux `getcwd` system call; returns a negative errno on failure.
 @syscall("getcwd")
 pub unsafe fn getcwd(buf: str, size: usize) isize;
 
+// The Linux `chdir` system call; returns a negative errno on failure.
 @syscall("chdir")
 pub fn chdir(path: str) i32;
 
+// The Linux `fchdir` system call; returns a negative errno on failure.
 @syscall("fchdir")
 pub fn fchdir(fd: i32) i32;
 
+// The Linux `rename` system call; returns a negative errno on failure.
 @syscall("rename")
 pub fn rename(oldpath: str, newpath: str) i32;
 
+// The Linux `renameat` system call; returns a negative errno on failure.
 @syscall("renameat")
 pub fn renameat(olddirfd: i32, oldpath: str, newdirfd: i32, newpath: str) i32;
 
+// The Linux `mkdir` system call; returns a negative errno on failure.
 @syscall("mkdir")
 pub fn mkdir(path: str, mode: u32) i32;
 
+// The Linux `mkdirat` system call; returns a negative errno on failure.
 @syscall("mkdirat")
 pub fn mkdirat(dirfd: i32, path: str, mode: u32) i32;
 
+// The Linux `rmdir` system call; returns a negative errno on failure.
 @syscall("rmdir")
 pub fn rmdir(path: str) i32;
 
+// The Linux `creat` system call; returns a negative errno on failure.
 @syscall("creat")
 pub fn creat(path: str, mode: u32) i32;
 
+// The Linux `link` system call; returns a negative errno on failure.
 @syscall("link")
 pub fn link(oldpath: str, newpath: str) i32;
 
+// The Linux `linkat` system call; returns a negative errno on failure.
 @syscall("linkat")
 pub fn linkat(olddirfd: i32, oldpath: str, newdirfd: i32, newpath: str, flags: i32) i32;
 
+// The Linux `unlink` system call; returns a negative errno on failure.
 @syscall("unlink")
 pub fn unlink(path: str) i32;
 
+// The Linux `unlinkat` system call; returns a negative errno on failure.
 @syscall("unlinkat")
 pub fn unlinkat(dirfd: i32, path: str, flags: i32) i32;
 
+// The Linux `symlink` system call; returns a negative errno on failure.
 @syscall("symlink")
 pub fn symlink(target: str, linkpath: str) i32;
 
+// The Linux `symlinkat` system call; returns a negative errno on failure.
 @syscall("symlinkat")
 pub fn symlinkat(target: str, newdirfd: i32, linkpath: str) i32;
 
+// The Linux `readlink` system call; returns a negative errno on failure.
 @syscall("readlink")
 pub fn readlink(path: str, buf: str, bufsiz: usize) isize;
 
+// The Linux `readlinkat` system call; returns a negative errno on failure.
 @syscall("readlinkat")
 pub fn readlinkat(dirfd: i32, path: str, buf: str, bufsiz: usize) isize;
 
+// The Linux `chmod` system call; returns a negative errno on failure.
 @syscall("chmod")
 pub fn chmod(path: str, mode: u32) i32;
 
+// The Linux `fchmod` system call; returns a negative errno on failure.
 @syscall("fchmod")
 pub fn fchmod(fd: i32, mode: u32) i32;
 
+// The Linux `fchmodat` system call; returns a negative errno on failure.
 @syscall("fchmodat")
 pub fn fchmodat(dirfd: i32, path: str, mode: u32, flags: i32) i32;
 
+// The Linux `chown` system call; returns a negative errno on failure.
 @syscall("chown")
 pub fn chown(path: str, owner: u32, group: u32) i32;
 
+// The Linux `fchown` system call; returns a negative errno on failure.
 @syscall("fchown")
 pub fn fchown(fd: i32, owner: u32, group: u32) i32;
 
+// The Linux `lchown` system call; returns a negative errno on failure.
 @syscall("lchown")
 pub fn lchown(path: str, owner: u32, group: u32) i32;
 
+// The Linux `fchownat` system call; returns a negative errno on failure.
 @syscall("fchownat")
 pub fn fchownat(dirfd: i32, path: str, owner: u32, group: u32, flags: i32) i32;
 
+// The Linux `umask` system call; returns a negative errno on failure.
 @syscall("umask")
 pub fn umask(mask: u32) u32;
 
@@ -206,6 +247,7 @@ pub fn umask(mask: u32) u32;
 @syscall("faccessat")
 pub fn faccessat(dirfd: i32, path: str, mode: i32, flags: i32) i32;
 
+// The Linux `openat` system call; returns a negative errno on failure.
 @syscall("openat")
 pub fn openat(dirfd: i32, path: str, flags: i32, mode: u32) i32;
 
@@ -217,6 +259,7 @@ pub unsafe fn sendfile(out_fd: i32, in_fd: i32, offset: *i64, count: usize) isiz
 @syscall("preadv")
 pub unsafe fn preadv(fd: i32, iov: *u8, iovcnt: i32, offset: i64) isize;
 
+// The Linux `pwritev` system call; returns a negative errno on failure.
 @syscall("pwritev")
 pub unsafe fn pwritev(fd: i32, iov: *u8, iovcnt: i32, offset: i64) isize;
 
@@ -232,9 +275,11 @@ pub fn mknod(path: str, mode: u32, dev: u64) i32;
 @syscall("splice")
 pub unsafe fn splice(fd_in: i32, off_in: *i64, fd_out: i32, off_out: *i64, len: usize, flags: u32) isize;
 
+// The Linux `tee` system call; returns a negative errno on failure.
 @syscall("tee")
 pub fn tee(fd_in: i32, fd_out: i32, len: usize, flags: u32) isize;
 
+// The Linux `copy_file_range` system call; returns a negative errno on failure.
 @syscall("copy_file_range")
 pub unsafe fn copy_file_range(fd_in: i32, off_in: *i64, fd_out: i32, off_out: *i64, len: usize, flags: u32) isize;
 
@@ -242,9 +287,11 @@ pub unsafe fn copy_file_range(fd_in: i32, off_in: *i64, fd_out: i32, off_out: *i
 @syscall("fallocate")
 pub fn fallocate(fd: i32, mode: i32, offset: i64, len: i64) i32;
 
+// The Linux `sync` system call; returns a negative errno on failure.
 @syscall("sync")
 pub fn sync() void;
 
+// The Linux `syncfs` system call; returns a negative errno on failure.
 @syscall("syncfs")
 pub fn syncfs(fd: i32) i32;
 
@@ -256,9 +303,11 @@ pub fn syncfs(fd: i32) i32;
 @syscall("mmap")
 pub unsafe fn mmap(addr: *u8, length: usize, prot: i32, flags: i32, fd: i32, offset: i64) *u8;
 
+// The Linux `munmap` system call; returns a negative errno on failure.
 @syscall("munmap")
 pub unsafe fn munmap(addr: *u8, length: usize) i32;
 
+// The Linux `mprotect` system call; returns a negative errno on failure.
 @syscall("mprotect")
 pub unsafe fn mprotect(addr: *u8, len: usize, prot: i32) i32;
 
@@ -275,9 +324,11 @@ pub unsafe fn madvise(addr: *u8, length: usize, advice: i32) i32;
 @syscall("msync")
 pub unsafe fn msync(addr: *u8, length: usize, flags: i32) i32;
 
+// The Linux `mlock` system call; returns a negative errno on failure.
 @syscall("mlock")
 pub unsafe fn mlock(addr: *u8, len: usize) i32;
 
+// The Linux `munlock` system call; returns a negative errno on failure.
 @syscall("munlock")
 pub unsafe fn munlock(addr: *u8, len: usize) i32;
 
@@ -285,6 +336,7 @@ pub unsafe fn munlock(addr: *u8, len: usize) i32;
 @syscall("mlockall")
 pub fn mlockall(flags: i32) i32;
 
+// The Linux `munlockall` system call; returns a negative errno on failure.
 @syscall("munlockall")
 pub fn munlockall() i32;
 
@@ -302,9 +354,11 @@ pub unsafe fn getrandom(buf: str, buflen: usize, flags: u32) isize;
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
+// The Linux `fork` system call; returns a negative errno on failure.
 @syscall("fork")
 pub fn fork() i32;
 
+// The Linux `vfork` system call; returns a negative errno on failure.
 @syscall("vfork")
 pub fn vfork() i32;
 
@@ -312,6 +366,7 @@ pub fn vfork() i32;
 @syscall("execve")
 pub unsafe fn execve(path: str, argv: *u8, envp: *u8) i32;
 
+// The Linux `execveat` system call; returns a negative errno on failure.
 @syscall("execveat")
 pub unsafe fn execveat(dirfd: i32, path: str, argv: *u8, envp: *u8, flags: i32) i32;
 
@@ -323,33 +378,43 @@ pub unsafe fn wait4(pid: i32, wstatus: *u32, options: i32, rusage: *u8) i32;
 @syscall("waitid")
 pub unsafe fn waitid(idtype: i32, id: u32, infop: *u8, options: i32) i32;
 
+// The Linux `exit` system call; returns a negative errno on failure.
 @syscall("exit")
 pub fn exit(status: i32) void;
 
+// The Linux `exit_group` system call; returns a negative errno on failure.
 @syscall("exit_group")
 pub fn exit_group(status: i32) void;
 
+// The Linux `getpid` system call; returns a negative errno on failure.
 @syscall("getpid")
 pub fn getpid() i32;
 
+// The Linux `getppid` system call; returns a negative errno on failure.
 @syscall("getppid")
 pub fn getppid() i32;
 
+// The Linux `gettid` system call; returns a negative errno on failure.
 @syscall("gettid")
 pub fn gettid() i32;
 
+// The Linux `setsid` system call; returns a negative errno on failure.
 @syscall("setsid")
 pub fn setsid() i32;
 
+// The Linux `getsid` system call; returns a negative errno on failure.
 @syscall("getsid")
 pub fn getsid(pid: i32) i32;
 
+// The Linux `setpgid` system call; returns a negative errno on failure.
 @syscall("setpgid")
 pub fn setpgid(pid: i32, pgid: i32) i32;
 
+// The Linux `getpgid` system call; returns a negative errno on failure.
 @syscall("getpgid")
 pub fn getpgid(pid: i32) i32;
 
+// The Linux `getpgrp` system call; returns a negative errno on failure.
 @syscall("getpgrp")
 pub fn getpgrp() i32;
 
@@ -357,9 +422,11 @@ pub fn getpgrp() i32;
 @syscall("kill")
 pub fn kill(pid: i32, sig: i32) i32;
 
+// The Linux `tkill` system call; returns a negative errno on failure.
 @syscall("tkill")
 pub fn tkill(tid: i32, sig: i32) i32;
 
+// The Linux `tgkill` system call; returns a negative errno on failure.
 @syscall("tgkill")
 pub fn tgkill(tgid: i32, tid: i32, sig: i32) i32;
 
@@ -377,6 +444,7 @@ pub fn prctl(option: i32, arg2: usize, arg3: usize, arg4: usize, arg5: usize) i3
 @syscall("arch_prctl")
 pub unsafe fn arch_prctl(op: i32, addr: *u8) i32;
 
+// The Linux `sched_yield` system call; returns a negative errno on failure.
 @syscall("sched_yield")
 pub fn sched_yield() i32;
 
@@ -384,6 +452,7 @@ pub fn sched_yield() i32;
 @syscall("sched_setaffinity")
 pub unsafe fn sched_setaffinity(pid: i32, cpusetsize: usize, mask: *u8) i32;
 
+// The Linux `sched_getaffinity` system call; returns a negative errno on failure.
 @syscall("sched_getaffinity")
 pub unsafe fn sched_getaffinity(pid: i32, cpusetsize: usize, mask: *u8) i32;
 
@@ -418,9 +487,11 @@ pub unsafe fn rt_sigpending(set: *u8, sigsetsize: usize) i32;
 @syscall("rt_sigsuspend")
 pub unsafe fn rt_sigsuspend(mask: *u8, sigsetsize: usize) i32;
 
+// The Linux `pause` system call; returns a negative errno on failure.
 @syscall("pause")
 pub fn pause() i32;
 
+// The Linux `alarm` system call; returns a negative errno on failure.
 @syscall("alarm")
 pub fn alarm(seconds: u32) u32;
 
@@ -434,6 +505,7 @@ pub unsafe fn sigaltstack(ss: *u8, old_ss: *u8) i32;
 @syscall("gettimeofday")
 pub unsafe fn gettimeofday(tv: *u8, tz: *u8) i32;
 
+// The Linux `settimeofday` system call; returns a negative errno on failure.
 @syscall("settimeofday")
 pub unsafe fn settimeofday(tv: *u8, tz: *u8) i32;
 
@@ -446,6 +518,7 @@ pub unsafe fn nanosleep(req: *u8, rem: *u8) i32;
 @syscall("clock_gettime")
 pub unsafe fn clock_gettime(clockid: i32, tp: *u8) i32;
 
+// The Linux `clock_settime` system call; returns a negative errno on failure.
 @syscall("clock_settime")
 pub unsafe fn clock_settime(clockid: i32, tp: *u8) i32;
 
@@ -453,6 +526,7 @@ pub unsafe fn clock_settime(clockid: i32, tp: *u8) i32;
 @syscall("clock_getres")
 pub unsafe fn clock_getres(clockid: i32, res: *u8) i32;
 
+// The Linux `clock_nanosleep` system call; returns a negative errno on failure.
 @syscall("clock_nanosleep")
 pub unsafe fn clock_nanosleep(clockid: i32, flags: i32, req: *u8, rem: *u8) i32;
 
@@ -483,6 +557,7 @@ pub fn socket(domain: i32, stype: i32, protocol: i32) i32;
 @syscall("bind")
 pub unsafe fn bind(sockfd: i32, addr: *u8, addrlen: u32) i32;
 
+// The Linux `listen` system call; returns a negative errno on failure.
 @syscall("listen")
 pub fn listen(sockfd: i32, backlog: i32) i32;
 
@@ -490,12 +565,15 @@ pub fn listen(sockfd: i32, backlog: i32) i32;
 @syscall("accept")
 pub unsafe fn accept(sockfd: i32, addr: *u8, addrlen: *u32) i32;
 
+// The Linux `accept4` system call; returns a negative errno on failure.
 @syscall("accept4")
 pub unsafe fn accept4(sockfd: i32, addr: *u8, addrlen: *u32, flags: i32) i32;
 
+// The Linux `connect` system call; returns a negative errno on failure.
 @syscall("connect")
 pub unsafe fn connect(sockfd: i32, addr: *u8, addrlen: u32) i32;
 
+// The Linux `sendto` system call; returns a negative errno on failure.
 @syscall("sendto")
 pub unsafe fn sendto(sockfd: i32, buf: *u8, len: usize, flags: i32, dest_addr: *u8, addrlen: u32) isize;
 
@@ -507,6 +585,7 @@ pub unsafe fn recvfrom(sockfd: i32, buf: *u8, len: usize, flags: i32, src_addr: 
 @syscall("sendmsg")
 pub unsafe fn sendmsg(sockfd: i32, msg: *u8, flags: i32) isize;
 
+// The Linux `recvmsg` system call; returns a negative errno on failure.
 @syscall("recvmsg")
 pub unsafe fn recvmsg(sockfd: i32, msg: *u8, flags: i32) isize;
 
@@ -518,6 +597,7 @@ pub fn shutdown(sockfd: i32, how: i32) i32;
 @syscall("getsockname")
 pub unsafe fn getsockname(sockfd: i32, addr: *u8, addrlen: *u32) i32;
 
+// The Linux `getpeername` system call; returns a negative errno on failure.
 @syscall("getpeername")
 pub unsafe fn getpeername(sockfd: i32, addr: *u8, addrlen: *u32) i32;
 
@@ -535,6 +615,7 @@ pub unsafe fn getsockopt(sockfd: i32, level: i32, optname: i32, optval: *u8, opt
 
 // ── Async I/O & event notification ───────────────────────────────────────────
 
+// The Linux `epoll_create1` system call; returns a negative errno on failure.
 @syscall("epoll_create1")
 pub fn epoll_create1(flags: i32) i32;
 
@@ -550,6 +631,7 @@ pub unsafe fn epoll_wait(epfd: i32, events: *u8, maxevents: i32, timeout: i32) i
 @syscall("epoll_pwait")
 pub unsafe fn epoll_pwait(epfd: i32, events: *u8, maxevents: i32, timeout: i32, sigmask: *u8) i32;
 
+// The Linux `eventfd2` system call; returns a negative errno on failure.
 @syscall("eventfd2")
 pub fn eventfd2(initval: u32, flags: i32) i32;
 
@@ -565,12 +647,15 @@ pub unsafe fn timerfd_settime(fd: i32, flags: i32, new_value: *u8, old_value: *u
 @syscall("timerfd_gettime")
 pub unsafe fn timerfd_gettime(fd: i32, curr_value: *u8) i32;
 
+// The Linux `inotify_init1` system call; returns a negative errno on failure.
 @syscall("inotify_init1")
 pub fn inotify_init1(flags: i32) i32;
 
+// The Linux `inotify_add_watch` system call; returns a negative errno on failure.
 @syscall("inotify_add_watch")
 pub fn inotify_add_watch(fd: i32, path: str, mask: u32) i32;
 
+// The Linux `inotify_rm_watch` system call; returns a negative errno on failure.
 @syscall("inotify_rm_watch")
 pub fn inotify_rm_watch(fd: i32, wd: i32) i32;
 
@@ -585,30 +670,39 @@ pub unsafe fn futex(uaddr: *u32, op: i32, val: u32, timeout: *u8, uaddr2: *u32, 
 
 // ── User / Group ─────────────────────────────────────────────────────────────
 
+// The Linux `getuid` system call; returns a negative errno on failure.
 @syscall("getuid")
 pub fn getuid() u32;
 
+// The Linux `getgid` system call; returns a negative errno on failure.
 @syscall("getgid")
 pub fn getgid() u32;
 
+// The Linux `geteuid` system call; returns a negative errno on failure.
 @syscall("geteuid")
 pub fn geteuid() u32;
 
+// The Linux `getegid` system call; returns a negative errno on failure.
 @syscall("getegid")
 pub fn getegid() u32;
 
+// The Linux `setuid` system call; returns a negative errno on failure.
 @syscall("setuid")
 pub fn setuid(uid: u32) i32;
 
+// The Linux `setgid` system call; returns a negative errno on failure.
 @syscall("setgid")
 pub fn setgid(gid: u32) i32;
 
+// The Linux `setreuid` system call; returns a negative errno on failure.
 @syscall("setreuid")
 pub fn setreuid(ruid: u32, euid: u32) i32;
 
+// The Linux `setregid` system call; returns a negative errno on failure.
 @syscall("setregid")
 pub fn setregid(rgid: u32, egid: u32) i32;
 
+// The Linux `setresuid` system call; returns a negative errno on failure.
 @syscall("setresuid")
 pub fn setresuid(ruid: u32, euid: u32, suid: u32) i32;
 
@@ -616,6 +710,7 @@ pub fn setresuid(ruid: u32, euid: u32, suid: u32) i32;
 @syscall("getresuid")
 pub unsafe fn getresuid(ruid: *u32, euid: *u32, suid: *u32) i32;
 
+// The Linux `setresgid` system call; returns a negative errno on failure.
 @syscall("setresgid")
 pub fn setresgid(rgid: u32, egid: u32, sgid: u32) i32;
 
@@ -631,9 +726,11 @@ pub unsafe fn getgroups(size: i32, list: *u32) i32;
 @syscall("setgroups")
 pub unsafe fn setgroups(size: usize, list: *u32) i32;
 
+// The Linux `setfsuid` system call; returns a negative errno on failure.
 @syscall("setfsuid")
 pub fn setfsuid(fsuid: u32) i32;
 
+// The Linux `setfsgid` system call; returns a negative errno on failure.
 @syscall("setfsgid")
 pub fn setfsgid(fsgid: u32) i32;
 
@@ -655,6 +752,7 @@ pub unsafe fn getrusage(who: i32, usage: *u8) i32;
 @syscall("getrlimit")
 pub unsafe fn getrlimit(resource: i32, rlim: *u8) i32;
 
+// The Linux `setrlimit` system call; returns a negative errno on failure.
 @syscall("setrlimit")
 pub unsafe fn setrlimit(resource: i32, rlim: *u8) i32;
 
@@ -662,12 +760,15 @@ pub unsafe fn setrlimit(resource: i32, rlim: *u8) i32;
 @syscall("prlimit64")
 pub unsafe fn prlimit64(pid: i32, resource: i32, new_limit: *u8, old_limit: *u8) i32;
 
+// The Linux `syslog` system call; returns a negative errno on failure.
 @syscall("syslog")
 pub unsafe fn syslog(stype: i32, buf: str, len: i32) i32;
 
+// The Linux `sethostname` system call; returns a negative errno on failure.
 @syscall("sethostname")
 pub unsafe fn sethostname(name: str, len: usize) i32;
 
+// The Linux `setdomainname` system call; returns a negative errno on failure.
 @syscall("setdomainname")
 pub unsafe fn setdomainname(name: str, len: usize) i32;
 
@@ -675,6 +776,7 @@ pub unsafe fn setdomainname(name: str, len: usize) i32;
 @syscall("reboot")
 pub unsafe fn reboot(magic1: i32, magic2: i32, cmd: u32, arg: *u8) i32;
 
+// The Linux `chroot` system call; returns a negative errno on failure.
 @syscall("chroot")
 pub fn chroot(path: str) i32;
 
@@ -682,15 +784,19 @@ pub fn chroot(path: str) i32;
 @syscall("mount")
 pub unsafe fn mount(source: str, target: str, fstype: str, mountflags: usize, data: *u8) i32;
 
+// The Linux `umount2` system call; returns a negative errno on failure.
 @syscall("umount2")
 pub fn umount2(target: str, flags: i32) i32;
 
+// The Linux `swapon` system call; returns a negative errno on failure.
 @syscall("swapon")
 pub fn swapon(path: str, swapflags: i32) i32;
 
+// The Linux `swapoff` system call; returns a negative errno on failure.
 @syscall("swapoff")
 pub fn swapoff(path: str) i32;
 
+// The Linux `acct` system call; returns a negative errno on failure.
 @syscall("acct")
 pub fn acct(filename: str) i32;
 
@@ -700,9 +806,11 @@ pub fn acct(filename: str) i32;
 @syscall("setxattr")
 pub unsafe fn setxattr(path: str, name: str, value: *u8, size: usize, flags: i32) i32;
 
+// The Linux `lsetxattr` system call; returns a negative errno on failure.
 @syscall("lsetxattr")
 pub unsafe fn lsetxattr(path: str, name: str, value: *u8, size: usize, flags: i32) i32;
 
+// The Linux `fsetxattr` system call; returns a negative errno on failure.
 @syscall("fsetxattr")
 pub unsafe fn fsetxattr(fd: i32, name: str, value: *u8, size: usize, flags: i32) i32;
 
@@ -710,32 +818,41 @@ pub unsafe fn fsetxattr(fd: i32, name: str, value: *u8, size: usize, flags: i32)
 @syscall("getxattr")
 pub unsafe fn getxattr(path: str, name: str, value: *u8, size: usize) isize;
 
+// The Linux `lgetxattr` system call; returns a negative errno on failure.
 @syscall("lgetxattr")
 pub unsafe fn lgetxattr(path: str, name: str, value: *u8, size: usize) isize;
 
+// The Linux `fgetxattr` system call; returns a negative errno on failure.
 @syscall("fgetxattr")
 pub unsafe fn fgetxattr(fd: i32, name: str, value: *u8, size: usize) isize;
 
+// The Linux `listxattr` system call; returns a negative errno on failure.
 @syscall("listxattr")
 pub unsafe fn listxattr(path: str, list: str, size: usize) isize;
 
+// The Linux `llistxattr` system call; returns a negative errno on failure.
 @syscall("llistxattr")
 pub unsafe fn llistxattr(path: str, list: str, size: usize) isize;
 
+// The Linux `flistxattr` system call; returns a negative errno on failure.
 @syscall("flistxattr")
 pub unsafe fn flistxattr(fd: i32, list: str, size: usize) isize;
 
+// The Linux `removexattr` system call; returns a negative errno on failure.
 @syscall("removexattr")
 pub fn removexattr(path: str, name: str) i32;
 
+// The Linux `lremovexattr` system call; returns a negative errno on failure.
 @syscall("lremovexattr")
 pub fn lremovexattr(path: str, name: str) i32;
 
+// The Linux `fremovexattr` system call; returns a negative errno on failure.
 @syscall("fremovexattr")
 pub fn fremovexattr(fd: i32, name: str) i32;
 
 // ── Misc ─────────────────────────────────────────────────────────────────────
 
+// The Linux `readahead` system call; returns a negative errno on failure.
 @syscall("readahead")
 pub fn readahead(fd: i32, offset: i64, count: usize) isize;
 
@@ -747,15 +864,19 @@ pub unsafe fn seccomp(op: u32, flags: u32, args: *u8) i32;
 @syscall("bpf")
 pub unsafe fn bpf(cmd: i32, attr: *u8, size: u32) i32;
 
+// The Linux `setns` system call; returns a negative errno on failure.
 @syscall("setns")
 pub fn setns(fd: i32, nstype: i32) i32;
 
+// The Linux `unshare` system call; returns a negative errno on failure.
 @syscall("unshare")
 pub fn unshare(flags: i32) i32;
 
+// The Linux `pivot_root` system call; returns a negative errno on failure.
 @syscall("pivot_root")
 pub fn pivot_root(new_root: str, put_old: str) i32;
 
+// The Linux `membarrier` system call; returns a negative errno on failure.
 @syscall("membarrier")
 pub fn membarrier(cmd: i32, flags: u32, cpu_id: i32) i32;
 
@@ -763,5 +884,6 @@ pub fn membarrier(cmd: i32, flags: u32, cpu_id: i32) i32;
 @syscall("process_vm_readv")
 pub unsafe fn process_vm_readv(pid: i32, lvec: *u8, liovcnt: usize, rvec: *u8, riovcnt: usize, flags: usize) isize;
 
+// The Linux `process_vm_writev` system call; returns a negative errno on failure.
 @syscall("process_vm_writev")
 pub unsafe fn process_vm_writev(pid: i32, lvec: *u8, liovcnt: usize, rvec: *u8, riovcnt: usize, flags: usize) isize;

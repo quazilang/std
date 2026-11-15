@@ -27,6 +27,7 @@
 @api("GetStdHandle")
 pub fn get_std_handle(n_std_handle: u32) usize;
 
+// The Win32 function `CloseHandle` (see its Microsoft documentation).
 @api("CloseHandle")
 pub fn close_handle(object: usize) i32;
 
@@ -52,6 +53,7 @@ pub unsafe fn write_console_a(console: usize, buf: str, n_chars: u32, n_written:
 @api("ReadConsoleA")
 pub unsafe fn read_console_a(console: usize, buf: str, n_chars: u32, n_read: *u32, reserved: *u8) i32;
 
+// The Win32 function `FlushFileBuffers` (see its Microsoft documentation).
 @api("FlushFileBuffers")
 pub fn flush_file_buffers(file: usize) i32;
 
@@ -59,9 +61,11 @@ pub fn flush_file_buffers(file: usize) i32;
 @api("GetConsoleMode")
 pub unsafe fn get_console_mode(console: usize, mode: *u32) i32;
 
+// The Win32 function `SetConsoleMode` (see its Microsoft documentation).
 @api("SetConsoleMode")
 pub fn set_console_mode(console: usize, mode: u32) i32;
 
+// The Win32 function `SetConsoleTitleA` (see its Microsoft documentation).
 @api("SetConsoleTitleA")
 pub fn set_console_title_a(title: str) i32;
 
@@ -69,12 +73,15 @@ pub fn set_console_title_a(title: str) i32;
 @api("SetConsoleTextAttribute")
 pub fn set_console_text_attribute(console: usize, attr: u16) i32;
 
+// The Win32 function `AllocConsole` (see its Microsoft documentation).
 @api("AllocConsole")
 pub fn alloc_console() i32;
 
+// The Win32 function `FreeConsole` (see its Microsoft documentation).
 @api("FreeConsole")
 pub fn free_console() i32;
 
+// The Win32 function `GetConsoleWindow` (see its Microsoft documentation).
 @api("GetConsoleWindow")
 pub fn get_console_window() usize;
 
@@ -105,12 +112,15 @@ pub unsafe fn set_file_pointer(file: usize, dist_low: i32, dist_high: *i32, meth
 @api("SetFilePointerEx")
 pub unsafe fn set_file_pointer_ex(file: usize, dist: i64, new_ptr: *i64, method: u32) i32;
 
+// The Win32 function `DeleteFileA` (see its Microsoft documentation).
 @api("DeleteFileA")
 pub fn delete_file_a(path: str) i32;
 
+// The Win32 function `MoveFileA` (see its Microsoft documentation).
 @api("MoveFileA")
 pub fn move_file_a(existing: str, new_path: str) i32;
 
+// The Win32 function `CopyFileA` (see its Microsoft documentation).
 @api("CopyFileA")
 pub fn copy_file_a(existing: str, new_path: str, fail_if_exists: i32) i32;
 
@@ -118,12 +128,15 @@ pub fn copy_file_a(existing: str, new_path: str, fail_if_exists: i32) i32;
 @api("CreateDirectoryA")
 pub unsafe fn create_directory_a(path: str, security: *u8) i32;
 
+// The Win32 function `RemoveDirectoryA` (see its Microsoft documentation).
 @api("RemoveDirectoryA")
 pub fn remove_directory_a(path: str) i32;
 
+// The Win32 function `GetCurrentDirectoryA` (see its Microsoft documentation).
 @api("GetCurrentDirectoryA")
 pub fn get_current_directory_a(buf_len: u32, buf: str) u32;
 
+// The Win32 function `SetCurrentDirectoryA` (see its Microsoft documentation).
 @api("SetCurrentDirectoryA")
 pub fn set_current_directory_a(path: str) i32;
 
@@ -131,35 +144,45 @@ pub fn set_current_directory_a(path: str) i32;
 @api("FindFirstFileA")
 pub unsafe fn find_first_file_a(pattern: str, data: *u8) usize;
 
+// The Win32 function `FindNextFileA` (see its Microsoft documentation).
 @api("FindNextFileA")
 pub unsafe fn find_next_file_a(handle: usize, data: *u8) i32;
 
+// The Win32 function `FindClose` (see its Microsoft documentation).
 @api("FindClose")
 pub fn find_close(handle: usize) i32;
 
+// The Win32 function `GetTempPathA` (see its Microsoft documentation).
 @api("GetTempPathA")
 pub fn get_temp_path_a(buf_len: u32, buf: str) u32;
 
+// The Win32 function `GetTempFileNameA` (see its Microsoft documentation).
 @api("GetTempFileNameA")
 pub fn get_temp_file_name_a(path: str, prefix: str, unique: u32, name: str) u32;
 
+// The Win32 function `GetFileAttributesA` (see its Microsoft documentation).
 @api("GetFileAttributesA")
 pub fn get_file_attributes_a(path: str) u32;
 
+// The Win32 function `SetFileAttributesA` (see its Microsoft documentation).
 @api("SetFileAttributesA")
 pub fn set_file_attributes_a(path: str, attrs: u32) i32;
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
+// The Win32 function `GetCurrentProcess` (see its Microsoft documentation).
 @api("GetCurrentProcess")
 pub fn get_current_process() usize;
 
+// The Win32 function `GetCurrentProcessId` (see its Microsoft documentation).
 @api("GetCurrentProcessId")
 pub fn get_current_process_id() u32;
 
+// The Win32 function `GetCurrentThreadId` (see its Microsoft documentation).
 @api("GetCurrentThreadId")
 pub fn get_current_thread_id() u32;
 
+// The Win32 function `ExitProcess` (see its Microsoft documentation).
 @api("ExitProcess")
 pub fn exit_process(exit_code: u32) void;
 
@@ -174,6 +197,7 @@ pub unsafe fn create_process_a(app: str, cmd: str, proc_sec: *u8, thread_sec: *u
 @api("OpenProcess")
 pub fn open_process(access: u32, inherit: i32, pid: u32) usize;
 
+// The Win32 function `TerminateProcess` (see its Microsoft documentation).
 @api("TerminateProcess")
 pub fn terminate_process(proc: usize, exit_code: u32) i32;
 
@@ -181,6 +205,7 @@ pub fn terminate_process(proc: usize, exit_code: u32) i32;
 @api("GetExitCodeProcess")
 pub unsafe fn get_exit_code_process(proc: usize, exit_code: *u32) i32;
 
+// The Win32 function `GetExitCodeThread` (see its Microsoft documentation).
 @api("GetExitCodeThread")
 pub unsafe fn get_exit_code_thread(thread: usize, exit_code: *u32) i32;
 
@@ -202,18 +227,23 @@ pub unsafe fn wait_for_multiple_objects(count: u32, handles: *u8, wait_all: i32,
 @api("CreateThread")
 pub unsafe fn create_thread(security: *u8, stack_size: usize, start_routine: usize, param: *u8, flags: u32, thread_id: *u32) usize;
 
+// The Win32 function `ExitThread` (see its Microsoft documentation).
 @api("ExitThread")
 pub fn exit_thread(exit_code: u32) void;
 
+// The Win32 function `GetCurrentThread` (see its Microsoft documentation).
 @api("GetCurrentThread")
 pub fn get_current_thread() usize;
 
+// The Win32 function `ResumeThread` (see its Microsoft documentation).
 @api("ResumeThread")
 pub fn resume_thread(thread: usize) u32;
 
+// The Win32 function `SuspendThread` (see its Microsoft documentation).
 @api("SuspendThread")
 pub fn suspend_thread(thread: usize) u32;
 
+// The Win32 function `TerminateThread` (see its Microsoft documentation).
 @api("TerminateThread")
 pub fn terminate_thread(thread: usize, exit_code: u32) i32;
 
@@ -221,9 +251,11 @@ pub fn terminate_thread(thread: usize, exit_code: u32) i32;
 @api("SetThreadPriority")
 pub fn set_thread_priority(thread: usize, priority: i32) i32;
 
+// The Win32 function `GetThreadPriority` (see its Microsoft documentation).
 @api("GetThreadPriority")
 pub fn get_thread_priority(thread: usize) i32;
 
+// The Win32 function `TlsAlloc` (see its Microsoft documentation).
 @api("TlsAlloc")
 pub fn tls_alloc() u32;
 
@@ -235,12 +267,15 @@ pub unsafe fn tls_get_value(index: u32) *u8;
 @api("TlsSetValue")
 pub unsafe fn tls_set_value(index: u32, value: *u8) i32;
 
+// The Win32 function `TlsFree` (see its Microsoft documentation).
 @api("TlsFree")
 pub fn tls_free(index: u32) i32;
 
+// The Win32 function `Sleep` (see its Microsoft documentation).
 @api("Sleep")
 pub fn sleep(ms: u32) void;
 
+// The Win32 function `SleepEx` (see its Microsoft documentation).
 @api("SleepEx")
 pub fn sleep_ex(ms: u32, alertable: i32) u32;
 
@@ -284,9 +319,11 @@ pub unsafe fn heap_realloc(heap: usize, flags: u32, mem: *u8, size: usize) *u8;
 @api("HeapSize")
 pub unsafe fn heap_size(heap: usize, flags: u32, mem: *u8) usize;
 
+// The Win32 function `HeapCreate` (see its Microsoft documentation).
 @api("HeapCreate")
 pub fn heap_create(options: u32, initial: usize, maximum: usize) usize;
 
+// The Win32 function `HeapDestroy` (see its Microsoft documentation).
 @api("HeapDestroy")
 pub fn heap_destroy(heap: usize) i32;
 
@@ -298,9 +335,11 @@ pub unsafe fn local_alloc(flags: u32, size: usize) *u8;
 @api("LocalFree")
 pub unsafe fn local_free(mem: *u8) *u8;
 
+// The Win32 function `GlobalAlloc` (see its Microsoft documentation).
 @api("GlobalAlloc")
 pub unsafe fn global_alloc(flags: u32, size: usize) *u8;
 
+// The Win32 function `GlobalFree` (see its Microsoft documentation).
 @api("GlobalFree")
 pub unsafe fn global_free(mem: *u8) *u8;
 
@@ -310,9 +349,11 @@ pub unsafe fn global_free(mem: *u8) *u8;
 @api("CreateMutexA")
 pub unsafe fn create_mutex_a(security: *u8, initial_owner: i32, name: str) usize;
 
+// The Win32 function `OpenMutexA` (see its Microsoft documentation).
 @api("OpenMutexA")
 pub fn open_mutex_a(access: u32, inherit: i32, name: str) usize;
 
+// The Win32 function `ReleaseMutex` (see its Microsoft documentation).
 @api("ReleaseMutex")
 pub fn release_mutex(mutex: usize) i32;
 
@@ -320,15 +361,19 @@ pub fn release_mutex(mutex: usize) i32;
 @api("CreateEventA")
 pub unsafe fn create_event_a(security: *u8, manual_reset: i32, initial_state: i32, name: str) usize;
 
+// The Win32 function `OpenEventA` (see its Microsoft documentation).
 @api("OpenEventA")
 pub fn open_event_a(access: u32, inherit: i32, name: str) usize;
 
+// The Win32 function `SetEvent` (see its Microsoft documentation).
 @api("SetEvent")
 pub fn set_event(event: usize) i32;
 
+// The Win32 function `ResetEvent` (see its Microsoft documentation).
 @api("ResetEvent")
 pub fn reset_event(event: usize) i32;
 
+// The Win32 function `PulseEvent` (see its Microsoft documentation).
 @api("PulseEvent")
 pub fn pulse_event(event: usize) i32;
 
@@ -344,23 +389,29 @@ pub unsafe fn release_semaphore(sem: usize, count: i32, prev: *i32) i32;
 @api("InitializeCriticalSection")
 pub unsafe fn initialize_critical_section(cs: *u8) void;
 
+// The Win32 function `EnterCriticalSection` (see its Microsoft documentation).
 @api("EnterCriticalSection")
 pub unsafe fn enter_critical_section(cs: *u8) void;
 
+// The Win32 function `TryEnterCriticalSection` (see its Microsoft documentation).
 @api("TryEnterCriticalSection")
 pub unsafe fn try_enter_critical_section(cs: *u8) i32;
 
+// The Win32 function `LeaveCriticalSection` (see its Microsoft documentation).
 @api("LeaveCriticalSection")
 pub unsafe fn leave_critical_section(cs: *u8) void;
 
+// The Win32 function `DeleteCriticalSection` (see its Microsoft documentation).
 @api("DeleteCriticalSection")
 pub unsafe fn delete_critical_section(cs: *u8) void;
 
 // ── Error ────────────────────────────────────────────────────────────────────
 
+// The Win32 function `GetLastError` (see its Microsoft documentation).
 @api("GetLastError")
 pub fn get_last_error() u32;
 
+// The Win32 function `SetLastError` (see its Microsoft documentation).
 @api("SetLastError")
 pub fn set_last_error(err: u32) void;
 
@@ -372,6 +423,7 @@ pub unsafe fn format_message_a(flags: u32, source: *u8, msg_id: u32, lang: u32, 
 
 // ── Library ──────────────────────────────────────────────────────────────────
 
+// The Win32 function `LoadLibraryA` (see its Microsoft documentation).
 @api("LoadLibraryA")
 pub fn load_library_a(name: str) usize;
 
@@ -383,23 +435,29 @@ pub fn load_library_ex_a(name: str, file: usize, flags: u32) usize;
 @api("GetProcAddress")
 pub fn get_proc_address(module: usize, name: str) usize;
 
+// The Win32 function `FreeLibrary` (see its Microsoft documentation).
 @api("FreeLibrary")
 pub fn free_library(module: usize) i32;
 
+// The Win32 function `GetModuleHandleA` (see its Microsoft documentation).
 @api("GetModuleHandleA")
 pub fn get_module_handle_a(name: str) usize;
 
+// The Win32 function `GetModuleFileNameA` (see its Microsoft documentation).
 @api("GetModuleFileNameA")
 pub fn get_module_file_name_a(module: usize, buf: str, size: u32) u32;
 
 // ── Environment & Command Line ────────────────────────────────────────────────
 
+// The Win32 function `GetEnvironmentVariableA` (see its Microsoft documentation).
 @api("GetEnvironmentVariableA")
 pub fn get_environment_variable_a(name: str, buf: str, size: u32) u32;
 
+// The Win32 function `SetEnvironmentVariableA` (see its Microsoft documentation).
 @api("SetEnvironmentVariableA")
 pub fn set_environment_variable_a(name: str, value: str) i32;
 
+// The Win32 function `GetCommandLineA` (see its Microsoft documentation).
 @api("GetCommandLineA")
 pub fn get_command_line_a() str;
 
@@ -417,12 +475,15 @@ pub unsafe fn free_environment_strings_a(env: *u8) i32;
 @api("GetSystemTime")
 pub unsafe fn get_system_time(st: *u8) void;
 
+// The Win32 function `GetLocalTime` (see its Microsoft documentation).
 @api("GetLocalTime")
 pub unsafe fn get_local_time(st: *u8) void;
 
+// The Win32 function `SetSystemTime` (see its Microsoft documentation).
 @api("SetSystemTime")
 pub unsafe fn set_system_time(st: *u8) i32;
 
+// The Win32 function `SetLocalTime` (see its Microsoft documentation).
 @api("SetLocalTime")
 pub unsafe fn set_local_time(st: *u8) i32;
 
@@ -430,12 +491,15 @@ pub unsafe fn set_local_time(st: *u8) i32;
 @api("GetSystemTimeAsFileTime")
 pub unsafe fn get_system_time_as_file_time(ft: *u8) void;
 
+// The Win32 function `FileTimeToSystemTime` (see its Microsoft documentation).
 @api("FileTimeToSystemTime")
 pub unsafe fn file_time_to_system_time(ft: *u8, st: *u8) i32;
 
+// The Win32 function `SystemTimeToFileTime` (see its Microsoft documentation).
 @api("SystemTimeToFileTime")
 pub unsafe fn system_time_to_file_time(st: *u8, ft: *u8) i32;
 
+// The Win32 function `FileTimeToLocalFileTime` (see its Microsoft documentation).
 @api("FileTimeToLocalFileTime")
 pub unsafe fn file_time_to_local_file_time(utc: *u8, local: *u8) i32;
 
@@ -443,9 +507,11 @@ pub unsafe fn file_time_to_local_file_time(utc: *u8, local: *u8) i32;
 @api("QueryPerformanceCounter")
 pub unsafe fn query_performance_counter(count: *i64) i32;
 
+// The Win32 function `QueryPerformanceFrequency` (see its Microsoft documentation).
 @api("QueryPerformanceFrequency")
 pub unsafe fn query_performance_frequency(freq: *i64) i32;
 
+// The Win32 function `GetTickCount64` (see its Microsoft documentation).
 @api("GetTickCount64")
 pub fn get_tick_count64() u64;
 
@@ -463,6 +529,7 @@ pub unsafe fn reg_open_key_ex_a(key: usize, sub_key: str, options: u32, access: 
 @api("RegCreateKeyExA")
 pub unsafe fn reg_create_key_ex_a(key: usize, sub_key: str, reserved: u32, cls: str, options: u32, access: u32, security: *u8, result: *u8, disposition: *u32) i32;
 
+// The Win32 function `RegCloseKey` (see its Microsoft documentation).
 @api("RegCloseKey")
 pub fn reg_close_key(key: usize) i32;
 
@@ -476,9 +543,11 @@ pub unsafe fn reg_query_value_ex_a(key: usize, value: str, reserved: *u32, reg_t
 @api("RegSetValueExA")
 pub unsafe fn reg_set_value_ex_a(key: usize, value: str, reserved: u32, reg_type: u32, data: *u8, cb_data: u32) i32;
 
+// The Win32 function `RegDeleteValueA` (see its Microsoft documentation).
 @api("RegDeleteValueA")
 pub fn reg_delete_value_a(key: usize, value: str) i32;
 
+// The Win32 function `RegDeleteKeyA` (see its Microsoft documentation).
 @api("RegDeleteKeyA")
 pub fn reg_delete_key_a(key: usize, sub_key: str) i32;
 
@@ -515,6 +584,7 @@ pub unsafe fn adjust_token_privileges(token: usize, disable_all: i32, new_state:
 @api("GetTokenInformation")
 pub unsafe fn get_token_information(token: usize, info_class: i32, info: *u8, info_len: u32, ret_len: *u32) i32;
 
+// The Win32 function `IsUserAnAdmin` (see its Microsoft documentation).
 @api("IsUserAnAdmin")
 pub fn is_user_an_admin() i32;
 
@@ -524,6 +594,7 @@ pub fn is_user_an_admin() i32;
 @api("GetSystemInfo")
 pub unsafe fn get_system_info(si: *u8) void;
 
+// The Win32 function `GetNativeSystemInfo` (see its Microsoft documentation).
 @api("GetNativeSystemInfo")
 pub unsafe fn get_native_system_info(si: *u8) void;
 
@@ -531,9 +602,11 @@ pub unsafe fn get_native_system_info(si: *u8) void;
 @api("GlobalMemoryStatusEx")
 pub unsafe fn global_memory_status_ex(stat: *u8) i32;
 
+// The Win32 function `GetComputerNameA` (see its Microsoft documentation).
 @api("GetComputerNameA")
 pub unsafe fn get_computer_name_a(buf: str, size: *u32) i32;
 
+// The Win32 function `GetUserNameA` (see its Microsoft documentation).
 @api("GetUserNameA")
 pub unsafe fn get_user_name_a(buf: str, size: *u32) i32;
 
@@ -545,12 +618,15 @@ pub unsafe fn get_version_ex_a(os_ver: *u8) i32;
 // Link with ws2_32.lib.  Call ws_startup() before using any socket function.
 // version: MAKEWORD(2,2) = 0x0202; data: pointer to WSADATA struct (at least 400 bytes)
 
+// The Win32 function `WSAStartup` (see its Microsoft documentation).
 @api("WSAStartup")
 pub unsafe fn ws_startup(version: u16, data: *u8) i32;
 
+// The Win32 function `WSACleanup` (see its Microsoft documentation).
 @api("WSACleanup")
 pub fn ws_cleanup() i32;
 
+// The Win32 function `WSAGetLastError` (see its Microsoft documentation).
 @api("WSAGetLastError")
 pub fn ws_get_last_error() i32;
 
@@ -558,6 +634,7 @@ pub fn ws_get_last_error() i32;
 @api("socket")
 pub fn socket(af: i32, stype: i32, protocol: i32) usize;
 
+// The Win32 function `closesocket` (see its Microsoft documentation).
 @api("closesocket")
 pub fn closesocket(s: usize) i32;
 
@@ -565,6 +642,7 @@ pub fn closesocket(s: usize) i32;
 @api("bind")
 pub unsafe fn bind(s: usize, addr: *u8, addrlen: i32) i32;
 
+// The Win32 function `listen` (see its Microsoft documentation).
 @api("listen")
 pub fn listen(s: usize, backlog: i32) i32;
 
@@ -572,12 +650,15 @@ pub fn listen(s: usize, backlog: i32) i32;
 @api("accept")
 pub unsafe fn accept(s: usize, addr: *u8, addrlen: *i32) usize;
 
+// The Win32 function `connect` (see its Microsoft documentation).
 @api("connect")
 pub unsafe fn connect(s: usize, addr: *u8, addrlen: i32) i32;
 
+// The Win32 function `send` (see its Microsoft documentation).
 @api("send")
 pub unsafe fn send(s: usize, buf: *u8, len: i32, flags: i32) i32;
 
+// The Win32 function `recv` (see its Microsoft documentation).
 @api("recv")
 pub unsafe fn recv(s: usize, buf: *u8, len: i32, flags: i32) i32;
 
@@ -601,6 +682,7 @@ pub unsafe fn getsockopt(s: usize, level: i32, optname: i32, optval: *u8, optlen
 @api("getsockname")
 pub unsafe fn getsockname(s: usize, addr: *u8, addrlen: *i32) i32;
 
+// The Win32 function `getpeername` (see its Microsoft documentation).
 @api("getpeername")
 pub unsafe fn getpeername(s: usize, addr: *u8, addrlen: *i32) i32;
 
@@ -620,6 +702,7 @@ pub unsafe fn getaddrinfo(node: str, service: str, hints: *u8, result: *u8) i32;
 @api("freeaddrinfo")
 pub unsafe fn freeaddrinfo(info: *u8) void;
 
+// The Win32 function `getnameinfo` (see its Microsoft documentation).
 @api("getnameinfo")
 pub unsafe fn getnameinfo(addr: *u8, addrlen: i32, host: str, host_len: u32, serv: str, serv_len: u32, flags: i32) i32;
 
@@ -635,11 +718,14 @@ pub unsafe fn inet_ntop(af: i32, src: *u8, dst: str, size: usize) str;
 @api("htons")
 pub fn htons(hostshort: u16) u16;
 
+// The Win32 function `ntohs` (see its Microsoft documentation).
 @api("ntohs")
 pub fn ntohs(netshort: u16) u16;
 
+// The Win32 function `htonl` (see its Microsoft documentation).
 @api("htonl")
 pub fn htonl(hostlong: u32) u32;
 
+// The Win32 function `ntohl` (see its Microsoft documentation).
 @api("ntohl")
 pub fn ntohl(netlong: u32) u32;

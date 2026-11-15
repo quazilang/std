@@ -1,50 +1,63 @@
 // Minimal pointer-correct Win32 substrate used by cross-platform std modules.
 // Keep C ABI pointers raw here; safe String/str wrappers belong in std.fs/os.
 
+// The Win32 function `CreateFileA` (see its Microsoft documentation).
 @api("CreateFileA")
 pub unsafe fn create_file(path: *u8, access: u32, share: u32, security: *u8,
     disposition: u32, flags: u32, template: usize) usize;
 
+// The Win32 function `ReadFile` (see its Microsoft documentation).
 @api("ReadFile")
 pub unsafe fn read_file(file: usize, buf: *u8, count: u32,
     read: *u32, overlapped: *u8) i32;
 
+// The Win32 function `WriteFile` (see its Microsoft documentation).
 @api("WriteFile")
 pub unsafe fn write_file(file: usize, buf: *u8, count: u32,
     written: *u32, overlapped: *u8) i32;
 
+// The Win32 function `GetStdHandle` (see its Microsoft documentation).
 @api("GetStdHandle")
 pub unsafe fn get_std_handle(kind: u32) usize;
 
+// The Win32 function `GetConsoleMode` (see its Microsoft documentation).
 @api("GetConsoleMode")
 pub unsafe fn get_console_mode(console: usize, mode: *u32) i32;
 
+// The Win32 function `SetConsoleMode` (see its Microsoft documentation).
 @api("SetConsoleMode")
 pub unsafe fn set_console_mode(console: usize, mode: u32) i32;
 
+// The Win32 function `MultiByteToWideChar` (see its Microsoft documentation).
 @api("MultiByteToWideChar")
 pub unsafe fn utf8_to_utf16(code_page: u32, flags: u32, input: *u8,
     input_len: i32, output: *u16, output_len: i32) i32;
 
+// The Win32 function `WriteConsoleW` (see its Microsoft documentation).
 @api("WriteConsoleW")
 pub unsafe fn write_console_utf16(console: usize, text: *u16, count: u32,
     written: *u32, reserved: *u8) i32;
 
+// The Win32 function `CloseHandle` (see its Microsoft documentation).
 @api("CloseHandle")
 pub unsafe fn close_handle(handle: usize) i32;
 
+// The Win32 function `SetFilePointerEx` (see its Microsoft documentation).
 @api("SetFilePointerEx")
 pub unsafe fn seek(file: usize, distance: i64, position: *i64, method: u32) i32;
 
+// The Win32 function `setsockopt` (see its Microsoft documentation).
 @api("setsockopt")
 pub unsafe fn set_socket_option(socket: usize, level: i32, name: i32, value: *u8, length: i32) i32;
 
 // ANSI-path working directory APIs, matching the other *A file APIs here.
 @api("GetCurrentDirectoryA")
 pub unsafe fn get_current_directory(length: u32, buffer: *u8) u32;
+// The Win32 function `SetCurrentDirectoryA` (see its Microsoft documentation).
 @api("SetCurrentDirectoryA")
 pub unsafe fn set_current_directory(path: *u8) i32;
 
+// The Win32 function `GetTickCount64` (see its Microsoft documentation).
 @api("GetTickCount64")
 pub unsafe fn get_tick_count64() u64;
 
@@ -52,9 +65,11 @@ pub unsafe fn get_tick_count64() u64;
 @api("GetSystemTimeAsFileTime")
 pub unsafe fn get_system_time_as_file_time(file_time: *u8) void;
 
+// The Win32 function `FlushFileBuffers` (see its Microsoft documentation).
 @api("FlushFileBuffers")
 pub unsafe fn sync(file: usize) i32;
 
+// The Win32 function `GetFileAttributesA` (see its Microsoft documentation).
 @api("GetFileAttributesA")
 pub unsafe fn file_attributes(path: *u8) u32;
 
@@ -63,42 +78,55 @@ pub unsafe fn file_attributes(path: *u8) u32;
 @api("GetFileAttributesExA")
 pub unsafe fn file_attribute_data(path: *u8, level: i32, data: *u8) i32;
 
+// The Win32 function `DeleteFileA` (see its Microsoft documentation).
 @api("DeleteFileA")
 pub unsafe fn delete_file(path: *u8) i32;
 
+// The Win32 function `CreateDirectoryA` (see its Microsoft documentation).
 @api("CreateDirectoryA")
 pub unsafe fn create_directory(path: *u8, security: *u8) i32;
 
+// The Win32 function `RemoveDirectoryA` (see its Microsoft documentation).
 @api("RemoveDirectoryA")
 pub unsafe fn remove_directory(path: *u8) i32;
 
+// The Win32 function `MoveFileA` (see its Microsoft documentation).
 @api("MoveFileA")
 pub unsafe fn move_file(from: *u8, to: *u8) i32;
 
+// The Win32 function `GetEnvironmentVariableA` (see its Microsoft documentation).
 @api("GetEnvironmentVariableA")
 pub unsafe fn environment(name: *u8, buf: *u8, capacity: u32) u32;
 
+// The Win32 function `FindFirstFileA` (see its Microsoft documentation).
 @api("FindFirstFileA")
 pub unsafe fn find_first(pattern: *u8, data: *u8) usize;
 
+// The Win32 function `FindNextFileA` (see its Microsoft documentation).
 @api("FindNextFileA")
 pub unsafe fn find_next(handle: usize, data: *u8) i32;
 
+// The Win32 function `FindClose` (see its Microsoft documentation).
 @api("FindClose")
 pub unsafe fn find_close(handle: usize) i32;
 
+// The Win32 function `GetLastError` (see its Microsoft documentation).
 @api("GetLastError")
 pub unsafe fn last_error() u32;
 
+// The Win32 function `CreateToolhelp32Snapshot` (see its Microsoft documentation).
 @api("CreateToolhelp32Snapshot")
 pub unsafe fn process_snapshot(flags: u32, process: u32) usize;
 
+// The Win32 function `Process32First` (see its Microsoft documentation).
 @api("Process32First")
 pub unsafe fn first_process(snapshot: usize, entry: *u8) i32;
 
+// The Win32 function `Process32Next` (see its Microsoft documentation).
 @api("Process32Next")
 pub unsafe fn next_process(snapshot: usize, entry: *u8) i32;
 
+// The Win32 function `GetCurrentProcessId` (see its Microsoft documentation).
 @api("GetCurrentProcessId")
 pub unsafe fn current_process_id() u32;
 
@@ -106,51 +134,67 @@ pub unsafe fn current_process_id() u32;
 @api("WSAStartup")
 pub unsafe fn winsock_startup(version: u16, data: *u8) i32;
 
+// The Win32 function `WSACleanup` (see its Microsoft documentation).
 @api("WSACleanup")
 pub unsafe fn winsock_cleanup() i32;
 
+// The Win32 function `WSAGetLastError` (see its Microsoft documentation).
 @api("WSAGetLastError")
 pub unsafe fn winsock_last_error() i32;
 
+// The Win32 function `socket` (see its Microsoft documentation).
 @api("socket")
 pub unsafe fn socket(af: i32, kind: i32, protocol: i32) usize;
 
+// The Win32 function `closesocket` (see its Microsoft documentation).
 @api("closesocket")
 pub unsafe fn close_socket(socket: usize) i32;
 
+// The Win32 function `listen` (see its Microsoft documentation).
 @api("listen")
 pub unsafe fn listen_socket(socket: usize, backlog: i32) i32;
 
+// The Win32 function `accept` (see its Microsoft documentation).
 @api("accept")
 pub unsafe fn accept_socket(socket: usize, address: *u8, address_length: *i32) usize;
 
+// The Win32 function `send` (see its Microsoft documentation).
 @api("send")
 pub unsafe fn send_socket(socket: usize, data: *u8, length: i32, flags: i32) i32;
 
+// The Win32 function `recv` (see its Microsoft documentation).
 @api("recv")
 pub unsafe fn receive_socket(socket: usize, data: *u8, length: i32, flags: i32) i32;
 
+// The Win32 function `sendto` (see its Microsoft documentation).
 @api("sendto")
 pub unsafe fn send_to_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: i32) i32;
 
+// The Win32 function `recvfrom` (see its Microsoft documentation).
 @api("recvfrom")
 pub unsafe fn receive_from_socket(socket: usize, data: *u8, length: i32, flags: i32, address: *u8, address_length: *i32) i32;
 
+// The Win32 function `shutdown` (see its Microsoft documentation).
 @api("shutdown")
 pub unsafe fn shutdown_socket(socket: usize, how: i32) i32;
 
+// The Win32 function `LoadLibraryA` (see its Microsoft documentation).
 @api("LoadLibraryA")
 pub unsafe fn load_library(path: *i8) usize;
 
+// The Win32 function `GetProcAddress` (see its Microsoft documentation).
 @api("GetProcAddress")
 pub unsafe fn library_symbol(library: usize, name: *i8) usize;
 
+// The Win32 function `FreeLibrary` (see its Microsoft documentation).
 @api("FreeLibrary")
 pub unsafe fn free_library(library: usize) i32;
 
+// The Win32 function `getaddrinfo` (see its Microsoft documentation).
 @api("getaddrinfo")
 pub unsafe fn get_address_info(node: *i8, service: *i8, hints: *u8, result: **u8) i32;
 
+// The Win32 function `freeaddrinfo` (see its Microsoft documentation).
 @api("freeaddrinfo")
 pub unsafe fn free_address_info(result: *u8) void;
 
@@ -158,13 +202,16 @@ pub unsafe fn free_address_info(result: *u8) void;
 @api("GetCommandLineW")
 pub unsafe fn command_line_w() *u8;
 
+// The Win32 function `CommandLineToArgvW` (see its Microsoft documentation).
 @api("CommandLineToArgvW")
 pub unsafe fn command_line_to_argv_w(command_line: *u8, count: *i32) *u8;
 
+// The Win32 function `WideCharToMultiByte` (see its Microsoft documentation).
 @api("WideCharToMultiByte")
 pub unsafe fn wide_to_multi_byte(code_page: u32, flags: u32, wide: *u8, wide_length: i32,
     output: *u8, output_length: i32, default_char: *u8, used_default: *u8) i32;
 
+// The Win32 function `LocalFree` (see its Microsoft documentation).
 @api("LocalFree")
 pub unsafe fn local_free(memory: *u8) *u8;
 

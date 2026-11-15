@@ -34,7 +34,7 @@ Other type conventions:
 pub fn read(fd: i32, buf: *u8, count: usize) isize
 ```
 
-_Undocumented._
+The Linux `read` system call; returns a negative errno on failure.
 
 ### `write`
 
@@ -42,7 +42,7 @@ _Undocumented._
 pub fn write(fd: i32, buf: *u8, count: usize) isize
 ```
 
-_Undocumented._
+The Linux `write` system call; returns a negative errno on failure.
 
 ### `open`
 
@@ -58,7 +58,7 @@ flags: O_RDONLY=0, O_WRONLY=1, O_RDWR=2, O_CREAT=64, O_TRUNC=512, O_APPEND=1024
 pub fn close(fd: i32) i32
 ```
 
-_Undocumented._
+The Linux `close` system call; returns a negative errno on failure.
 
 ### `stat`
 
@@ -74,7 +74,7 @@ statbuf: pointer to struct stat (144 bytes on x86-64)
 pub fn fstat(fd: i32, statbuf: *u8) i32
 ```
 
-_Undocumented._
+The Linux `fstat` system call; returns a negative errno on failure.
 
 ### `lstat`
 
@@ -82,7 +82,7 @@ _Undocumented._
 pub fn lstat(path: str, statbuf: *u8) i32
 ```
 
-_Undocumented._
+The Linux `lstat` system call; returns a negative errno on failure.
 
 ### `poll`
 
@@ -114,7 +114,7 @@ pread64 / pwrite64 — positional read/write (no seek side effect)
 pub fn pwrite64(fd: i32, buf: str, count: usize, offset: i64) isize
 ```
 
-_Undocumented._
+The Linux `pwrite64` system call; returns a negative errno on failure.
 
 ### `readv`
 
@@ -130,7 +130,7 @@ iov: pointer to struct iovec[]; iovcnt: vector count
 pub fn writev(fd: i32, iov: *u8, iovcnt: i32) isize
 ```
 
-_Undocumented._
+The Linux `writev` system call; returns a negative errno on failure.
 
 ### `access`
 
@@ -154,7 +154,7 @@ pipe — pipefd: pointer to i32[2]; [0]=read end, [1]=write end
 pub fn pipe2(pipefd: *u8, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `pipe2` system call; returns a negative errno on failure.
 
 ### `select`
 
@@ -170,7 +170,7 @@ readfds/writefds/exceptfds: pointer to fd_set; timeout: pointer to struct timeva
 pub fn dup(oldfd: i32) i32
 ```
 
-_Undocumented._
+The Linux `dup` system call; returns a negative errno on failure.
 
 ### `dup2`
 
@@ -178,7 +178,7 @@ _Undocumented._
 pub fn dup2(oldfd: i32, newfd: i32) i32
 ```
 
-_Undocumented._
+The Linux `dup2` system call; returns a negative errno on failure.
 
 ### `dup3`
 
@@ -186,7 +186,7 @@ _Undocumented._
 pub fn dup3(oldfd: i32, newfd: i32, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `dup3` system call; returns a negative errno on failure.
 
 ### `ioctl`
 
@@ -227,7 +227,7 @@ operation: LOCK_SH=1, LOCK_EX=2, LOCK_NB=4, LOCK_UN=8
 pub fn fsync(fd: i32) i32
 ```
 
-_Undocumented._
+The Linux `fsync` system call; returns a negative errno on failure.
 
 ### `fdatasync`
 
@@ -235,7 +235,7 @@ _Undocumented._
 pub fn fdatasync(fd: i32) i32
 ```
 
-_Undocumented._
+The Linux `fdatasync` system call; returns a negative errno on failure.
 
 ### `truncate`
 
@@ -243,7 +243,7 @@ _Undocumented._
 pub fn truncate(path: str, length: i64) i32
 ```
 
-_Undocumented._
+The Linux `truncate` system call; returns a negative errno on failure.
 
 ### `ftruncate`
 
@@ -251,7 +251,7 @@ _Undocumented._
 pub fn ftruncate(fd: i32, length: i64) i32
 ```
 
-_Undocumented._
+The Linux `ftruncate` system call; returns a negative errno on failure.
 
 ### `getdents`
 
@@ -267,7 +267,7 @@ dirp: pointer to struct dirent buffer; count: buffer size
 pub fn getdents64(fd: i32, dirp: *u8, count: usize) isize
 ```
 
-_Undocumented._
+The Linux `getdents64` system call; returns a negative errno on failure.
 
 ### `getcwd`
 
@@ -275,7 +275,7 @@ _Undocumented._
 pub fn getcwd(buf: str, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `getcwd` system call; returns a negative errno on failure.
 
 ### `chdir`
 
@@ -283,7 +283,7 @@ _Undocumented._
 pub fn chdir(path: str) i32
 ```
 
-_Undocumented._
+The Linux `chdir` system call; returns a negative errno on failure.
 
 ### `fchdir`
 
@@ -291,7 +291,7 @@ _Undocumented._
 pub fn fchdir(fd: i32) i32
 ```
 
-_Undocumented._
+The Linux `fchdir` system call; returns a negative errno on failure.
 
 ### `rename`
 
@@ -299,7 +299,7 @@ _Undocumented._
 pub fn rename(oldpath: str, newpath: str) i32
 ```
 
-_Undocumented._
+The Linux `rename` system call; returns a negative errno on failure.
 
 ### `renameat`
 
@@ -307,7 +307,7 @@ _Undocumented._
 pub fn renameat(olddirfd: i32, oldpath: str, newdirfd: i32, newpath: str) i32
 ```
 
-_Undocumented._
+The Linux `renameat` system call; returns a negative errno on failure.
 
 ### `mkdir`
 
@@ -315,7 +315,7 @@ _Undocumented._
 pub fn mkdir(path: str, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `mkdir` system call; returns a negative errno on failure.
 
 ### `mkdirat`
 
@@ -323,7 +323,7 @@ _Undocumented._
 pub fn mkdirat(dirfd: i32, path: str, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `mkdirat` system call; returns a negative errno on failure.
 
 ### `rmdir`
 
@@ -331,7 +331,7 @@ _Undocumented._
 pub fn rmdir(path: str) i32
 ```
 
-_Undocumented._
+The Linux `rmdir` system call; returns a negative errno on failure.
 
 ### `creat`
 
@@ -339,7 +339,7 @@ _Undocumented._
 pub fn creat(path: str, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `creat` system call; returns a negative errno on failure.
 
 ### `link`
 
@@ -347,7 +347,7 @@ _Undocumented._
 pub fn link(oldpath: str, newpath: str) i32
 ```
 
-_Undocumented._
+The Linux `link` system call; returns a negative errno on failure.
 
 ### `linkat`
 
@@ -355,7 +355,7 @@ _Undocumented._
 pub fn linkat(olddirfd: i32, oldpath: str, newdirfd: i32, newpath: str, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `linkat` system call; returns a negative errno on failure.
 
 ### `unlink`
 
@@ -363,7 +363,7 @@ _Undocumented._
 pub fn unlink(path: str) i32
 ```
 
-_Undocumented._
+The Linux `unlink` system call; returns a negative errno on failure.
 
 ### `unlinkat`
 
@@ -371,7 +371,7 @@ _Undocumented._
 pub fn unlinkat(dirfd: i32, path: str, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `unlinkat` system call; returns a negative errno on failure.
 
 ### `symlink`
 
@@ -379,7 +379,7 @@ _Undocumented._
 pub fn symlink(target: str, linkpath: str) i32
 ```
 
-_Undocumented._
+The Linux `symlink` system call; returns a negative errno on failure.
 
 ### `symlinkat`
 
@@ -387,7 +387,7 @@ _Undocumented._
 pub fn symlinkat(target: str, newdirfd: i32, linkpath: str) i32
 ```
 
-_Undocumented._
+The Linux `symlinkat` system call; returns a negative errno on failure.
 
 ### `readlink`
 
@@ -395,7 +395,7 @@ _Undocumented._
 pub fn readlink(path: str, buf: str, bufsiz: usize) isize
 ```
 
-_Undocumented._
+The Linux `readlink` system call; returns a negative errno on failure.
 
 ### `readlinkat`
 
@@ -403,7 +403,7 @@ _Undocumented._
 pub fn readlinkat(dirfd: i32, path: str, buf: str, bufsiz: usize) isize
 ```
 
-_Undocumented._
+The Linux `readlinkat` system call; returns a negative errno on failure.
 
 ### `chmod`
 
@@ -411,7 +411,7 @@ _Undocumented._
 pub fn chmod(path: str, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `chmod` system call; returns a negative errno on failure.
 
 ### `fchmod`
 
@@ -419,7 +419,7 @@ _Undocumented._
 pub fn fchmod(fd: i32, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `fchmod` system call; returns a negative errno on failure.
 
 ### `fchmodat`
 
@@ -427,7 +427,7 @@ _Undocumented._
 pub fn fchmodat(dirfd: i32, path: str, mode: u32, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `fchmodat` system call; returns a negative errno on failure.
 
 ### `chown`
 
@@ -435,7 +435,7 @@ _Undocumented._
 pub fn chown(path: str, owner: u32, group: u32) i32
 ```
 
-_Undocumented._
+The Linux `chown` system call; returns a negative errno on failure.
 
 ### `fchown`
 
@@ -443,7 +443,7 @@ _Undocumented._
 pub fn fchown(fd: i32, owner: u32, group: u32) i32
 ```
 
-_Undocumented._
+The Linux `fchown` system call; returns a negative errno on failure.
 
 ### `lchown`
 
@@ -451,7 +451,7 @@ _Undocumented._
 pub fn lchown(path: str, owner: u32, group: u32) i32
 ```
 
-_Undocumented._
+The Linux `lchown` system call; returns a negative errno on failure.
 
 ### `fchownat`
 
@@ -459,7 +459,7 @@ _Undocumented._
 pub fn fchownat(dirfd: i32, path: str, owner: u32, group: u32, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `fchownat` system call; returns a negative errno on failure.
 
 ### `umask`
 
@@ -467,7 +467,7 @@ _Undocumented._
 pub fn umask(mask: u32) u32
 ```
 
-_Undocumented._
+The Linux `umask` system call; returns a negative errno on failure.
 
 ### `faccessat`
 
@@ -483,7 +483,7 @@ dirfd: AT_FDCWD=-100 to use cwd
 pub fn openat(dirfd: i32, path: str, flags: i32, mode: u32) i32
 ```
 
-_Undocumented._
+The Linux `openat` system call; returns a negative errno on failure.
 
 ### `sendfile`
 
@@ -507,7 +507,7 @@ iov: pointer to struct iovec[]
 pub fn pwritev(fd: i32, iov: *u8, iovcnt: i32, offset: i64) isize
 ```
 
-_Undocumented._
+The Linux `pwritev` system call; returns a negative errno on failure.
 
 ### `statx`
 
@@ -539,7 +539,7 @@ off_in / off_out: pointer to off_t (updated after call); pass null to use fd pos
 pub fn tee(fd_in: i32, fd_out: i32, len: usize, flags: u32) isize
 ```
 
-_Undocumented._
+The Linux `tee` system call; returns a negative errno on failure.
 
 ### `copy_file_range`
 
@@ -547,7 +547,7 @@ _Undocumented._
 pub fn copy_file_range(fd_in: i32, off_in: *i64, fd_out: i32, off_out: *i64, len: usize, flags: u32) isize
 ```
 
-_Undocumented._
+The Linux `copy_file_range` system call; returns a negative errno on failure.
 
 ### `fallocate`
 
@@ -563,7 +563,7 @@ fallocate — preallocate file space
 pub fn sync() void
 ```
 
-_Undocumented._
+The Linux `sync` system call; returns a negative errno on failure.
 
 ### `syncfs`
 
@@ -571,7 +571,7 @@ _Undocumented._
 pub fn syncfs(fd: i32) i32
 ```
 
-_Undocumented._
+The Linux `syncfs` system call; returns a negative errno on failure.
 
 ### `mmap`
 
@@ -589,7 +589,7 @@ addr: hint address (pass null for kernel choice); returns mapped address or MAP_
 pub fn munmap(addr: *u8, length: usize) i32
 ```
 
-_Undocumented._
+The Linux `munmap` system call; returns a negative errno on failure.
 
 ### `mprotect`
 
@@ -597,7 +597,7 @@ _Undocumented._
 pub fn mprotect(addr: *u8, len: usize, prot: i32) i32
 ```
 
-_Undocumented._
+The Linux `mprotect` system call; returns a negative errno on failure.
 
 ### `mremap`
 
@@ -630,7 +630,7 @@ flags: MS_ASYNC=1, MS_SYNC=4, MS_INVALIDATE=2
 pub fn mlock(addr: *u8, len: usize) i32
 ```
 
-_Undocumented._
+The Linux `mlock` system call; returns a negative errno on failure.
 
 ### `munlock`
 
@@ -638,7 +638,7 @@ _Undocumented._
 pub fn munlock(addr: *u8, len: usize) i32
 ```
 
-_Undocumented._
+The Linux `munlock` system call; returns a negative errno on failure.
 
 ### `mlockall`
 
@@ -654,7 +654,7 @@ flags: MCL_CURRENT=1, MCL_FUTURE=2
 pub fn munlockall() i32
 ```
 
-_Undocumented._
+The Linux `munlockall` system call; returns a negative errno on failure.
 
 ### `brk`
 
@@ -686,7 +686,7 @@ getrandom — kernel CSPRNG; buf is a write buffer
 pub fn fork() i32
 ```
 
-_Undocumented._
+The Linux `fork` system call; returns a negative errno on failure.
 
 ### `vfork`
 
@@ -694,7 +694,7 @@ _Undocumented._
 pub fn vfork() i32
 ```
 
-_Undocumented._
+The Linux `vfork` system call; returns a negative errno on failure.
 
 ### `execve`
 
@@ -710,7 +710,7 @@ argv/envp: pointer to null-terminated array of C strings
 pub fn execveat(dirfd: i32, path: str, argv: *u8, envp: *u8, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `execveat` system call; returns a negative errno on failure.
 
 ### `wait4`
 
@@ -734,7 +734,7 @@ infop: pointer to siginfo_t
 pub fn exit(status: i32) void
 ```
 
-_Undocumented._
+The Linux `exit` system call; returns a negative errno on failure.
 
 ### `exit_group`
 
@@ -742,7 +742,7 @@ _Undocumented._
 pub fn exit_group(status: i32) void
 ```
 
-_Undocumented._
+The Linux `exit_group` system call; returns a negative errno on failure.
 
 ### `getpid`
 
@@ -750,7 +750,7 @@ _Undocumented._
 pub fn getpid() i32
 ```
 
-_Undocumented._
+The Linux `getpid` system call; returns a negative errno on failure.
 
 ### `getppid`
 
@@ -758,7 +758,7 @@ _Undocumented._
 pub fn getppid() i32
 ```
 
-_Undocumented._
+The Linux `getppid` system call; returns a negative errno on failure.
 
 ### `gettid`
 
@@ -766,7 +766,7 @@ _Undocumented._
 pub fn gettid() i32
 ```
 
-_Undocumented._
+The Linux `gettid` system call; returns a negative errno on failure.
 
 ### `setsid`
 
@@ -774,7 +774,7 @@ _Undocumented._
 pub fn setsid() i32
 ```
 
-_Undocumented._
+The Linux `setsid` system call; returns a negative errno on failure.
 
 ### `getsid`
 
@@ -782,7 +782,7 @@ _Undocumented._
 pub fn getsid(pid: i32) i32
 ```
 
-_Undocumented._
+The Linux `getsid` system call; returns a negative errno on failure.
 
 ### `setpgid`
 
@@ -790,7 +790,7 @@ _Undocumented._
 pub fn setpgid(pid: i32, pgid: i32) i32
 ```
 
-_Undocumented._
+The Linux `setpgid` system call; returns a negative errno on failure.
 
 ### `getpgid`
 
@@ -798,7 +798,7 @@ _Undocumented._
 pub fn getpgid(pid: i32) i32
 ```
 
-_Undocumented._
+The Linux `getpgid` system call; returns a negative errno on failure.
 
 ### `getpgrp`
 
@@ -806,7 +806,7 @@ _Undocumented._
 pub fn getpgrp() i32
 ```
 
-_Undocumented._
+The Linux `getpgrp` system call; returns a negative errno on failure.
 
 ### `kill`
 
@@ -822,7 +822,7 @@ sig: SIGTERM=15, SIGKILL=9, SIGINT=2, SIGHUP=1, SIGUSR1=10, SIGUSR2=12
 pub fn tkill(tid: i32, sig: i32) i32
 ```
 
-_Undocumented._
+The Linux `tkill` system call; returns a negative errno on failure.
 
 ### `tgkill`
 
@@ -830,7 +830,7 @@ _Undocumented._
 pub fn tgkill(tgid: i32, tid: i32, sig: i32) i32
 ```
 
-_Undocumented._
+The Linux `tgkill` system call; returns a negative errno on failure.
 
 ### `clone`
 
@@ -864,7 +864,7 @@ addr: pointer to u64 for GET, value for SET
 pub fn sched_yield() i32
 ```
 
-_Undocumented._
+The Linux `sched_yield` system call; returns a negative errno on failure.
 
 ### `sched_setaffinity`
 
@@ -880,7 +880,7 @@ mask: pointer to cpu_set_t
 pub fn sched_getaffinity(pid: i32, cpusetsize: usize, mask: *u8) i32
 ```
 
-_Undocumented._
+The Linux `sched_getaffinity` system call; returns a negative errno on failure.
 
 ### `getcpu`
 
@@ -945,7 +945,7 @@ mask: pointer to sigset_t to block while waiting
 pub fn pause() i32
 ```
 
-_Undocumented._
+The Linux `pause` system call; returns a negative errno on failure.
 
 ### `alarm`
 
@@ -953,7 +953,7 @@ _Undocumented._
 pub fn alarm(seconds: u32) u32
 ```
 
-_Undocumented._
+The Linux `alarm` system call; returns a negative errno on failure.
 
 ### `sigaltstack`
 
@@ -977,7 +977,7 @@ tv: pointer to struct timeval { i64 sec, i64 usec }; tz: pointer to struct timez
 pub fn settimeofday(tv: *u8, tz: *u8) i32
 ```
 
-_Undocumented._
+The Linux `settimeofday` system call; returns a negative errno on failure.
 
 ### `nanosleep`
 
@@ -1002,7 +1002,7 @@ tp: pointer to struct timespec output
 pub fn clock_settime(clockid: i32, tp: *u8) i32
 ```
 
-_Undocumented._
+The Linux `clock_settime` system call; returns a negative errno on failure.
 
 ### `clock_getres`
 
@@ -1018,7 +1018,7 @@ res: pointer to struct timespec output
 pub fn clock_nanosleep(clockid: i32, flags: i32, req: *u8, rem: *u8) i32
 ```
 
-_Undocumented._
+The Linux `clock_nanosleep` system call; returns a negative errno on failure.
 
 ### `getitimer`
 
@@ -1075,7 +1075,7 @@ addr: pointer to sockaddr variant; addrlen: sizeof(sockaddr_*)
 pub fn listen(sockfd: i32, backlog: i32) i32
 ```
 
-_Undocumented._
+The Linux `listen` system call; returns a negative errno on failure.
 
 ### `accept`
 
@@ -1091,7 +1091,7 @@ addr: pointer to sockaddr output; addrlen: pointer to socklen_t (in/out)
 pub fn accept4(sockfd: i32, addr: *u8, addrlen: *u32, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `accept4` system call; returns a negative errno on failure.
 
 ### `connect`
 
@@ -1099,7 +1099,7 @@ _Undocumented._
 pub fn connect(sockfd: i32, addr: *u8, addrlen: u32) i32
 ```
 
-_Undocumented._
+The Linux `connect` system call; returns a negative errno on failure.
 
 ### `sendto`
 
@@ -1107,7 +1107,7 @@ _Undocumented._
 pub fn sendto(sockfd: i32, buf: *u8, len: usize, flags: i32, dest_addr: *u8, addrlen: u32) isize
 ```
 
-_Undocumented._
+The Linux `sendto` system call; returns a negative errno on failure.
 
 ### `recvfrom`
 
@@ -1131,7 +1131,7 @@ msg: pointer to struct msghdr
 pub fn recvmsg(sockfd: i32, msg: *u8, flags: i32) isize
 ```
 
-_Undocumented._
+The Linux `recvmsg` system call; returns a negative errno on failure.
 
 ### `shutdown`
 
@@ -1155,7 +1155,7 @@ addr: pointer to sockaddr output; addrlen: pointer to socklen_t (in/out)
 pub fn getpeername(sockfd: i32, addr: *u8, addrlen: *u32) i32
 ```
 
-_Undocumented._
+The Linux `getpeername` system call; returns a negative errno on failure.
 
 ### `socketpair`
 
@@ -1187,7 +1187,7 @@ optval: pointer to option value output; optlen: pointer to socklen_t (in/out)
 pub fn epoll_create1(flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `epoll_create1` system call; returns a negative errno on failure.
 
 ### `epoll_ctl`
 
@@ -1219,7 +1219,7 @@ sigmask: pointer to sigset_t (or null)
 pub fn eventfd2(initval: u32, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `eventfd2` system call; returns a negative errno on failure.
 
 ### `timerfd_create`
 
@@ -1251,7 +1251,7 @@ curr_value: pointer to struct itimerspec output
 pub fn inotify_init1(flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `inotify_init1` system call; returns a negative errno on failure.
 
 ### `inotify_add_watch`
 
@@ -1259,7 +1259,7 @@ _Undocumented._
 pub fn inotify_add_watch(fd: i32, path: str, mask: u32) i32
 ```
 
-_Undocumented._
+The Linux `inotify_add_watch` system call; returns a negative errno on failure.
 
 ### `inotify_rm_watch`
 
@@ -1267,7 +1267,7 @@ _Undocumented._
 pub fn inotify_rm_watch(fd: i32, wd: i32) i32
 ```
 
-_Undocumented._
+The Linux `inotify_rm_watch` system call; returns a negative errno on failure.
 
 ### `signalfd4`
 
@@ -1292,7 +1292,7 @@ op: FUTEX_WAIT=0, FUTEX_WAKE=1, FUTEX_FD=2, FUTEX_REQUEUE=3
 pub fn getuid() u32
 ```
 
-_Undocumented._
+The Linux `getuid` system call; returns a negative errno on failure.
 
 ### `getgid`
 
@@ -1300,7 +1300,7 @@ _Undocumented._
 pub fn getgid() u32
 ```
 
-_Undocumented._
+The Linux `getgid` system call; returns a negative errno on failure.
 
 ### `geteuid`
 
@@ -1308,7 +1308,7 @@ _Undocumented._
 pub fn geteuid() u32
 ```
 
-_Undocumented._
+The Linux `geteuid` system call; returns a negative errno on failure.
 
 ### `getegid`
 
@@ -1316,7 +1316,7 @@ _Undocumented._
 pub fn getegid() u32
 ```
 
-_Undocumented._
+The Linux `getegid` system call; returns a negative errno on failure.
 
 ### `setuid`
 
@@ -1324,7 +1324,7 @@ _Undocumented._
 pub fn setuid(uid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setuid` system call; returns a negative errno on failure.
 
 ### `setgid`
 
@@ -1332,7 +1332,7 @@ _Undocumented._
 pub fn setgid(gid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setgid` system call; returns a negative errno on failure.
 
 ### `setreuid`
 
@@ -1340,7 +1340,7 @@ _Undocumented._
 pub fn setreuid(ruid: u32, euid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setreuid` system call; returns a negative errno on failure.
 
 ### `setregid`
 
@@ -1348,7 +1348,7 @@ _Undocumented._
 pub fn setregid(rgid: u32, egid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setregid` system call; returns a negative errno on failure.
 
 ### `setresuid`
 
@@ -1356,7 +1356,7 @@ _Undocumented._
 pub fn setresuid(ruid: u32, euid: u32, suid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setresuid` system call; returns a negative errno on failure.
 
 ### `getresuid`
 
@@ -1372,7 +1372,7 @@ ruid/euid/suid: pointers to u32 output
 pub fn setresgid(rgid: u32, egid: u32, sgid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setresgid` system call; returns a negative errno on failure.
 
 ### `getresgid`
 
@@ -1404,7 +1404,7 @@ list: pointer to gid_t[] input
 pub fn setfsuid(fsuid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setfsuid` system call; returns a negative errno on failure.
 
 ### `setfsgid`
 
@@ -1412,7 +1412,7 @@ _Undocumented._
 pub fn setfsgid(fsgid: u32) i32
 ```
 
-_Undocumented._
+The Linux `setfsgid` system call; returns a negative errno on failure.
 
 ### `uname`
 
@@ -1452,7 +1452,7 @@ resource: RLIMIT_NOFILE=7, RLIMIT_STACK=3, RLIMIT_AS=9; rlim: pointer to struct 
 pub fn setrlimit(resource: i32, rlim: *u8) i32
 ```
 
-_Undocumented._
+The Linux `setrlimit` system call; returns a negative errno on failure.
 
 ### `prlimit64`
 
@@ -1468,7 +1468,7 @@ new_limit/old_limit: pointer to struct rlimit64 (or null)
 pub fn syslog(stype: i32, buf: str, len: i32) i32
 ```
 
-_Undocumented._
+The Linux `syslog` system call; returns a negative errno on failure.
 
 ### `sethostname`
 
@@ -1476,7 +1476,7 @@ _Undocumented._
 pub fn sethostname(name: str, len: usize) i32
 ```
 
-_Undocumented._
+The Linux `sethostname` system call; returns a negative errno on failure.
 
 ### `setdomainname`
 
@@ -1484,7 +1484,7 @@ _Undocumented._
 pub fn setdomainname(name: str, len: usize) i32
 ```
 
-_Undocumented._
+The Linux `setdomainname` system call; returns a negative errno on failure.
 
 ### `reboot`
 
@@ -1500,7 +1500,7 @@ arg: optional pointer (depends on cmd); pass null if unused
 pub fn chroot(path: str) i32
 ```
 
-_Undocumented._
+The Linux `chroot` system call; returns a negative errno on failure.
 
 ### `mount`
 
@@ -1516,7 +1516,7 @@ data: filesystem-specific mount options pointer (or null)
 pub fn umount2(target: str, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `umount2` system call; returns a negative errno on failure.
 
 ### `swapon`
 
@@ -1524,7 +1524,7 @@ _Undocumented._
 pub fn swapon(path: str, swapflags: i32) i32
 ```
 
-_Undocumented._
+The Linux `swapon` system call; returns a negative errno on failure.
 
 ### `swapoff`
 
@@ -1532,7 +1532,7 @@ _Undocumented._
 pub fn swapoff(path: str) i32
 ```
 
-_Undocumented._
+The Linux `swapoff` system call; returns a negative errno on failure.
 
 ### `acct`
 
@@ -1540,7 +1540,7 @@ _Undocumented._
 pub fn acct(filename: str) i32
 ```
 
-_Undocumented._
+The Linux `acct` system call; returns a negative errno on failure.
 
 ### `setxattr`
 
@@ -1556,7 +1556,7 @@ value: pointer to attribute value buffer
 pub fn lsetxattr(path: str, name: str, value: *u8, size: usize, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `lsetxattr` system call; returns a negative errno on failure.
 
 ### `fsetxattr`
 
@@ -1564,7 +1564,7 @@ _Undocumented._
 pub fn fsetxattr(fd: i32, name: str, value: *u8, size: usize, flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `fsetxattr` system call; returns a negative errno on failure.
 
 ### `getxattr`
 
@@ -1580,7 +1580,7 @@ value: pointer to output buffer for attribute value
 pub fn lgetxattr(path: str, name: str, value: *u8, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `lgetxattr` system call; returns a negative errno on failure.
 
 ### `fgetxattr`
 
@@ -1588,7 +1588,7 @@ _Undocumented._
 pub fn fgetxattr(fd: i32, name: str, value: *u8, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `fgetxattr` system call; returns a negative errno on failure.
 
 ### `listxattr`
 
@@ -1596,7 +1596,7 @@ _Undocumented._
 pub fn listxattr(path: str, list: str, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `listxattr` system call; returns a negative errno on failure.
 
 ### `llistxattr`
 
@@ -1604,7 +1604,7 @@ _Undocumented._
 pub fn llistxattr(path: str, list: str, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `llistxattr` system call; returns a negative errno on failure.
 
 ### `flistxattr`
 
@@ -1612,7 +1612,7 @@ _Undocumented._
 pub fn flistxattr(fd: i32, list: str, size: usize) isize
 ```
 
-_Undocumented._
+The Linux `flistxattr` system call; returns a negative errno on failure.
 
 ### `removexattr`
 
@@ -1620,7 +1620,7 @@ _Undocumented._
 pub fn removexattr(path: str, name: str) i32
 ```
 
-_Undocumented._
+The Linux `removexattr` system call; returns a negative errno on failure.
 
 ### `lremovexattr`
 
@@ -1628,7 +1628,7 @@ _Undocumented._
 pub fn lremovexattr(path: str, name: str) i32
 ```
 
-_Undocumented._
+The Linux `lremovexattr` system call; returns a negative errno on failure.
 
 ### `fremovexattr`
 
@@ -1636,7 +1636,7 @@ _Undocumented._
 pub fn fremovexattr(fd: i32, name: str) i32
 ```
 
-_Undocumented._
+The Linux `fremovexattr` system call; returns a negative errno on failure.
 
 ### `readahead`
 
@@ -1644,7 +1644,7 @@ _Undocumented._
 pub fn readahead(fd: i32, offset: i64, count: usize) isize
 ```
 
-_Undocumented._
+The Linux `readahead` system call; returns a negative errno on failure.
 
 ### `seccomp`
 
@@ -1668,7 +1668,7 @@ attr: pointer to union bpf_attr
 pub fn setns(fd: i32, nstype: i32) i32
 ```
 
-_Undocumented._
+The Linux `setns` system call; returns a negative errno on failure.
 
 ### `unshare`
 
@@ -1676,7 +1676,7 @@ _Undocumented._
 pub fn unshare(flags: i32) i32
 ```
 
-_Undocumented._
+The Linux `unshare` system call; returns a negative errno on failure.
 
 ### `pivot_root`
 
@@ -1684,7 +1684,7 @@ _Undocumented._
 pub fn pivot_root(new_root: str, put_old: str) i32
 ```
 
-_Undocumented._
+The Linux `pivot_root` system call; returns a negative errno on failure.
 
 ### `membarrier`
 
@@ -1692,7 +1692,7 @@ _Undocumented._
 pub fn membarrier(cmd: i32, flags: u32, cpu_id: i32) i32
 ```
 
-_Undocumented._
+The Linux `membarrier` system call; returns a negative errno on failure.
 
 ### `process_vm_readv`
 
@@ -1708,4 +1708,4 @@ lvec/rvec: pointer to struct iovec[]
 pub fn process_vm_writev(pid: i32, lvec: *u8, liovcnt: usize, rvec: *u8, riovcnt: usize, flags: usize) isize
 ```
 
-_Undocumented._
+The Linux `process_vm_writev` system call; returns a negative errno on failure.

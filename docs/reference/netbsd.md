@@ -19,7 +19,8 @@ Only imported when @cfg(target_os="netbsd") is active.
 pub fn errno_value() i32
 ```
 
-_Undocumented._
+NetBSD libc `errno_value`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `open`
 
@@ -27,7 +28,8 @@ _Undocumented._
 pub fn open(path: str, flags: i32, mode: u32) i32
 ```
 
-_Undocumented._
+NetBSD libc `open`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `close`
 
@@ -35,7 +37,8 @@ _Undocumented._
 pub fn close(fd: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `close`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `read`
 
@@ -43,7 +46,8 @@ _Undocumented._
 pub fn read(fd: i32, data: *u8, size: usize) isize
 ```
 
-_Undocumented._
+NetBSD libc `read`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `write`
 
@@ -51,7 +55,8 @@ _Undocumented._
 pub fn write(fd: i32, data: *u8, size: usize) isize
 ```
 
-_Undocumented._
+NetBSD libc `write`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `lseek`
 
@@ -59,7 +64,8 @@ _Undocumented._
 pub fn lseek(fd: i32, offset: i64, whence: i32) i64
 ```
 
-_Undocumented._
+NetBSD libc `lseek`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `fsync`
 
@@ -67,7 +73,8 @@ _Undocumented._
 pub fn fsync(fd: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `fsync`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `ftruncate`
 
@@ -75,7 +82,8 @@ _Undocumented._
 pub fn ftruncate(fd: i32, len: i64) i32
 ```
 
-_Undocumented._
+NetBSD libc `ftruncate`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `access`
 
@@ -83,7 +91,8 @@ _Undocumented._
 pub fn access(path: str, mode: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `access`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `unlink`
 
@@ -91,7 +100,8 @@ _Undocumented._
 pub fn unlink(path: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `unlink`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `mkdir`
 
@@ -99,7 +109,8 @@ _Undocumented._
 pub fn mkdir(path: str, mode: u32) i32
 ```
 
-_Undocumented._
+NetBSD libc `mkdir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `rmdir`
 
@@ -107,7 +118,8 @@ _Undocumented._
 pub fn rmdir(path: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `rmdir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `rename`
 
@@ -115,7 +127,8 @@ _Undocumented._
 pub fn rename(old: str, new: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `rename`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `chdir`
 
@@ -123,7 +136,8 @@ _Undocumented._
 pub fn chdir(path: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `chdir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getcwd`
 
@@ -131,7 +145,8 @@ _Undocumented._
 pub fn getcwd(buf: str, size: usize) isize
 ```
 
-_Undocumented._
+NetBSD libc `getcwd`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `sched_yield`
 
@@ -139,7 +154,8 @@ _Undocumented._
 pub fn sched_yield() i32
 ```
 
-_Undocumented._
+NetBSD libc `sched_yield`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getuid`
 
@@ -147,7 +163,8 @@ _Undocumented._
 pub fn getuid() u32
 ```
 
-_Undocumented._
+NetBSD libc `getuid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getgid`
 
@@ -155,7 +172,8 @@ _Undocumented._
 pub fn getgid() u32
 ```
 
-_Undocumented._
+NetBSD libc `getgid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `geteuid`
 
@@ -163,7 +181,8 @@ _Undocumented._
 pub fn geteuid() u32
 ```
 
-_Undocumented._
+NetBSD libc `geteuid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getegid`
 
@@ -171,7 +190,8 @@ _Undocumented._
 pub fn getegid() u32
 ```
 
-_Undocumented._
+NetBSD libc `getegid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `umask`
 
@@ -179,7 +199,8 @@ _Undocumented._
 pub fn umask(mask: u32) u32
 ```
 
-_Undocumented._
+NetBSD libc `umask`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `kill`
 
@@ -187,7 +208,8 @@ _Undocumented._
 pub fn kill(pid: i32, sig: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `kill`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `clock_gettime`
 
@@ -195,7 +217,8 @@ _Undocumented._
 pub fn clock_gettime(clock_id: i32, result: *u8) i32
 ```
 
-_Undocumented._
+NetBSD libc `clock_gettime`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `opendir`
 
@@ -203,7 +226,8 @@ _Undocumented._
 pub fn opendir(path: str) *u8
 ```
 
-_Undocumented._
+NetBSD libc `opendir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `readdir`
 
@@ -211,7 +235,8 @@ _Undocumented._
 pub fn readdir(handle: *u8) *u8
 ```
 
-_Undocumented._
+NetBSD libc `readdir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `closedir`
 
@@ -219,7 +244,8 @@ _Undocumented._
 pub fn closedir(handle: *u8) i32
 ```
 
-_Undocumented._
+NetBSD libc `closedir`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `link`
 
@@ -227,7 +253,8 @@ _Undocumented._
 pub fn link(old: str, new_path: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `link`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `symlink`
 
@@ -235,7 +262,8 @@ _Undocumented._
 pub fn symlink(target: str, link_path: str) i32
 ```
 
-_Undocumented._
+NetBSD libc `symlink`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `chmod`
 
@@ -243,7 +271,8 @@ _Undocumented._
 pub fn chmod(path: str, mode: u32) i32
 ```
 
-_Undocumented._
+NetBSD libc `chmod`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getpid`
 
@@ -251,7 +280,8 @@ _Undocumented._
 pub fn getpid() i32
 ```
 
-_Undocumented._
+NetBSD libc `getpid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `getppid`
 
@@ -259,7 +289,8 @@ _Undocumented._
 pub fn getppid() i32
 ```
 
-_Undocumented._
+NetBSD libc `getppid`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `socket`
 
@@ -267,7 +298,8 @@ _Undocumented._
 pub fn socket(domain: i32, kind: i32, protocol: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `socket`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `setsockopt`
 
@@ -275,7 +307,8 @@ _Undocumented._
 pub fn setsockopt(fd: i32, level: i32, name: i32, value: *u8, length: u32) i32
 ```
 
-_Undocumented._
+NetBSD libc `setsockopt`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `listen`
 
@@ -283,7 +316,8 @@ _Undocumented._
 pub fn listen(fd: i32, backlog: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `listen`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `accept`
 
@@ -291,7 +325,8 @@ _Undocumented._
 pub fn accept(fd: i32, addr: *u8, len: *u32) i32
 ```
 
-_Undocumented._
+NetBSD libc `accept`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `sendto`
 
@@ -299,7 +334,8 @@ _Undocumented._
 pub fn sendto(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: u32) isize
 ```
 
-_Undocumented._
+NetBSD libc `sendto`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `recvfrom`
 
@@ -307,7 +343,8 @@ _Undocumented._
 pub fn recvfrom(fd: i32, buf: *u8, count: usize, flags: i32, address: *u8, address_size: *u32) isize
 ```
 
-_Undocumented._
+NetBSD libc `recvfrom`, returning a negative errno on failure like the
+Linux system call of the same name.
 
 ### `shutdown`
 
@@ -315,4 +352,5 @@ _Undocumented._
 pub fn shutdown(fd: i32, mode: i32) i32
 ```
 
-_Undocumented._
+NetBSD libc `shutdown`, returning a negative errno on failure like the
+Linux system call of the same name.
