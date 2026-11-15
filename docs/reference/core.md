@@ -239,22 +239,6 @@ pub fn str_concat(s1: str, s2: str) String
 Owned text results. Their buffers and compiler-owned headers are destroyed
 through String; callers never adopt raw formatter allocations themselves.
 
-### `int_to_str`
-
-```quazi
-pub fn int_to_str(n: i64) String
-```
-
-The decimal text of `n`.
-
-### `float_to_str`
-
-```quazi
-pub fn float_to_str(f: f64) String
-```
-
-The decimal text of `f`.
-
 ### `atomic_add`
 
 ```quazi

@@ -692,7 +692,7 @@ fn __digits(text: str, start: usize, count: usize) i64 {
 }
 
 fn __push_padded(output: String, value: i64, width: usize) String {
-    var digits: String = String.from(value.to_str());
+    var digits: String = value.to_string();
     var result: String = output;
     var padding: usize = digits.bytes_len();
     for (padding < width) {
