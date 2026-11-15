@@ -349,14 +349,14 @@ pub fn version() String {
         }
         var result: String = String.from(product);
         if (core.strlen(edition) > 0) {
-            result = result.push_str(" ");
-            result = result.push_str(edition);
+            result.push_str(" ");
+            result.push_str(edition);
         }
         if (build > 0) {
             const build_text: String = owned_u32(build);
-            result = result.push_str(" (build ");
-            result = result.push_str(build_text.as_str());
-            result = result.push_str(")");
+            result.push_str(" (build ");
+            result.push_str(build_text.as_str());
+            result.push_str(")");
         }
         ret result;
     }

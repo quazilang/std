@@ -538,10 +538,11 @@ impl SystemTime {
         const text: String = local.unwrap().format_rfc3339();
         if (offset.seconds == 0) { ret Some(text); }
         const body: String = text[0:(text.len() as isize) - 1];
-        var output: String = body.push_str(if (offset.seconds < 0) { "-" } else { "+" });
+        var output: String = body;
+        output.push_str(if (offset.seconds < 0) { "-" } else { "+" });
         const magnitude: i64 = if (offset.seconds < 0) { -(offset.seconds as i64) } else { offset.seconds as i64 };
         output = __push_padded(output, magnitude / 3600, 2);
-        output = output.push_str(":");
+        output.push_str(":");
         Some(__push_padded(output, (magnitude % 3600) / 60, 2))
     }
 
@@ -664,10 +665,11 @@ fn __push_padded(output: String, value: i64, width: usize) String {
     var result: String = output;
     var padding: usize = digits.bytes_len();
     for (padding < width) {
-        result = result.push_str("0");
+        result.push_str("0");
         padding = padding + 1;
     }
-    result.push_str(digits.as_str())
+    result.push_str(digits.as_str());
+    result
 }
 
 // A fixed offset from UTC in whole minutes, -23:59 through +23:59. It is not
@@ -737,21 +739,22 @@ impl DateTime {
     pub fn format_rfc3339(self: &DateTime) String {
         var output: String = String.new();
         output = __push_padded(output, self.year as i64, 4);
-        output = output.push_str("-");
+        output.push_str("-");
         output = __push_padded(output, self.month as i64, 2);
-        output = output.push_str("-");
+        output.push_str("-");
         output = __push_padded(output, self.day as i64, 2);
-        output = output.push_str("T");
+        output.push_str("T");
         output = __push_padded(output, self.hour as i64, 2);
-        output = output.push_str(":");
+        output.push_str(":");
         output = __push_padded(output, self.minute as i64, 2);
-        output = output.push_str(":");
+        output.push_str(":");
         output = __push_padded(output, self.second as i64, 2);
         if (self.nanosecond != 0) {
-            output = output.push_str(".");
+            output.push_str(".");
             output = __push_padded(output, self.nanosecond as i64, 9);
         }
-        output.push_str("Z")
+        output.push_str("Z");
+        output
     }
 }
 

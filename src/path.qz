@@ -91,8 +91,8 @@ impl Path {
         }
         var result: String = text[0:stem_end];
         if (!extension.is_empty()) {
-            result = result.push_str(".");
-            result = result.push_str(extension);
+            result.push_str(".");
+            result.push_str(extension);
         }
         Path { text: result }
     }
@@ -123,8 +123,9 @@ impl Path {
         const appended = Path.new(child);
         if (base.is_empty() || appended.is_absolute()) { ret appended; }
         var text: String = String.from(base);
-        if (!path.is_separator(base, base.len() - 1)) { text = text.push_str(path.separator()); }
-        Path { text: text.push_str(child) }
+        if (!path.is_separator(base, base.len() - 1)) { text.push_str(path.separator()); }
+        text.push_str(child);
+        Path { text: text }
     }
 
     // The last component, unless the path ends in a root or `..`.
@@ -213,7 +214,7 @@ impl Path {
         var index: usize = path.drive_length(source);
         var prefix: String = String.from(source[0:index].as_str());
         if (rooted && index < source.len()) {
-            prefix = prefix.push_str(source[index:index + 1].as_str());
+            prefix.push_str(source[index:index + 1].as_str());
             index = index + 1;
         }
         var kept: Array[String] = Array.new();
@@ -243,8 +244,8 @@ impl Path {
         var count: usize = 0;
         for (kept.len() > 0) {
             const part: String = kept.remove(0);
-            if (count > 0) { text = text.push_str(path.separator()); }
-            text = text.push_str(part.as_str());
+            if (count > 0) { text.push_str(path.separator()); }
+            text.push_str(part.as_str());
             count = count + 1;
         }
         if (text.is_empty()) { ret Path.new("."); }

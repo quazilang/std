@@ -624,7 +624,7 @@ pub fn count_entries(path: str) Result[usize, FsError] {
 
     @cfg(target_os = "windows") {
         var pattern: String = String.from(path);
-        pattern = pattern.push_str("\\*");
+        pattern.push_str("\\*");
         var raw_handle: usize = 0;
         unsafe {
             raw_handle = win32_core.find_first(
@@ -728,7 +728,7 @@ pub fn read_dir_names(path: str) Result[Array[String], FsError] {
 
     @cfg(target_os = "windows") {
         var pattern: String = String.from(path);
-        pattern = pattern.push_str("\\*");
+        pattern.push_str("\\*");
         var raw_handle: usize = 0;
         unsafe {
             raw_handle = win32_core.find_first(
@@ -879,7 +879,10 @@ fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
 
 fn joined(base: str, name: str) String {
     if (base.is_empty()) { ret String.from(name); }
-    String.from(base).push_str("/").push_str(name)
+    var path = String.from(base);
+    path.push_str("/");
+    path.push_str(name);
+    path
 }
 
 // Every entry below `root` as a path relative to it (`a`, `a/b.txt`, ...),
@@ -1166,9 +1169,10 @@ fn entry_path(directory: str, name: str) String {
     if (!directory.is_empty() && !directory.ends_with("/") && !directory.ends_with("\\")) {
         var separator: str = "/";
         @cfg(target_os = "windows") { separator = "\\"; }
-        text = text.push_str(separator);
+        text.push_str(separator);
     }
-    text.push_str(name)
+    text.push_str(name);
+    text
 }
 
 // Maps a `d_type` value (Linux/NetBSD) to the entry kind code; 0 (unknown)
@@ -1264,7 +1268,7 @@ pub fn read_dir(path: str) Result[ReadDir, FsError] {
 
     @cfg(target_os = "windows") {
         var pattern: String = String.from(directory);
-        pattern = pattern.push_str("\\*");
+        pattern.push_str("\\*");
         var raw_handle: usize = 0;
         unsafe {
             raw_handle = win32_core.find_first(core.str_as_ptr(pattern.as_str()), buffer.data);

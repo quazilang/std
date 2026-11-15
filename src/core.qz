@@ -113,8 +113,9 @@ pub fn strlen(s: str) usize;
 // Owned text results. Their buffers and compiler-owned headers are destroyed
 // through String; callers never adopt raw formatter allocations themselves.
 pub fn str_concat(s1: str, s2: str) String {
-    const first = String.from(s1);
-    ret first.push_str(s2);
+    var result = String.from(s1);
+    result.push_str(s2);
+    ret result;
 }
 
 pub fn int_to_str(n: i64) String { ret n.to_string(); }
