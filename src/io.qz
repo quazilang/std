@@ -104,27 +104,35 @@ fn write_text(fd: i32, s: str) isize {
 }
 // ── Writer types ──────────────────────────────────────────────────────────────
 
+// Standard output; get it with `io.stdout()`.
 pub struct Stdout { fd: i32, }
+// Standard error; get it with `io.stderr()`.
 pub struct Stderr { fd: i32, }
 
+// The standard output stream.
 pub fn stdout() Stdout { ret Stdout { fd: 1 }; }
+// The standard error stream.
 pub fn stderr() Stderr { ret Stderr { fd: 2 }; }
 
 impl Write for Stdout {
+    // Writes `s` as it is.
     pub fn write(self: Stdout, s: str) void {
         write_text(1, s);
     }
 
+    // Writes `s` and a newline.
     pub fn writeln(self: Stdout, s: str) void {
         write_text(1, s);
         write_text(1, "\n");
     }
 
+    // Writes formatted text (`{}` placeholders).
     @format
     pub fn writef(self: Stdout, s: str, ...args: any) void {
         write_text(1, s);
     }
 
+    // Writes formatted text and a newline.
     @format
     pub fn writelnf(self: Stdout, s: str, ...args: any) void {
         write_text(1, s);
@@ -133,20 +141,24 @@ impl Write for Stdout {
 }
 
 impl Write for Stderr {
+    // Writes `s` as it is.
     pub fn write(self: Stderr, s: str) void {
         write_text(2, s);
     }
 
+    // Writes `s` and a newline.
     pub fn writeln(self: Stderr, s: str) void {
         write_text(2, s);
         write_text(2, "\n");
     }
 
+    // Writes formatted text (`{}` placeholders).
     @format
     pub fn writef(self: Stderr, s: str, ...args: any) void {
         write_text(2, s);
     }
 
+    // Writes formatted text and a newline.
     @format
     pub fn writelnf(self: Stderr, s: str, ...args: any) void {
         write_text(2, s);
@@ -156,11 +168,14 @@ impl Write for Stderr {
 
 // ── stdout convenience ────────────────────────────────────────────────────────
 
+// Writes formatted text to standard output without a newline. `{}` in
+// `s` is replaced by the next argument (`print("{} items", count)`).
 @format
 pub fn print(s: str, ...args: any) void {
     write_text(1, s);
 }
 
+// Writes formatted text and a newline to standard output.
 @format
 pub fn println(s: str, ...args: any) void {
     write_text(1, s);
@@ -169,11 +184,13 @@ pub fn println(s: str, ...args: any) void {
 
 // ── stderr convenience ────────────────────────────────────────────────────────
 
+// Writes formatted text to standard error without a newline.
 @format
 pub fn err(s: str, ...args: any) void {
     write_text(2, s);
 }
 
+// Writes formatted text and a newline to standard error.
 @format
 pub fn errln(s: str, ...args: any) void {
     write_text(2, s);
@@ -182,6 +199,7 @@ pub fn errln(s: str, ...args: any) void {
 
 // ── arbitrary fd ─────────────────────────────────────────────────────────────
 
+// Writes `s` and a newline to the file descriptor `fd`.
 pub fn writeln(fd: i32, s: str) void {
     write_text(fd, s);
     write_text(fd, "\n");
@@ -189,6 +207,8 @@ pub fn writeln(fd: i32, s: str) void {
 
 // ── stdin ─────────────────────────────────────────────────────────────────────
 
+// Why reading standard input failed (`EndOfInput` when the input is
+// closed).
 pub enum ReadError {
     AllocationFailed,
     CapacityOverflow,

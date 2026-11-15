@@ -72,8 +72,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   Linux `memory_available` parses `MemAvailable` from `/proc/meminfo`, including
   reclaimable memory; unreadable or invalid snapshots fall back to the core
   free-RAM counter. The private `os_memory.qz` helper returns only scalar bytes.
-- `std.fs.count_entries` owns and automatically destroys its scan buffer and
-  enumeration handle. It excludes `.` and `..`, uses `getdents64` on Linux and
+- `std.fs.read_dir` owns and automatically destroys its scan buffer and
+  enumeration handle. It returns `Array[DirEntry]` without `.` and `..`, uses
+  `getdents64` on Linux, `opendir`/`readdir` on NetBSD and
   `FindFirstFileA`/`FindNextFile` on Windows, and returns errors instead of
   conflating an unreadable directory with an empty one.
 - `std.os.cpu_name`, `version`, `shell`, and `terminal` expose display-ready

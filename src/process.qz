@@ -8,6 +8,8 @@ import std.core;
 @cfg(target_os = "linux")
 import std.unix;
 
+// Why a process operation failed; each variant carries the native error
+// code (`errno` or Windows error).
 pub enum ProcessError {
     SpawnFailed(i32),
     WaitFailed(i32),
@@ -16,6 +18,7 @@ pub enum ProcessError {
 }
 
 impl ProcessError {
+    // The operating-system error code of the failure.
     pub fn native_code(self: ProcessError) i32 {
         ret match self {
             SpawnFailed(code) => code,
@@ -25,6 +28,7 @@ impl ProcessError {
         };
     }
 
+    // A short English description of the error, for display.
     pub fn message(self: ProcessError) str {
         ret match self {
             SpawnFailed(_) => "could not start child process",
@@ -35,6 +39,8 @@ impl ProcessError {
     }
 }
 
+// How a child process ended: `Code(n)` from its exit status, or
+// `Signal(n)` when a Unix signal killed it.
 pub enum ExitStatus {
     Code(i32),
     Signal(i32),
@@ -122,6 +128,8 @@ impl Child {
         ret Ok(true);
     }
 
+    // The native process handle: the process id on Linux and NetBSD, a
+    // process `HANDLE` on Windows.
     pub fn handle(self: &Child) usize { ret self.handle; }
 }
 
@@ -249,6 +257,8 @@ unsafe fn c_copy(text: str) *u8 {
 // Arguments are passed as given, without a shell. Linux only for now; other
 // targets report SpawnFailed(38) (ENOSYS).
 
+// A program to run, built step by step like a shell command line but without
+// a shell: `process.Command.new("git").arg("status").current_dir(dir).status()`.
 pub struct Command {
     program: String,
     arguments: CStrings,
@@ -261,6 +271,8 @@ pub struct Command {
 }
 
 impl Command {
+    // A command running `program`. A name without `/` is searched in the `PATH`
+    // the child will see; a path is used as it is.
     pub fn new(program: str) Command {
         var arguments = CStrings.new();
         arguments.push(program);
@@ -274,12 +286,14 @@ impl Command {
         }
     }
 
+    // Appends one argument.
     pub fn arg(self: Command, value: str) Command {
         var command = self;
         command.arguments.push(value);
         command
     }
 
+    // Appends every argument of `values`.
     pub fn args(self: Command, values: Array[str]) Command {
         var command = self;
         for index : 0..values.len() {
@@ -306,6 +320,7 @@ impl Command {
         command
     }
 
+    // Removes the variable `name` from the child's environment.
     pub fn env_remove(self: Command, name: str) Command {
         var command = self;
         command.variables.remove_named(name, true);

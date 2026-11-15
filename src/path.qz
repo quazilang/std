@@ -8,6 +8,9 @@
 // also accept `\` and treat `C:\` and `\\server\share` prefixes as absolute.
 // Indexes count Unicode scalars, like every `str` operation.
 
+// A file-system path held as owned UTF-8 text. Its methods split and join
+// paths lexically (without touching the disk); `std.fs` adds file-system
+// queries such as `exists`, `is_dir` and `read_dir`.
 pub struct Path {
     text: String,
 }
@@ -70,8 +73,10 @@ fn last_component_start(text: str, end: usize) usize {
 }
 
 impl Path {
+    // A path holding a copy of `text`.
     pub fn new(text: str) Path { Path { text: String.from(text) } }
 
+    // The path as text.
     pub fn as_str(self: &Path) str { ret self.text.as_str(); }
 
     // An owned copy of the text.

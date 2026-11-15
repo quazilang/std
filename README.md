@@ -32,9 +32,13 @@ or production readiness.
 
 ## Modules Overview
 
+Every public function, type and method is listed with its signature and
+description in the generated [API reference](docs/reference/README.md)
+(`qz doc -o docs/reference`; `scripts/check_reference.py` keeps it current).
+
 - `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
 - `collections`: Fallible, non-panicking `usize` map and set types.
-- `fs`: Cross-platform owned files, whole-file reads, directory iteration (`read_dir`/`DirEntry`), `Path`/`PathBuf`, and metadata operations.
+- `fs`: Cross-platform owned files, whole-file reads, directory listing (`read_dir` returns `Array[DirEntry]`), `Path` methods (`is_dir`, `read_dir`, ...), and metadata operations.
 - `io`: Standard input, output, and error streams handling.
 - `path`: Lexical `Path` manipulation (join, parent, names, extensions, normalize).
 - `json`: Bounded JSON syntax validation and safe JSON string-token encoding.
@@ -149,8 +153,9 @@ fn describe() Result[String, i32] {
 
 Portable system queries include `os.env`, `os.name`, `os.hostname`,
 `os.version`, `os.cpu_name`, `os.shell`, `os.terminal`, `os.memory_total`, and
-`os.memory_available`. `fs.count_entries` counts immediate non-dot directory
-entries with `getdents64` or Win32 enumeration handles. On Linux these APIs are
+`os.memory_available`. `fs.read_dir` lists immediate non-dot directory
+entries (`fs.read_dir(path)?.len()` counts them) with `getdents64`, NetBSD
+`readdir` or Win32 enumeration handles. On Linux these APIs are
 backed by kernel state and syscalls; on Windows they use CPUID, shared kernel
 release data, process snapshots, and Win32. They do not execute shell commands
 and do not require callers to manually free returned `String` values.
