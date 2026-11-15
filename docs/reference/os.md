@@ -27,7 +27,7 @@ runtime. An argument that is not valid UTF-8 reports InvalidData.
 pub fn exit(code: i32) void
 ```
 
-_Undocumented._
+Ends the process now with status `code`; destructors do not run.
 
 ### `sleep`
 
@@ -121,7 +121,8 @@ are checked first, then the parent-process chain is inspected directly.
 pub fn terminal() String
 ```
 
-_Undocumented._
+The terminal: `TERM` on Linux and NetBSD, the console host on Windows,
+`unknown` when it cannot be detected.
 
 ### `hostname`
 
@@ -148,7 +149,8 @@ Windows reports MEMORYSTATUSEX.available_physical.
 pub fn memory_available() u64
 ```
 
-_Undocumented._
+Memory in bytes that can be allocated without swapping (Linux
+`MemAvailable`, Windows available physical memory).
 
 ### `current_dir`
 

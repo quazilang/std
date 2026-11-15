@@ -3,6 +3,7 @@
 // dynamic value tree; typed decoding is supplied by derived codecs later.
 import std.core;
 
+// Why JSON validation or decoding failed.
 pub enum JsonError {
     InputLimit,
     DepthLimit,
@@ -18,6 +19,7 @@ pub enum JsonError {
 }
 
 impl JsonError {
+    // A short English description of the error, for display.
     pub fn message(self: JsonError) str {
         ret match self {
             InputLimit => "JSON input exceeds the configured byte limit",
@@ -168,6 +170,8 @@ impl Parser {
     }
 }
 
+// Checks that `source` is valid JSON no longer than `max_input` bytes and
+// no deeper than `max_depth`.
 pub fn validate_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, JsonError] {
     if (source.bytes_len() > max_input) { ret Err(JsonError.InputLimit); }
     var parser: Parser = Parser { source: source, offset: 0, max_depth: max_depth };
@@ -178,6 +182,7 @@ pub fn validate_with_limits(source: str, max_input: usize, max_depth: usize) Res
     ret Ok(true);
 }
 
+// Checks that `source` is valid JSON (default size and depth limits).
 pub fn validate(source: str) Result[bool, JsonError] { ret validate_with_limits(source, 1048576, 64); }
 
 // Encode a valid UTF-8 string as one JSON string token. Non-ASCII scalars are
@@ -217,6 +222,7 @@ pub fn quote(value: str) String {
     ret output;
 }
 
+// The JSON text of `value` (`true` or `false`).
 pub fn boolean(value: bool) str { if (value) { ret "true"; } ret "false"; }
 
 // Return the JSON null literal without allocating an owned string.
@@ -359,6 +365,7 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
     ret Ok(result);
 }
 
+// The text of a JSON string literal, with escapes decoded.
 pub fn decode_string(source: str) Result[String, JsonError] { ret decode_string_with_limits(source, 1048576, 64); }
 
 // Return the raw JSON value for one object key. The returned token is validated
@@ -404,6 +411,8 @@ pub fn object_field_with_limits(source: str, key: str, max_input: usize, max_dep
     ret Ok(found);
 }
 
+// The raw JSON text of field `key` in the object `source`, or `None` when
+// the object has no such field.
 pub fn object_field(source: str, key: str) Result[Option[String], JsonError] {
     ret object_field_with_limits(source, key, 1048576, 64);
 }

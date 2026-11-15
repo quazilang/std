@@ -17,7 +17,8 @@ dynamic value tree; typed decoding is supplied by derived codecs later.
 pub fn validate_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, JsonError]
 ```
 
-_Undocumented._
+Checks that `source` is valid JSON no longer than `max_input` bytes and
+no deeper than `max_depth`.
 
 ### `validate`
 
@@ -25,7 +26,7 @@ _Undocumented._
 pub fn validate(source: str) Result[bool, JsonError]
 ```
 
-_Undocumented._
+Checks that `source` is valid JSON (default size and depth limits).
 
 ### `quote`
 
@@ -43,7 +44,7 @@ ensures their byte boundaries are safe to preserve.
 pub fn boolean(value: bool) str
 ```
 
-_Undocumented._
+The JSON text of `value` (`true` or `false`).
 
 ### `null`
 
@@ -88,7 +89,7 @@ Decode exactly one JSON string token after validating its syntax and limits.
 pub fn decode_string(source: str) Result[String, JsonError]
 ```
 
-_Undocumented._
+The text of a JSON string literal, with escapes decoded.
 
 ### `object_field_with_limits`
 
@@ -106,7 +107,8 @@ rejected instead of selecting an implementation-defined winner.
 pub fn object_field(source: str, key: str) Result[Option[String], JsonError]
 ```
 
-_Undocumented._
+The raw JSON text of field `key` in the object `source`, or `None` when
+the object has no such field.
 
 ## `JsonError`
 
@@ -126,7 +128,7 @@ pub enum JsonError {
 }
 ```
 
-_Undocumented._
+Why JSON validation or decoding failed.
 
 ### `JsonError.message`
 
@@ -134,4 +136,4 @@ _Undocumented._
 pub fn message(self: JsonError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.

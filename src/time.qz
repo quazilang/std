@@ -15,9 +15,11 @@ import std.netbsd;
 @cfg(target_os="windows")
 import std.win32_core;
 
+// Why a clock or time conversion failed.
 pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, }
 
 impl TimeError {
+    // A short English description of the error, for display.
     pub fn message(self: TimeError) str {
         ret match self {
             ClockUnavailable => "clock is unavailable",
@@ -28,14 +30,18 @@ impl TimeError {
     }
 }
 
+// A span of time with nanosecond precision (seconds plus nanoseconds),
+// never negative.
 pub struct Duration {
     seconds: u64,
     nanoseconds: u32,
 }
 
 impl Duration {
+    // A duration of length zero.
     pub fn zero() Duration { ret Duration { seconds: 0, nanoseconds: 0 }; }
 
+    // A duration of `nanoseconds` nanoseconds.
     pub fn from_nanoseconds(nanoseconds: u64) Duration {
         ret Duration {
             seconds: nanoseconds / 1000000000,
@@ -43,6 +49,7 @@ impl Duration {
         };
     }
 
+    // A duration of `microseconds` microseconds.
     pub fn from_microseconds(microseconds: u64) Duration {
         ret Duration {
             seconds: microseconds / 1000000,
@@ -50,6 +57,7 @@ impl Duration {
         };
     }
 
+    // A duration of `milliseconds` milliseconds.
     pub fn from_milliseconds(milliseconds: u64) Duration {
         ret Duration {
             seconds: milliseconds / 1000,
@@ -57,6 +65,7 @@ impl Duration {
         };
     }
 
+    // A duration of `seconds` seconds.
     pub fn from_seconds(seconds: u64) Duration {
         ret Duration { seconds: seconds, nanoseconds: 0 };
     }
@@ -68,6 +77,7 @@ impl Duration {
         ret Some(Duration { seconds: minutes * 60, nanoseconds: 0 });
     }
 
+    // A duration of `hours` hours, or `None` when it does not fit.
     pub fn from_hours(hours: u64) Option[Duration] {
         if (hours > 18446744073709551615 / 3600) { ret None; }
         ret Some(Duration { seconds: hours * 3600, nanoseconds: 0 });
@@ -78,9 +88,12 @@ impl Duration {
         ret __compare_parts(self.seconds as i64, self.nanoseconds, other.seconds as i64, other.nanoseconds, false);
     }
 
+    // The whole seconds of the duration.
     pub fn seconds(self: &Duration) u64 { ret self.seconds; }
+    // The nanoseconds beyond the whole seconds (0..=999999999).
     pub fn subsec_nanoseconds(self: &Duration) u32 { ret self.nanoseconds; }
 
+    // The sum, or `None` on overflow.
     pub fn checked_add(self: &Duration, other: Duration) Option[Duration] {
         var seconds: u64 = self.seconds.wrapping_add(other.seconds);
         if seconds < self.seconds { ret None; }
@@ -93,6 +106,7 @@ impl Duration {
         ret Some(Duration { seconds: seconds, nanoseconds: nanoseconds });
     }
 
+    // The difference, or `None` when `other` is longer.
     pub fn checked_sub(self: &Duration, other: Duration) Option[Duration] {
         if self.seconds < other.seconds { ret None; }
         if self.seconds == other.seconds && self.nanoseconds < other.nanoseconds { ret None; }
@@ -106,12 +120,15 @@ impl Duration {
     }
 }
 
+// A point on the monotonic clock, for measuring elapsed time; it never
+// goes backwards and has no relation to the calendar.
 pub struct Instant {
     seconds: u64,
     nanoseconds: u32,
 }
 
 impl Instant {
+    // The current monotonic time.
     @cfg(target_os="linux")
     pub fn now() Result[Instant, TimeError] {
         var raw: *u8 = 0;
@@ -139,6 +156,7 @@ impl Instant {
         });
     }
 
+    // The current monotonic time.
     @cfg(target_os="netbsd")
     pub fn now() Result[Instant, TimeError] {
         var raw: *u8 = 0;
@@ -163,6 +181,7 @@ impl Instant {
         ret Ok(Instant { seconds: seconds as u64, nanoseconds: nanoseconds as u32 });
     }
 
+    // The current monotonic time.
     @cfg(target_os="windows")
     pub fn now() Result[Instant, TimeError] {
         var milliseconds: u64 = 0;
@@ -173,6 +192,8 @@ impl Instant {
         });
     }
 
+    // The time from `earlier` to this instant; `ClockWentBackwards` when
+    // `earlier` is later.
     pub fn duration_since(self: Instant, earlier: Instant) Result[Duration, TimeError] {
         if self.seconds < earlier.seconds {
             ret Err(TimeError.ClockWentBackwards);
@@ -203,6 +224,7 @@ impl Instant {
         __compare_parts(self.seconds as i64, self.nanoseconds, other.seconds as i64, other.nanoseconds, false)
     }
 
+    // The time since this instant.
     pub fn elapsed(self: Instant) Result[Duration, TimeError] {
         var current: Instant = Instant.now()?;
         ret current.duration_since(self);
@@ -310,6 +332,7 @@ pub struct Deadline {
 }
 
 impl Deadline {
+    // A deadline at the monotonic `instant`.
     pub fn at(instant: Instant) Deadline { Deadline { at: instant } }
 
     // The deadline `duration` from now; OutOfRange if it cannot be represented.
@@ -326,6 +349,7 @@ impl Deadline {
         Ok(self.remaining_at(&now))
     }
 
+    // Whether the deadline has passed.
     pub fn has_expired(self: &Deadline) Result[bool, TimeError] {
         const left: Duration = self.remaining()?;
         Ok(left.seconds == 0 && left.nanoseconds == 0)
@@ -402,8 +426,10 @@ impl SystemTime {
         Some(SystemTime { seconds: seconds, nanoseconds: nanoseconds })
     }
 
+    // 1970-01-01T00:00:00Z.
     pub fn unix_epoch() SystemTime { SystemTime { seconds: 0, nanoseconds: 0 } }
 
+    // The current wall-clock time (it can jump when the clock is set).
     @cfg(target_os="linux")
     pub fn now() Result[SystemTime, TimeError] {
         var raw: *u8 = 0;
@@ -421,6 +447,7 @@ impl SystemTime {
         ret __system_time_from_clock(status, seconds, nanoseconds);
     }
 
+    // The current wall-clock time (it can jump when the clock is set).
     @cfg(target_os="netbsd")
     pub fn now() Result[SystemTime, TimeError] {
         var raw: *u8 = 0;
@@ -438,6 +465,7 @@ impl SystemTime {
         ret __system_time_from_clock(status, seconds, nanoseconds);
     }
 
+    // The current wall-clock time (it can jump when the clock is set).
     @cfg(target_os="windows")
     pub fn now() Result[SystemTime, TimeError] {
         var raw: *u8 = 0;
@@ -455,7 +483,9 @@ impl SystemTime {
         ret __system_time_from_clock(0, seconds, nanoseconds);
     }
 
+    // Whole seconds since the Unix epoch (negative before 1970).
     pub fn unix_seconds(self: &SystemTime) i64 { self.seconds }
+    // The nanoseconds beyond `unix_seconds`.
     pub fn subsec_nanoseconds(self: &SystemTime) u32 { self.nanoseconds }
 
     // -1, 0 or 1 as `self` is earlier than, equal to or later than `other`.
@@ -487,6 +517,7 @@ impl SystemTime {
         SystemTime.from_unix(seconds, nanoseconds)
     }
 
+    // This time minus `duration`, or `None` when out of range.
     pub fn checked_sub(self: &SystemTime, duration: Duration) Option[SystemTime] {
         if (duration.seconds > (__max_unix_seconds() - __min_unix_seconds()) as u64) { ret None; }
         var seconds: i64 = self.seconds - (duration.seconds as i64);
@@ -679,6 +710,7 @@ pub struct UtcOffset {
 }
 
 impl UtcOffset {
+    // The zero offset (UTC).
     pub fn utc() UtcOffset { UtcOffset { seconds: 0 } }
 
     // `hours` carries the sign; `minutes` is 0-59 (e.g. (-5, 30) is -05:30).
@@ -715,12 +747,19 @@ impl DateTime {
         })
     }
 
+    // The calendar year.
     pub fn year(self: &DateTime) i32 { self.year }
+    // The month, 1..=12.
     pub fn month(self: &DateTime) u32 { self.month }
+    // The day of the month, 1..=31.
     pub fn day(self: &DateTime) u32 { self.day }
+    // The hour, 0..=23.
     pub fn hour(self: &DateTime) u32 { self.hour }
+    // The minute, 0..=59.
     pub fn minute(self: &DateTime) u32 { self.minute }
+    // The second, 0..=59.
     pub fn second(self: &DateTime) u32 { self.second }
+    // The nanoseconds within the second.
     pub fn nanosecond(self: &DateTime) u32 { self.nanosecond }
 
     // ISO weekday: 1 = Monday ... 7 = Sunday.
@@ -730,12 +769,14 @@ impl DateTime {
         (((days % 7) + 7 + 3) % 7 + 1) as u32
     }
 
+    // The same moment as a `SystemTime`.
     pub fn to_system_time(self: &DateTime) SystemTime {
         const days: i64 = __days_from_civil(self.year as i64, self.month, self.day);
         const seconds: i64 = days * 86400 + (self.hour as i64) * 3600 + (self.minute as i64) * 60 + (self.second as i64);
         SystemTime { seconds: seconds, nanoseconds: self.nanosecond }
     }
 
+    // RFC 3339 text such as `2026-11-08T09:05:00Z`.
     pub fn format_rfc3339(self: &DateTime) String {
         var output: String = String.new();
         output = __push_padded(output, self.year as i64, 4);

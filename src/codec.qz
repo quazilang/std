@@ -4,6 +4,7 @@ import std.json;
 import std.json.JsonError;
 import std.time.SystemTime;
 
+// Why a value could not be encoded.
 pub enum EncodeError {
     UnsupportedType,
     OutputLimit,
@@ -12,6 +13,7 @@ pub enum EncodeError {
 }
 
 impl EncodeError {
+    // A short English description of the error, for display.
     pub fn message(self: EncodeError) str {
         ret match self {
             UnsupportedType => "this value has no supported wire encoding",
@@ -22,6 +24,7 @@ impl EncodeError {
     }
 }
 
+// Why decoding failed.
 pub enum DecodeError {
     InputLimit,
     DepthLimit,
@@ -34,6 +37,7 @@ pub enum DecodeError {
 }
 
 impl DecodeError {
+    // A short English description of the error, for display.
     pub fn message(self: DecodeError) str {
         ret match self {
             InputLimit => "serialized input exceeds the configured byte limit",
@@ -57,6 +61,7 @@ pub trait Serialize {
 // Quazi traits currently require a receiver, so typed decode starts as explicit
 // free functions. A static Deserialize trait needs receiverless trait methods.
 impl Serialize for bool {
+    // The JSON text of the value.
     pub fn to_json(self: bool) Result[String, EncodeError] {
         ret Ok(String.from(json.boolean(self)));
     }
@@ -66,6 +71,7 @@ impl Serialize for bool {
 // integer contract at i64 matches decode_i64 and avoids silently promising
 // lossy float or platform-width integer behavior to generated derives.
 impl Serialize for i64 {
+    // The JSON text of the value.
     pub fn to_json(self: i64) Result[String, EncodeError] {
         ret Ok(self.to_string());
     }
@@ -111,6 +117,7 @@ fn decode_validation_error(error: JsonError) DecodeError {
     };
 }
 
+// Decodes a JSON boolean, with input size and nesting limits.
 pub fn decode_bool_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, DecodeError] {
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
@@ -123,20 +130,24 @@ pub fn decode_bool_with_limits(source: str, max_input: usize, max_depth: usize) 
     ret Err(DecodeError.TypeMismatch);
 }
 
+// Decodes a JSON boolean.
 pub fn decode_bool(source: str) Result[bool, DecodeError] {
     ret decode_bool_with_limits(source, 1048576, 64);
 }
 
+// Decodes a JSON string, with input size and nesting limits.
 pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, DecodeError] {
     const decoded: Result[String, JsonError] = json.decode_string_with_limits(source, max_input, max_depth);
     if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
     ret Ok(decoded.unwrap());
 }
 
+// Decodes a JSON string.
 pub fn decode_string(source: str) Result[String, DecodeError] {
     ret decode_string_with_limits(source, 1048576, 64);
 }
 
+// Decodes a JSON integer as `i64`, with input size and nesting limits.
 pub fn decode_i64_with_limits(source: str, max_input: usize, max_depth: usize) Result[i64, DecodeError] {
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
@@ -150,13 +161,16 @@ pub fn decode_i64_with_limits(source: str, max_input: usize, max_depth: usize) R
     ret Ok(parsed.unwrap());
 }
 
+// Decodes a JSON integer as `i64`.
 pub fn decode_i64(source: str) Result[i64, DecodeError] { ret decode_i64_with_limits(source, 1048576, 64); }
 
 impl Serialize for str {
+    // The JSON string literal of the text, with escapes.
     pub fn to_json(self: str) Result[String, EncodeError] { ret Ok(json.quote(self)); }
 }
 
 impl Serialize for String {
+    // The JSON string literal of the text, with escapes.
     pub fn to_json(self: String) Result[String, EncodeError] {
         ret Ok(json.quote(self.as_str()));
     }
@@ -165,6 +179,7 @@ impl Serialize for String {
 // A timestamp serializes as an RFC 3339 UTC JSON string, e.g.
 // "2000-02-29T12:34:56Z"; fractions keep nine digits when nonzero.
 impl Serialize for SystemTime {
+    // The time as a JSON string in RFC 3339 format.
     pub fn to_json(self: SystemTime) Result[String, EncodeError] {
         const text: String = self.format_rfc3339();
         Ok(json.quote(text.as_str()))

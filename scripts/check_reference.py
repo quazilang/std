@@ -13,7 +13,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-COMPLETE = {"fs.md", "path.md", "process.md", "io.md"}
+COMPLETE = {"fs.md", "path.md", "process.md", "io.md", "time.md", "random.md", "os.md",
+            "json.md", "codec.md", "ini.md"}
 
 
 def main():

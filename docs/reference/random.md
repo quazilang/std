@@ -19,7 +19,7 @@ uses rejection sampling, never modulo bias.
 pub fn next_u64() Result[u64, RandomError]
 ```
 
-_Undocumented._
+A uniformly random `u64` from the operating system's secure generator.
 
 ### `next_u32`
 
@@ -27,7 +27,7 @@ _Undocumented._
 pub fn next_u32() Result[u32, RandomError]
 ```
 
-_Undocumented._
+A uniformly random `u32`.
 
 ### `next_u8`
 
@@ -35,7 +35,7 @@ _Undocumented._
 pub fn next_u8() Result[u8, RandomError]
 ```
 
-_Undocumented._
+A uniformly random `u8`.
 
 ### `next_i64`
 
@@ -43,7 +43,7 @@ _Undocumented._
 pub fn next_i64() Result[i64, RandomError]
 ```
 
-_Undocumented._
+A uniformly random `i64`.
 
 ### `next_i32`
 
@@ -51,7 +51,7 @@ _Undocumented._
 pub fn next_i32() Result[i32, RandomError]
 ```
 
-_Undocumented._
+A uniformly random `i32`.
 
 ### `boolean`
 
@@ -59,7 +59,7 @@ _Undocumented._
 pub fn boolean() Result[bool, RandomError]
 ```
 
-_Undocumented._
+`true` or `false` with equal probability.
 
 ### `float`
 
@@ -75,7 +75,8 @@ Uniform f64 in [0.0, 1.0), using 53 random mantissa bits.
 pub fn chance(probability: f64) Result[bool, RandomError]
 ```
 
-_Undocumented._
+`true` with the given probability (0.0..=1.0); `InvalidProbability`
+otherwise.
 
 ### `range`
 
@@ -91,7 +92,8 @@ Uniform integer from an exclusive (`a..b`) or inclusive (`a..=b`) Range.
 pub fn choose[T](items: Array[T]) Result[T, RandomError]
 ```
 
-_Undocumented._
+One element of `items`, chosen uniformly; `EmptyCollection` for an empty
+array.
 
 ### `shuffle`
 
@@ -108,7 +110,7 @@ collection and returns it for convenient chaining.
 pub fn random_bytes(count: usize) Result[Array[u8], RandomError]
 ```
 
-_Undocumented._
+`count` secure random bytes.
 
 ## `RandomError`
 
@@ -121,7 +123,7 @@ pub enum RandomError {
 }
 ```
 
-_Undocumented._
+Why random generation failed.
 
 ### `RandomError.message`
 
@@ -129,4 +131,4 @@ _Undocumented._
 pub fn message(self: RandomError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.

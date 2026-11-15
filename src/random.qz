@@ -10,6 +10,7 @@ unsafe fn __system_u64(output: *u64) bool;
 @intrinsic("quazi.random.system_f64")
 unsafe fn __system_f64(output: *f64) bool;
 
+// Why random generation failed.
 pub enum RandomError {
     Unavailable,
     InvalidRange,
@@ -18,6 +19,7 @@ pub enum RandomError {
 }
 
 impl RandomError {
+    // A short English description of the error, for display.
     pub fn message(self: RandomError) str {
         ret match self {
             RandomError.Unavailable => "secure system random is unavailable",
@@ -28,6 +30,7 @@ impl RandomError {
     }
 }
 
+// A uniformly random `u64` from the operating system's secure generator.
 pub fn next_u64() Result[u64, RandomError] {
     var value: u64 = 0;
     var available: bool = false;
@@ -36,22 +39,27 @@ pub fn next_u64() Result[u64, RandomError] {
     ret Ok(value);
 }
 
+// A uniformly random `u32`.
 pub fn next_u32() Result[u32, RandomError] {
     ret Ok((next_u64()? >> 32) as u32);
 }
 
+// A uniformly random `u8`.
 pub fn next_u8() Result[u8, RandomError] {
     ret Ok(next_u64()? as u8);
 }
 
+// A uniformly random `i64`.
 pub fn next_i64() Result[i64, RandomError] {
     ret Ok(next_u64()? as i64);
 }
 
+// A uniformly random `i32`.
 pub fn next_i32() Result[i32, RandomError] {
     ret Ok(next_u64()? as i32);
 }
 
+// `true` or `false` with equal probability.
 pub fn boolean() Result[bool, RandomError] {
     ret Ok((next_u64()? & 1) == 1);
 }
@@ -65,6 +73,8 @@ pub fn float() Result[f64, RandomError] {
     ret Ok(value);
 }
 
+// `true` with the given probability (0.0..=1.0); `InvalidProbability`
+// otherwise.
 pub fn chance(probability: f64) Result[bool, RandomError] {
     if (probability < 0.0 || probability > 1.0) {
         ret Err(RandomError.InvalidProbability);
@@ -97,6 +107,8 @@ pub fn range(bounds: Range) Result[i64, RandomError] {
     ret Ok((selected ^ sign_bit) as i64);
 }
 
+// One element of `items`, chosen uniformly; `EmptyCollection` for an empty
+// array.
 pub fn choose[T](items: Array[T]) Result[T, RandomError] {
     if (items.is_empty()) { ret Err(RandomError.EmptyCollection); }
     const index: usize = range(0..(items.len() as i64))? as usize;
@@ -119,6 +131,7 @@ pub fn shuffle[T](items: Array[T]) Result[Array[T], RandomError] {
     ret Ok(items);
 }
 
+// `count` secure random bytes.
 pub fn random_bytes(count: usize) Result[Array[u8], RandomError] {
     var output: Array[u8] = Array.new() as Array[u8];
     var index: usize = 0;

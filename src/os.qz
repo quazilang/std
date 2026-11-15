@@ -217,6 +217,7 @@ pub fn args() Result[Array[String], fs.FsError] {
     Err(FsError.Unsupported)
 }
 
+// Ends the process now with status `code`; destructors do not run.
 pub fn exit(code: i32) void {
     core.exit(code);
 }
@@ -405,6 +406,8 @@ pub fn shell() String {
     ret String.from("unknown");
 }
 
+// The terminal: `TERM` on Linux and NetBSD, the console host on Windows,
+// `unknown` when it cannot be detected.
 pub fn terminal() String {
     @cfg(target_os = "windows") {
         const session: String = env("WT_SESSION", "");
@@ -437,6 +440,8 @@ pub fn hostname() String {
 // memory through MemAvailable, falling back to sysinfo.free_ram without procfs.
 // Windows reports MEMORYSTATUSEX.available_physical.
 pub fn memory_total() u64 { ret core.memory_total(); }
+// Memory in bytes that can be allocated without swapping (Linux
+// `MemAvailable`, Windows available physical memory).
 pub fn memory_available() u64 {
     @cfg(target_os = "linux") {
         const read: Result[String, fs.FsError] = fs.read_to_string("/proc/meminfo");

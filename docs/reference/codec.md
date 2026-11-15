@@ -32,7 +32,7 @@ JsonError in their public Result type.
 pub fn decode_bool_with_limits(source: str, max_input: usize, max_depth: usize) Result[bool, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON boolean, with input size and nesting limits.
 
 ### `decode_bool`
 
@@ -40,7 +40,7 @@ _Undocumented._
 pub fn decode_bool(source: str) Result[bool, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON boolean.
 
 ### `decode_string_with_limits`
 
@@ -48,7 +48,7 @@ _Undocumented._
 pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON string, with input size and nesting limits.
 
 ### `decode_string`
 
@@ -56,7 +56,7 @@ _Undocumented._
 pub fn decode_string(source: str) Result[String, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON string.
 
 ### `decode_i64_with_limits`
 
@@ -64,7 +64,7 @@ _Undocumented._
 pub fn decode_i64_with_limits(source: str, max_input: usize, max_depth: usize) Result[i64, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON integer as `i64`, with input size and nesting limits.
 
 ### `decode_i64`
 
@@ -72,7 +72,7 @@ _Undocumented._
 pub fn decode_i64(source: str) Result[i64, DecodeError]
 ```
 
-_Undocumented._
+Decodes a JSON integer as `i64`.
 
 ### `decode_system_time`
 
@@ -95,7 +95,7 @@ pub enum EncodeError {
 }
 ```
 
-_Undocumented._
+Why a value could not be encoded.
 
 ### `EncodeError.message`
 
@@ -103,7 +103,7 @@ _Undocumented._
 pub fn message(self: EncodeError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.
 
 ## `DecodeError`
 
@@ -120,7 +120,7 @@ pub enum DecodeError {
 }
 ```
 
-_Undocumented._
+Why decoding failed.
 
 ### `DecodeError.message`
 
@@ -128,7 +128,7 @@ _Undocumented._
 pub fn message(self: DecodeError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.
 
 ## `Serialize`
 
@@ -149,7 +149,7 @@ implement this trait for supported non-generic structs.
 pub fn to_json(self: bool) Result[String, EncodeError]
 ```
 
-_Undocumented._
+The JSON text of the value.
 
 ## `i64`
 
@@ -159,7 +159,7 @@ _Undocumented._
 pub fn to_json(self: i64) Result[String, EncodeError]
 ```
 
-_Undocumented._
+The JSON text of the value.
 
 ## `str`
 
@@ -169,7 +169,7 @@ _Undocumented._
 pub fn to_json(self: str) Result[String, EncodeError]
 ```
 
-_Undocumented._
+The JSON string literal of the text, with escapes.
 
 ## `String`
 
@@ -179,7 +179,7 @@ _Undocumented._
 pub fn to_json(self: String) Result[String, EncodeError]
 ```
 
-_Undocumented._
+The JSON string literal of the text, with escapes.
 
 ## `SystemTime`
 
@@ -189,4 +189,4 @@ _Undocumented._
 pub fn to_json(self: SystemTime) Result[String, EncodeError]
 ```
 
-_Undocumented._
+The time as a JSON string in RFC 3339 format.

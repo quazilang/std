@@ -38,7 +38,7 @@ milliseconds (the platform sleep granularity); saturates at u64::MAX ms.
 pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, }
 ```
 
-_Undocumented._
+Why a clock or time conversion failed.
 
 ### `TimeError.message`
 
@@ -46,7 +46,7 @@ _Undocumented._
 pub fn message(self: TimeError) str
 ```
 
-_Undocumented._
+A short English description of the error, for display.
 
 ## `Duration`
 
@@ -54,7 +54,8 @@ _Undocumented._
 pub struct Duration { /* internal fields */ }
 ```
 
-_Undocumented._
+A span of time with nanosecond precision (seconds plus nanoseconds),
+never negative.
 
 ### `Duration.zero`
 
@@ -62,7 +63,7 @@ _Undocumented._
 pub fn zero() Duration
 ```
 
-_Undocumented._
+A duration of length zero.
 
 ### `Duration.from_nanoseconds`
 
@@ -70,7 +71,7 @@ _Undocumented._
 pub fn from_nanoseconds(nanoseconds: u64) Duration
 ```
 
-_Undocumented._
+A duration of `nanoseconds` nanoseconds.
 
 ### `Duration.from_microseconds`
 
@@ -78,7 +79,7 @@ _Undocumented._
 pub fn from_microseconds(microseconds: u64) Duration
 ```
 
-_Undocumented._
+A duration of `microseconds` microseconds.
 
 ### `Duration.from_milliseconds`
 
@@ -86,7 +87,7 @@ _Undocumented._
 pub fn from_milliseconds(milliseconds: u64) Duration
 ```
 
-_Undocumented._
+A duration of `milliseconds` milliseconds.
 
 ### `Duration.from_seconds`
 
@@ -94,7 +95,7 @@ _Undocumented._
 pub fn from_seconds(seconds: u64) Duration
 ```
 
-_Undocumented._
+A duration of `seconds` seconds.
 
 ### `Duration.from_minutes`
 
@@ -111,7 +112,7 @@ Days and longer calendar units are deliberately absent.
 pub fn from_hours(hours: u64) Option[Duration]
 ```
 
-_Undocumented._
+A duration of `hours` hours, or `None` when it does not fit.
 
 ### `Duration.compare`
 
@@ -127,7 +128,7 @@ pub fn compare(self: &Duration, other: &Duration) i32
 pub fn seconds(self: &Duration) u64
 ```
 
-_Undocumented._
+The whole seconds of the duration.
 
 ### `Duration.subsec_nanoseconds`
 
@@ -135,7 +136,7 @@ _Undocumented._
 pub fn subsec_nanoseconds(self: &Duration) u32
 ```
 
-_Undocumented._
+The nanoseconds beyond the whole seconds (0..=999999999).
 
 ### `Duration.checked_add`
 
@@ -143,7 +144,7 @@ _Undocumented._
 pub fn checked_add(self: &Duration, other: Duration) Option[Duration]
 ```
 
-_Undocumented._
+The sum, or `None` on overflow.
 
 ### `Duration.checked_sub`
 
@@ -151,7 +152,7 @@ _Undocumented._
 pub fn checked_sub(self: &Duration, other: Duration) Option[Duration]
 ```
 
-_Undocumented._
+The difference, or `None` when `other` is longer.
 
 ## `Instant`
 
@@ -159,7 +160,8 @@ _Undocumented._
 pub struct Instant { /* internal fields */ }
 ```
 
-_Undocumented._
+A point on the monotonic clock, for measuring elapsed time; it never
+goes backwards and has no relation to the calendar.
 
 ### `Instant.now`
 
@@ -167,7 +169,7 @@ _Undocumented._
 pub fn now() Result[Instant, TimeError]
 ```
 
-_Undocumented._
+The current monotonic time.
 
 ### `Instant.now`
 
@@ -175,7 +177,7 @@ _Undocumented._
 pub fn now() Result[Instant, TimeError]
 ```
 
-_Undocumented._
+The current monotonic time.
 
 ### `Instant.now`
 
@@ -183,7 +185,7 @@ _Undocumented._
 pub fn now() Result[Instant, TimeError]
 ```
 
-_Undocumented._
+The current monotonic time.
 
 ### `Instant.duration_since`
 
@@ -191,7 +193,8 @@ _Undocumented._
 pub fn duration_since(self: Instant, earlier: Instant) Result[Duration, TimeError]
 ```
 
-_Undocumented._
+The time from `earlier` to this instant; `ClockWentBackwards` when
+`earlier` is later.
 
 ### `Instant.checked_add`
 
@@ -215,7 +218,7 @@ pub fn compare(self: &Instant, other: &Instant) i32
 pub fn elapsed(self: Instant) Result[Duration, TimeError]
 ```
 
-_Undocumented._
+The time since this instant.
 
 ## `Interval`
 
@@ -283,7 +286,7 @@ A point on the monotonic clock by which an operation should finish.
 pub fn at(instant: Instant) Deadline
 ```
 
-_Undocumented._
+A deadline at the monotonic `instant`.
 
 ### `Deadline.after`
 
@@ -307,7 +310,7 @@ Time left before the deadline, or zero once it has passed.
 pub fn has_expired(self: &Deadline) Result[bool, TimeError]
 ```
 
-_Undocumented._
+Whether the deadline has passed.
 
 ### `Deadline.remaining_at`
 
@@ -339,7 +342,7 @@ None unless `nanoseconds < 1_000_000_000` and the time is in years 0001-9999.
 pub fn unix_epoch() SystemTime
 ```
 
-_Undocumented._
+1970-01-01T00:00:00Z.
 
 ### `SystemTime.now`
 
@@ -347,7 +350,7 @@ _Undocumented._
 pub fn now() Result[SystemTime, TimeError]
 ```
 
-_Undocumented._
+The current wall-clock time (it can jump when the clock is set).
 
 ### `SystemTime.now`
 
@@ -355,7 +358,7 @@ _Undocumented._
 pub fn now() Result[SystemTime, TimeError]
 ```
 
-_Undocumented._
+The current wall-clock time (it can jump when the clock is set).
 
 ### `SystemTime.now`
 
@@ -363,7 +366,7 @@ _Undocumented._
 pub fn now() Result[SystemTime, TimeError]
 ```
 
-_Undocumented._
+The current wall-clock time (it can jump when the clock is set).
 
 ### `SystemTime.unix_seconds`
 
@@ -371,7 +374,7 @@ _Undocumented._
 pub fn unix_seconds(self: &SystemTime) i64
 ```
 
-_Undocumented._
+Whole seconds since the Unix epoch (negative before 1970).
 
 ### `SystemTime.subsec_nanoseconds`
 
@@ -379,7 +382,7 @@ _Undocumented._
 pub fn subsec_nanoseconds(self: &SystemTime) u32
 ```
 
-_Undocumented._
+The nanoseconds beyond `unix_seconds`.
 
 ### `SystemTime.compare`
 
@@ -411,7 +414,7 @@ None when the result leaves years 0001-9999.
 pub fn checked_sub(self: &SystemTime, duration: Duration) Option[SystemTime]
 ```
 
-_Undocumented._
+This time minus `duration`, or `None` when out of range.
 
 ### `SystemTime.to_utc`
 
@@ -472,7 +475,7 @@ a time zone: it carries no daylight-saving rules.
 pub fn utc() UtcOffset
 ```
 
-_Undocumented._
+The zero offset (UTC).
 
 ### `UtcOffset.from_hours_minutes`
 
@@ -512,7 +515,7 @@ None unless every field is in range for years 0001-9999 (seconds 0-59).
 pub fn year(self: &DateTime) i32
 ```
 
-_Undocumented._
+The calendar year.
 
 ### `DateTime.month`
 
@@ -520,7 +523,7 @@ _Undocumented._
 pub fn month(self: &DateTime) u32
 ```
 
-_Undocumented._
+The month, 1..=12.
 
 ### `DateTime.day`
 
@@ -528,7 +531,7 @@ _Undocumented._
 pub fn day(self: &DateTime) u32
 ```
 
-_Undocumented._
+The day of the month, 1..=31.
 
 ### `DateTime.hour`
 
@@ -536,7 +539,7 @@ _Undocumented._
 pub fn hour(self: &DateTime) u32
 ```
 
-_Undocumented._
+The hour, 0..=23.
 
 ### `DateTime.minute`
 
@@ -544,7 +547,7 @@ _Undocumented._
 pub fn minute(self: &DateTime) u32
 ```
 
-_Undocumented._
+The minute, 0..=59.
 
 ### `DateTime.second`
 
@@ -552,7 +555,7 @@ _Undocumented._
 pub fn second(self: &DateTime) u32
 ```
 
-_Undocumented._
+The second, 0..=59.
 
 ### `DateTime.nanosecond`
 
@@ -560,7 +563,7 @@ _Undocumented._
 pub fn nanosecond(self: &DateTime) u32
 ```
 
-_Undocumented._
+The nanoseconds within the second.
 
 ### `DateTime.weekday`
 
@@ -576,7 +579,7 @@ ISO weekday: 1 = Monday ... 7 = Sunday.
 pub fn to_system_time(self: &DateTime) SystemTime
 ```
 
-_Undocumented._
+The same moment as a `SystemTime`.
 
 ### `DateTime.format_rfc3339`
 
@@ -584,4 +587,4 @@ _Undocumented._
 pub fn format_rfc3339(self: &DateTime) String
 ```
 
-_Undocumented._
+RFC 3339 text such as `2026-11-08T09:05:00Z`.

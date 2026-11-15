@@ -32,7 +32,7 @@ atomic: malformed input never replaces a previously valid document.
 pub fn new() IniDocument
 ```
 
-_Undocumented._
+An empty document.
 
 ### `IniDocument.parse`
 
@@ -40,7 +40,8 @@ _Undocumented._
 pub fn parse(content: str) Result[IniDocument, IniDecodeError]
 ```
 
-_Undocumented._
+A document parsed from INI text (`[section]` headers and `key = value`
+lines; `#` and `;` start comments).
 
 ### `IniDocument.get`
 
@@ -48,7 +49,7 @@ _Undocumented._
 pub fn get(self: &IniDocument, section: str, key: str) Option[String]
 ```
 
-_Undocumented._
+The value of `key` in `section`, or `None`.
 
 ### `IniDocument.contains`
 
@@ -56,7 +57,7 @@ _Undocumented._
 pub fn contains(self: &IniDocument, section: str, key: str) bool
 ```
 
-_Undocumented._
+Whether `section` has `key`.
 
 ### `IniDocument.has_section`
 
@@ -64,7 +65,7 @@ _Undocumented._
 pub fn has_section(self: &IniDocument, section: str) bool
 ```
 
-_Undocumented._
+Whether the document has `section`.
 
 ### `IniDocument.free`
 
@@ -72,7 +73,7 @@ _Undocumented._
 pub fn free(self: IniDocument) void
 ```
 
-_Undocumented._
+Frees the document; called automatically at the end of scope.
 
 ### `IniDocument.parse_string`
 
@@ -80,7 +81,8 @@ _Undocumented._
 pub fn parse_string(self: &IniDocument!, content: str) Result[bool, IniError]
 ```
 
-_Undocumented._
+Replaces the contents with the parsed `content`; on error the previous
+contents stay.
 
 ### `IniDocument.stringify`
 
@@ -88,7 +90,7 @@ _Undocumented._
 pub fn stringify(self: &IniDocument) String
 ```
 
-_Undocumented._
+The document as INI text.
 
 ### `IniDocument.require_string`
 
@@ -96,7 +98,7 @@ _Undocumented._
 pub fn require_string(self: &IniDocument, section: str, key: str) Result[String, IniDecodeError]
 ```
 
-_Undocumented._
+The value of `key` in `section`, or `MissingValue(section, key)`.
 
 ### `IniDocument.require_i32`
 
@@ -104,7 +106,7 @@ _Undocumented._
 pub fn require_i32(self: &IniDocument, section: str, key: str) Result[i32, IniDecodeError]
 ```
 
-_Undocumented._
+The value of `key` parsed as `i32`.
 
 ### `IniDocument.require_u64`
 
@@ -112,7 +114,7 @@ _Undocumented._
 pub fn require_u64(self: &IniDocument, section: str, key: str) Result[u64, IniDecodeError]
 ```
 
-_Undocumented._
+The value of `key` parsed as `u64`.
 
 ### `IniDocument.require_bool`
 
@@ -120,7 +122,7 @@ _Undocumented._
 pub fn require_bool(self: &IniDocument, section: str, key: str) Result[bool, IniDecodeError]
 ```
 
-_Undocumented._
+The value of `key` parsed as `true`/`false`.
 
 ## `IniError`
 
@@ -133,7 +135,7 @@ pub enum IniError {
 }
 ```
 
-_Undocumented._
+Why INI text could not be parsed.
 
 ## `IniDecodeError`
 

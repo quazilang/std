@@ -6,6 +6,7 @@
 // atomic: malformed input never replaces a previously valid document.
 pub struct IniDocument { content: String, }
 
+// Why INI text could not be parsed.
 pub enum IniError {
     EmptySection(usize),
     InvalidSection(usize),
@@ -121,8 +122,11 @@ fn has_section_in(content: str, wanted: str) bool {
 }
 
 impl IniDocument {
+    // An empty document.
     pub fn new() IniDocument { ret IniDocument { content: String.new() }; }
 
+    // A document parsed from INI text (`[section]` headers and `key = value`
+    // lines; `#` and `;` start comments).
     pub fn parse(content: str) Result[IniDocument, IniDecodeError] {
         var document = IniDocument.new();
         const parsed = document.parse_string(content);
@@ -130,20 +134,26 @@ impl IniDocument {
         ret Ok(document);
     }
 
+    // The value of `key` in `section`, or `None`.
     pub fn get(self: &IniDocument, section: str, key: str) Option[String] {
         ret lookup(self.content.as_str(), section, key);
     }
 
+    // Whether `section` has `key`.
     pub fn contains(self: &IniDocument, section: str, key: str) bool {
         ret self.get(section, key).is_some();
     }
 
+    // Whether the document has `section`.
     pub fn has_section(self: &IniDocument, section: str) bool {
         ret has_section_in(self.content.as_str(), section);
     }
 
+    // Frees the document; called automatically at the end of scope.
     pub fn free(self: IniDocument) void { self.content.free(); self.content = String.new(); }
 
+    // Replaces the contents with the parsed `content`; on error the previous
+    // contents stay.
     pub fn parse_string(self: &IniDocument!, content: str) Result[bool, IniError] {
         const checked = validate(content);
         if checked.is_err() { ret Err(checked.unwrap_err()); }
@@ -152,14 +162,17 @@ impl IniDocument {
         ret Ok(true);
     }
 
+    // The document as INI text.
     pub fn stringify(self: &IniDocument) String { ret String.from(self.content.as_str()); }
 
+    // The value of `key` in `section`, or `MissingValue(section, key)`.
     pub fn require_string(self: &IniDocument, section: str, key: str) Result[String, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
         ret Ok(value.unwrap());
     }
 
+    // The value of `key` parsed as `i32`.
     pub fn require_i32(self: &IniDocument, section: str, key: str) Result[i32, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
@@ -169,6 +182,7 @@ impl IniDocument {
         ret Ok(parsed.unwrap());
     }
 
+    // The value of `key` parsed as `u64`.
     pub fn require_u64(self: &IniDocument, section: str, key: str) Result[u64, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
@@ -178,6 +192,7 @@ impl IniDocument {
         ret Ok(parsed.unwrap());
     }
 
+    // The value of `key` parsed as `true`/`false`.
     pub fn require_bool(self: &IniDocument, section: str, key: str) Result[bool, IniDecodeError] {
         const value = self.get(section, key);
         if value.is_none() { ret Err(IniDecodeError.MissingValue(String.from(section), String.from(key))); }
