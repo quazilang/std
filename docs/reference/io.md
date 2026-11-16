@@ -31,7 +31,7 @@ The standard error stream.
 ### `print`
 
 ```quazi
-pub fn print(s: str, ...args: any) void
+pub fn print(template: str, ...args: Display) void
 ```
 
 Writes formatted text to standard output without a newline. `{}` in
@@ -40,7 +40,7 @@ Writes formatted text to standard output without a newline. `{}` in
 ### `println`
 
 ```quazi
-pub fn println(s: str, ...args: any) void
+pub fn println(template: str, ...args: Display) void
 ```
 
 Writes formatted text and a newline to standard output.
@@ -48,7 +48,7 @@ Writes formatted text and a newline to standard output.
 ### `err`
 
 ```quazi
-pub fn err(s: str, ...args: any) void
+pub fn err(template: str, ...args: Display) void
 ```
 
 Writes formatted text to standard error without a newline.
@@ -56,7 +56,7 @@ Writes formatted text to standard error without a newline.
 ### `errln`
 
 ```quazi
-pub fn errln(s: str, ...args: any) void
+pub fn errln(template: str, ...args: Display) void
 ```
 
 Writes formatted text and a newline to standard error.
@@ -123,15 +123,15 @@ Writes `s` and a newline.
 ### `Stdout.writef`
 
 ```quazi
-pub fn writef(self: Stdout, s: str, ...args: any) void
+pub fn writef(self: Stdout, template: str, ...args: Display) void
 ```
 
-Writes formatted text (`{}` placeholders).
+Writes `template` with each `{}` replaced by the next value.
 
 ### `Stdout.writelnf`
 
 ```quazi
-pub fn writelnf(self: Stdout, s: str, ...args: any) void
+pub fn writelnf(self: Stdout, template: str, ...args: Display) void
 ```
 
 Writes formatted text and a newline.
@@ -163,15 +163,15 @@ Writes `s` and a newline.
 ### `Stderr.writef`
 
 ```quazi
-pub fn writef(self: Stderr, s: str, ...args: any) void
+pub fn writef(self: Stderr, template: str, ...args: Display) void
 ```
 
-Writes formatted text (`{}` placeholders).
+Writes `template` with each `{}` replaced by the next value.
 
 ### `Stderr.writelnf`
 
 ```quazi
-pub fn writelnf(self: Stderr, s: str, ...args: any) void
+pub fn writelnf(self: Stderr, template: str, ...args: Display) void
 ```
 
 Writes formatted text and a newline.

@@ -125,17 +125,17 @@ impl Write for Stdout {
         write_text(1, s);
         write_text(1, "\n");
     }
+}
 
-    // Writes formatted text (`{}` placeholders).
-    @format
-    pub fn writef(self: Stdout, s: str, ...args: any) void {
-        write_text(1, s);
+impl Stdout {
+    // Writes `template` with each `{}` replaced by the next value.
+    pub fn writef(self: Stdout, template: str, ...args: Display) void {
+        write_formatted(1, template, ...args);
     }
 
     // Writes formatted text and a newline.
-    @format
-    pub fn writelnf(self: Stdout, s: str, ...args: any) void {
-        write_text(1, s);
+    pub fn writelnf(self: Stdout, template: str, ...args: Display) void {
+        write_formatted(1, template, ...args);
         write_text(1, "\n");
     }
 }
@@ -151,18 +151,29 @@ impl Write for Stderr {
         write_text(2, s);
         write_text(2, "\n");
     }
+}
 
-    // Writes formatted text (`{}` placeholders).
-    @format
-    pub fn writef(self: Stderr, s: str, ...args: any) void {
-        write_text(2, s);
+impl Stderr {
+    // Writes `template` with each `{}` replaced by the next value.
+    pub fn writef(self: Stderr, template: str, ...args: Display) void {
+        write_formatted(2, template, ...args);
     }
 
     // Writes formatted text and a newline.
-    @format
-    pub fn writelnf(self: Stderr, s: str, ...args: any) void {
-        write_text(2, s);
+    pub fn writelnf(self: Stderr, template: str, ...args: Display) void {
+        write_formatted(2, template, ...args);
         write_text(2, "\n");
+    }
+}
+
+// Writes `template` to `fd`, replacing each `{}` by the next value's text.
+// Without values the text is written as it is.
+fn write_formatted(fd: i32, template: str, ...args: Display) void {
+    if args.len() == 0 {
+        write_text(fd, template);
+    } else {
+        const text = format(template, ...args);
+        write_text(fd, text.as_str());
     }
 }
 
@@ -170,30 +181,26 @@ impl Write for Stderr {
 
 // Writes formatted text to standard output without a newline. `{}` in
 // `s` is replaced by the next argument (`print("{} items", count)`).
-@format
-pub fn print(s: str, ...args: any) void {
-    write_text(1, s);
+pub fn print(template: str, ...args: Display) void {
+    write_formatted(1, template, ...args);
 }
 
 // Writes formatted text and a newline to standard output.
-@format
-pub fn println(s: str, ...args: any) void {
-    write_text(1, s);
+pub fn println(template: str, ...args: Display) void {
+    write_formatted(1, template, ...args);
     write_text(1, "\n");
 }
 
 // ── stderr convenience ────────────────────────────────────────────────────────
 
 // Writes formatted text to standard error without a newline.
-@format
-pub fn err(s: str, ...args: any) void {
-    write_text(2, s);
+pub fn err(template: str, ...args: Display) void {
+    write_formatted(2, template, ...args);
 }
 
 // Writes formatted text and a newline to standard error.
-@format
-pub fn errln(s: str, ...args: any) void {
-    write_text(2, s);
+pub fn errln(template: str, ...args: Display) void {
+    write_formatted(2, template, ...args);
     write_text(2, "\n");
 }
 
