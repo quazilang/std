@@ -4,8 +4,8 @@ std.process — shell-free child-process management.
 
 The compiler runtime owns platform creation, command-line marshalling,
 waiting, and native handles. This module keeps the public lifetime contract
-independent of those platform details. Linux is currently implemented;
-Windows support remains pending its UTF-16 CreateProcessW lowerer.
+independent of those platform details. Linux uses the runtime; Windows uses
+CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
 
 ## Contents
 

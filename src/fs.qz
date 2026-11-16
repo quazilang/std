@@ -1590,4 +1590,29 @@ impl Path {
     pub fn read_to_string(self: &Path) Result[String, FsError] { read_to_string(self.as_str()) }
     // The absolute form of this path (see `fs.canonicalize`).
     pub fn canonicalize(self: &Path) Result[Path, FsError] { canonicalize(self.as_str()) }
+    // Opens the file at this path for reading (`File.open`).
+    pub fn open(self: &Path) Result[File, FsError] { File.open(self.as_str()) }
+    // Creates or truncates the file at this path for writing (`File.create`).
+    pub fn create(self: &Path) Result[File, FsError] { File.create(self.as_str()) }
+    // Replaces the file's contents with `contents` (`fs.write`).
+    pub fn write(self: &Path, contents: str) Result[usize, FsError] { write(self.as_str(), contents) }
+    // Creates this directory and its missing parents (`fs.create_dir_all`).
+    pub fn create_dir_all(self: &Path) Result[bool, FsError] { create_dir_all(self.as_str()) }
+    // Removes the file at this path (`fs.remove`).
+    pub fn remove(self: &Path) Result[bool, FsError] { remove(self.as_str()) }
+}
+
+@test
+fn path_methods_open_write_and_remove_files() void {
+    const directory = Path.new("/tmp/quazi_path_methods_test/nested");
+    directory.create_dir_all().unwrap();
+    const file = directory.join("note.txt");
+    if (file.write("hello").unwrap() != 5) { panic("write length"); }
+    const text = file.read_to_string().unwrap();
+    if (text.as_str() != "hello") { panic("read back"); }
+    var handle = file.open().unwrap();
+    handle.close();
+    if (!file.remove().unwrap() || file.exists()) { panic("remove"); }
+    rmdir("/tmp/quazi_path_methods_test/nested").unwrap();
+    rmdir("/tmp/quazi_path_methods_test").unwrap();
 }

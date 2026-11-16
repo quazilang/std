@@ -749,3 +749,43 @@ pub fn canonicalize(self: &Path) Result[Path, FsError]
 ```
 
 The absolute form of this path (see `fs.canonicalize`).
+
+### `Path.open`
+
+```quazi
+pub fn open(self: &Path) Result[File, FsError]
+```
+
+Opens the file at this path for reading (`File.open`).
+
+### `Path.create`
+
+```quazi
+pub fn create(self: &Path) Result[File, FsError]
+```
+
+Creates or truncates the file at this path for writing (`File.create`).
+
+### `Path.write`
+
+```quazi
+pub fn write(self: &Path, contents: str) Result[usize, FsError]
+```
+
+Replaces the file's contents with `contents` (`fs.write`).
+
+### `Path.create_dir_all`
+
+```quazi
+pub fn create_dir_all(self: &Path) Result[bool, FsError]
+```
+
+Creates this directory and its missing parents (`fs.create_dir_all`).
+
+### `Path.remove`
+
+```quazi
+pub fn remove(self: &Path) Result[bool, FsError]
+```
+
+Removes the file at this path (`fs.remove`).

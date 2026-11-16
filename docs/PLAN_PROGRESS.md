@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 72.1%. Remaining: 27.9%.**
+**Complete: 72.8%. Remaining: 27.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -31,7 +31,7 @@ release-readiness probability. New requirements change the denominator.
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
 | Operating-system APIs | 7/10 | 70.0% | 30.0% |
-| Processes | 10/16 | 62.5% | 37.5% |
+| Processes | 11/16 | 68.8% | 31.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
@@ -107,7 +107,9 @@ Evidence: [src/process.qz](../src/process.qz).
 - [x] Timeout/cancellation API (`Child.wait_timeout` polls with back-off until a
   deadline; `wait_or_terminate` cancels a child that overruns; restored on
   2026-11-15 by maintainer answer В17).
-- [ ] Windows CreateProcessW runtime.
+- [x] Windows CreateProcessW runtime (UTF-16 command line quoted for
+  CommandLineToArgvW, wait/try_wait/terminate/close, Command PATH lookup and
+  current_dir; `scripts/check_windows_process.py` under Wine, 2026-11-16).
 - [ ] Large-output and simultaneous stdout/stderr regressions.
 - [ ] Automatic Child scope cleanup.
 - [ ] Complete target-native argv/status/termination/cleanup matrix.
@@ -261,9 +263,10 @@ Since 2026-11-08 every module, including HTTP Headers/codecs and JSON object
 composition, passes ownership analysis, and `qz test` from the repository root
 passes all 38 `@test` functions (the procfs parser fixtures now live inside
 `src/os_memory.qz`). Process cleanup is
-explicit: there is no automatic `Child.free` hook. Windows process creation,
-portable cwd/environment mutation, buffered I/O, named time zones, and TLS are
-absent; UTC civil time and RFC 3339 exist since 2026-11-08.
+explicit: there is no automatic `Child.free` hook. Windows process creation
+exists since 2026-11-16 (checked under Wine, not on real Windows); portable
+environment mutation, named time zones, and TLS are absent; UTC civil time
+and RFC 3339 exist since 2026-11-08.
 
 The bounded receiver fixture excludes Headers/codec operations. The full HTTP
 round trip is exercised by the compiler repository's

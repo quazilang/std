@@ -2,11 +2,13 @@
 //
 // The compiler runtime owns platform creation, command-line marshalling,
 // waiting, and native handles. This module keeps the public lifetime contract
-// independent of those platform details. Linux is currently implemented;
-// Windows support remains pending its UTF-16 CreateProcessW lowerer.
+// independent of those platform details. Linux uses the runtime; Windows uses
+// CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
 import std.core;
 @cfg(target_os = "linux")
 import std.unix;
+@cfg(target_os = "windows")
+import std.win32_core;
 import std.time;
 import std.time.Duration;
 
@@ -64,6 +66,9 @@ impl Child {
     // Launch an exact executable path without a shell or PATH lookup. `args`
     // excludes argv[0]; the runtime supplies `program` as the first argument.
     pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
+        @cfg(target_os = "windows") {
+            ret windows_spawn(program, true, &args, "");
+        }
         var handle: usize = 0;
         var error: i32 = 0;
         var result: i32 = -1;
@@ -80,6 +85,11 @@ impl Child {
         const handle: usize = self.handle;
         if (handle == 0) { ret Ok(None); }
         self.handle = 0;
+        @cfg(target_os = "windows") {
+            const code = windows_wait(handle, 4294967295)?;
+            unsafe { win32_core.close_handle(handle); }
+            ret Ok(code);
+        }
         var kind: i32 = 0;
         var value: i32 = 0;
         var error: i32 = 0;
@@ -94,6 +104,13 @@ impl Child {
     pub fn try_wait(self: &Child!) Result[Option[ExitStatus], ProcessError] {
         const handle: usize = self.handle;
         if (handle == 0) { ret Ok(None); }
+        @cfg(target_os = "windows") {
+            const polled = windows_wait(handle, 0)?;
+            if (polled.is_none()) { ret Ok(None); }
+            unsafe { win32_core.close_handle(handle); }
+            self.handle = 0;
+            ret Ok(polled);
+        }
         var exited: i32 = 0;
         var kind: i32 = 0;
         var value: i32 = 0;
@@ -110,6 +127,12 @@ impl Child {
     // handle is a no-op and returns false.
     pub fn terminate(self: &Child!) Result[bool, ProcessError] {
         if (self.handle == 0) { ret Ok(false); }
+        @cfg(target_os = "windows") {
+            var terminated: i32 = 0;
+            unsafe { terminated = win32_core.terminate_process(self.handle, 1); }
+            if (terminated == 0) { ret Err(ProcessError.TerminateFailed(windows_error())); }
+            ret Ok(true);
+        }
         var error: i32 = 0;
         var result: i32 = -1;
         unsafe { result = core.process_terminate(self.handle, &error); }
@@ -123,6 +146,17 @@ impl Child {
         const handle: usize = self.handle;
         if (handle == 0) { ret Ok(false); }
         self.handle = 0;
+        @cfg(target_os = "windows") {
+            // Terminate a live child and wait so nothing outlives the handle.
+            unsafe {
+                if (win32_core.wait_for_single_object(handle, 0) == 258) {
+                    win32_core.terminate_process(handle, 1);
+                    win32_core.wait_for_single_object(handle, 4294967295);
+                }
+                if (win32_core.close_handle(handle) == 0) { ret Err(ProcessError.CloseFailed(windows_error())); }
+            }
+            ret Ok(true);
+        }
         var error: i32 = 0;
         var result: i32 = -1;
         unsafe { result = core.process_close(handle, &error); }
@@ -179,8 +213,10 @@ pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
 // A process builder for scripting (D-021):
 //   process.Command.new("git").arg("push").current_dir(path).status()?
 // A program name without `/` is looked up in PATH (the PATH the child will
-// see). Arguments are passed as given, without a shell. Linux only for now;
-// other targets report SpawnFailed(-38) (ENOSYS).
+// see). Arguments are passed as given, without a shell. On Windows the
+// arguments are quoted for CommandLineToArgvW and PATH lookup is Windows'
+// own; environment changes report SpawnFailed(50) there. Other targets
+// report SpawnFailed(38) (ENOSYS).
 
 // An owned list of NUL-terminated strings, also usable as an argv/envp
 // pointer array (it keeps a trailing null slot).
@@ -376,6 +412,17 @@ impl Command {
         @cfg(target_os = "linux") {
             ret command_spawn_linux(self);
         }
+        @cfg(target_os = "windows") {
+            // Environment changes need a UTF-16 environment block, which is
+            // not built yet: report ERROR_NOT_SUPPORTED rather than ignore them.
+            if (self.clear_environment || self.variables.count > 0 || self.removed.count > 0) {
+                ret Err(ProcessError.SpawnFailed(50));
+            }
+            var arguments: Array[str] = Array.new();
+            for index : 0..self.arguments.count { arguments.push(self.arguments.get(index)); }
+            // Without an application name Windows searches PATH (adding `.exe`).
+            ret windows_spawn(self.program.as_str(), false, &arguments, self.directory.as_str());
+        }
         Err(ProcessError.SpawnFailed(38))
     }
 
@@ -533,4 +580,158 @@ fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
         ret Err(ProcessError.SpawnFailed(child_error));
     }
     Ok(Child { handle: pid as usize })
+}
+
+// ── Windows ─────────────────────────────────────────────────────────────────
+
+@cfg(target_os = "windows")
+fn windows_error() i32 {
+    var code: u32 = 0;
+    unsafe { code = win32_core.last_error(); }
+    ret code as i32;
+}
+
+// A growing NUL-terminated UTF-8 byte buffer (builds the Windows command line).
+struct ByteBuffer { data: *u8, length: usize, capacity: usize, }
+
+impl ByteBuffer {
+    fn new() ByteBuffer { ByteBuffer { data: 0, length: 0, capacity: 0 } }
+
+    fn push(self: &ByteBuffer!, byte: u8) bool {
+        if (self.length + 2 > self.capacity) {
+            var grown: usize = self.capacity * 2;
+            if (grown < 64) { grown = 64; }
+            var data: *u8 = 0;
+            unsafe { data = core.realloc(self.data, grown); }
+            if (data == 0) { ret false; }
+            self.data = data;
+            self.capacity = grown;
+        }
+        unsafe {
+            *(self.data + self.length) = byte;
+            *(self.data + self.length + 1) = 0;
+        }
+        self.length = self.length + 1;
+        ret true;
+    }
+
+    // Appends `text` quoted so that CommandLineToArgvW returns it unchanged:
+    // backslashes are literal except before a quote, where they double.
+    fn push_argument(self: &ByteBuffer!, text: str) bool {
+        const length: usize = text.bytes_len();
+        var plain: bool = length > 0;
+        for index : 0..length {
+            const byte: u8 = core.str_byte_at(text, index);
+            if (byte == 32 || byte == 9 || byte == 34) { plain = false; }
+        }
+        if (plain) {
+            for index : 0..length {
+                if (!self.push(core.str_byte_at(text, index))) { ret false; }
+            }
+            ret true;
+        }
+        if (!self.push(34)) { ret false; }
+        var backslashes: usize = 0;
+        for index : 0..length {
+            const byte: u8 = core.str_byte_at(text, index);
+            if (byte == 92) {
+                backslashes = backslashes + 1;
+            } else {
+                var repeat: usize = backslashes;
+                if (byte == 34) { repeat = backslashes * 2 + 1; }
+                for _ : 0..repeat { if (!self.push(92)) { ret false; } }
+                backslashes = 0;
+                if (!self.push(byte)) { ret false; }
+            }
+        }
+        for _ : 0..backslashes * 2 { if (!self.push(92)) { ret false; } }
+        ret self.push(34);
+    }
+
+    fn free(self: ByteBuffer) void {
+        if (self.data != 0) { unsafe { core.free(self.data); } }
+    }
+}
+
+// A NUL-terminated UTF-16 copy of `length` UTF-8 bytes at `text`; 0 when
+// the conversion or allocation fails. The caller frees it.
+@cfg(target_os = "windows")
+unsafe fn windows_utf16(text: *u8, length: usize) *u16 {
+    const none: *u16 = 0;
+    var units: i32 = 0;
+    if (length > 0) {
+        units = win32_core.utf8_to_utf16(65001, 0, text, length as i32, none, 0);
+        if (units <= 0) { ret none; }
+    }
+    const wide = core.malloc(((units as usize) + 1) * 2) as *u16;
+    if (wide == 0) { ret wide; }
+    if (length > 0) {
+        win32_core.utf8_to_utf16(65001, 0, text, length as i32, wide, units);
+    }
+    // The terminator follows `units` UTF-16 code units (two bytes each).
+    *(((wide as *u8) + (units as usize) * 2) as *u16) = 0;
+    ret wide;
+}
+
+// Starts `program` with `arguments` (program is argv[0]). With `exact`, the
+// program path is used as is; otherwise Windows searches PATH.
+@cfg(target_os = "windows")
+fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: str) Result[Child, ProcessError] {
+    var line = ByteBuffer.new();
+    var built: bool = line.push_argument(program);
+    for index : 0..arguments.len() {
+        built = built && line.push(32) && line.push_argument(arguments[index]);
+    }
+    if (!built) { line.free(); ret Err(ProcessError.SpawnFailed(8)); }
+    var result: i32 = 0;
+    var error: i32 = 0;
+    var handle: usize = 0;
+    unsafe {
+        const command_line = windows_utf16(line.data, line.length);
+        var application: *u16 = 0;
+        if (exact) { application = windows_utf16(core.str_as_ptr(program), program.bytes_len()); }
+        var current: *u16 = 0;
+        if (directory.bytes_len() > 0) { current = windows_utf16(core.str_as_ptr(directory), directory.bytes_len()); }
+        // STARTUPINFOW (104 bytes, `cb` first) and PROCESS_INFORMATION (24).
+        const startup = core.malloc(104);
+        const information = core.malloc(24);
+        if (command_line != 0 && startup != 0 && information != 0) {
+            core.memset(startup, 0, 104);
+            core.memset(information, 0, 24);
+            *(startup as *u32) = 104;
+            // Inherit the standard handles, like the Linux runtime.
+            result = win32_core.create_process_w(application, command_line, 0, 0, 1, 0, 0, current, startup, information);
+            if (result == 0) {
+                error = windows_error();
+            } else {
+                handle = *(information as *usize);
+                win32_core.close_handle(*((information + 8) as *usize));
+            }
+        } else {
+            error = 8;
+        }
+        if (command_line != 0) { core.free(command_line as *u8); }
+        if (application != 0) { core.free(application as *u8); }
+        if (current != 0) { core.free(current as *u8); }
+        if (startup != 0) { core.free(startup); }
+        if (information != 0) { core.free(information); }
+    }
+    line.free();
+    if (result == 0) { ret Err(ProcessError.SpawnFailed(error)); }
+    ret Ok(Child { handle: handle });
+}
+
+// Waits up to `milliseconds` (0xFFFFFFFF: forever): the exit code once the
+// process ended, `None` while it runs.
+@cfg(target_os = "windows")
+fn windows_wait(handle: usize, milliseconds: u32) Result[Option[ExitStatus], ProcessError] {
+    var waited: u32 = 0;
+    unsafe { waited = win32_core.wait_for_single_object(handle, milliseconds); }
+    if (waited == 258) { ret Ok(None); }
+    if (waited != 0) { ret Err(ProcessError.WaitFailed(windows_error())); }
+    var code: u32 = 0;
+    var read: i32 = 0;
+    unsafe { read = win32_core.get_exit_code_process(handle, &code); }
+    if (read == 0) { ret Err(ProcessError.WaitFailed(windows_error())); }
+    ret Ok(Some(ExitStatus.Code(code as i32)));
 }

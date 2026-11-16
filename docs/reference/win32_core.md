@@ -78,6 +78,41 @@ pub fn write_console_utf16(console: usize, text: *u16, count: u32,
 
 The Win32 function `WriteConsoleW` (see its Microsoft documentation).
 
+### `create_process_w`
+
+```quazi
+pub fn create_process_w(application: *u16, command_line: *u16,
+    process_attributes: *u8, thread_attributes: *u8, inherit_handles: i32,
+    creation_flags: u32, environment: *u8, current_directory: *u16,
+    startup_info: *u8, process_information: *u8) i32
+```
+
+The Win32 function `CreateProcessW` (see its Microsoft documentation).
+
+### `wait_for_single_object`
+
+```quazi
+pub fn wait_for_single_object(handle: usize, milliseconds: u32) u32
+```
+
+The Win32 function `WaitForSingleObject` (see its Microsoft documentation).
+
+### `get_exit_code_process`
+
+```quazi
+pub fn get_exit_code_process(handle: usize, exit_code: *u32) i32
+```
+
+The Win32 function `GetExitCodeProcess` (see its Microsoft documentation).
+
+### `terminate_process`
+
+```quazi
+pub fn terminate_process(handle: usize, exit_code: u32) i32
+```
+
+The Win32 function `TerminateProcess` (see its Microsoft documentation).
+
 ### `close_handle`
 
 ```quazi
