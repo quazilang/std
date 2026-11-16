@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 69.8%. Remaining: 30.2%.**
+**Complete: 72.1%. Remaining: 27.9%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -34,10 +34,10 @@ release-readiness probability. New requirements change the denominator.
 | Processes | 10/16 | 62.5% | 37.5% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
-| Panic handling | 5/10 | 50.0% | 50.0% |
+| Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 18/19 | 94.7% | 5.3% |
-| Serialization | 7/15 | 46.7% | 53.3% |
+| Serialization | 9/15 | 60.0% | 40.0% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
 ## Requirements
@@ -163,7 +163,9 @@ Evidence: companion compiler `quazistrap/prelude/src/panic.qz` and its panic-han
 - [x] Default source-location diagnostics.
 - [x] Default exit status 101.
 - [ ] Final custom-handler lifecycle/safety contract.
-- [ ] Nested/recursive panic behavior.
+- [x] Nested/recursive panic behavior (a panic while a panic is handled
+  aborts with status 101; companion compiler `5f03491`, regression in
+  `scripts/check_stack_overflow.py`; maintainer answer В16А).
 - [ ] Thread/task panic interaction.
 - [ ] Target-native custom-handler lifecycle regressions.
 - [ ] Resolve the remaining D-006 panic policy.
@@ -221,13 +223,16 @@ Evidence: [src/codec.qz](../src/codec.qz).
 - [x] Bounded bool/i64/String scalar decoding.
 - [x] Bounded top-level object-field extraction.
 - [x] Ownership-safe JSON object composition under the current compiler.
-- [ ] Derived Deserialize.
+- [x] Derived Deserialize (`@derive(Deserialize)` generates
+  `Type.from_json`; `object_fields`, `field_*`, `optional_*`; 2026-11-16).
 - [ ] Option field support.
 - [ ] Collection field support.
 - [ ] Nested struct support.
 - [ ] Enum support.
 - [ ] Wider numeric field matrix.
-- [ ] Finalize missing/unknown/duplicate/default decode policy.
+- [x] Finalize missing/unknown/duplicate/default decode policy (maintainer
+  answer В19В: unknown, duplicate and missing keys are errors; `Option`
+  fields default to `None`; `object_fields_reject_unknown_and_duplicate_keys`).
 - [ ] Complete source/QZI/target-native codec regression matrix.
 
 ### Library-wide safety / other modules

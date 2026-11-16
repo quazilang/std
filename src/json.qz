@@ -14,6 +14,7 @@ pub enum JsonError {
     InvalidNumber,
     TrailingData,
     DuplicateKey,
+    UnknownKey,
     ObjectLengthMismatch,
     OutputLimit,
 }
@@ -31,6 +32,7 @@ impl JsonError {
             InvalidNumber => "invalid JSON number",
             TrailingData => "unexpected data after a JSON value",
             DuplicateKey => "JSON object contains a duplicate key",
+            UnknownKey => "JSON object contains a key that is not expected",
             ObjectLengthMismatch => "JSON object keys and values have different lengths",
             OutputLimit => "JSON object output exceeds the configured byte limit",
         };
@@ -415,6 +417,61 @@ pub fn object_field_with_limits(source: str, key: str, max_input: usize, max_dep
 // the object has no such field.
 pub fn object_field(source: str, key: str) Result[Option[String], JsonError] {
     ret object_field_with_limits(source, key, 1048576, 64);
+}
+
+// Where each expected key's value lies in the object `source`: entries
+// `2 * i` and `2 * i + 1` are the byte range of `keys[i]`'s raw JSON value,
+// both zero when the object does not contain the key. A key outside `keys`
+// is `UnknownKey` and a repeated key is `DuplicateKey` (maintainer answer
+// В19В: an error rather than silence).
+pub fn object_fields_with_limits(source: str, keys: &Array[str], max_input: usize, max_depth: usize) Result[Array[usize], JsonError] {
+    const valid: Result[bool, JsonError] = validate_with_limits(source, max_input, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+    var spans: Array[usize] = Array.new();
+    var index: usize = 0;
+    for (index < keys.len()) { spans.push(0); spans.push(0); index = index + 1; }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (end - start < 2 || core.str_byte_at(source, start) != 123 || core.str_byte_at(source, end - 1) != 125) { ret Err(JsonError.InvalidToken); }
+    var parser: Parser = Parser { source: source, offset: start + 1, max_depth: max_depth };
+    parser.skip_whitespace();
+    if (!parser.at_end() && parser.byte() == 125) { ret Ok(spans); }
+    for (true) {
+        if (parser.at_end() || parser.byte() != 34) { ret Err(JsonError.InvalidToken); }
+        const key_start: usize = parser.offset;
+        const scanned_key: Result[bool, JsonError] = parser.string();
+        if (scanned_key.is_err()) { ret Err(scanned_key.unwrap_err()); }
+        const key_end: usize = parser.offset;
+        const raw_key: String = source[key_start as isize:key_end as isize];
+        const decoded_key: Result[String, JsonError] = decode_string_with_limits(raw_key.as_str(), max_input, max_depth);
+        if (decoded_key.is_err()) { ret Err(decoded_key.unwrap_err()); }
+        const key: String = decoded_key.unwrap();
+        parser.skip_whitespace();
+        if (parser.at_end() || parser.byte() != 58) { ret Err(JsonError.InvalidToken); }
+        parser.offset = parser.offset + 1; parser.skip_whitespace();
+        const value_start: usize = parser.offset;
+        const scanned_value: Result[bool, JsonError] = parser.value(1);
+        if (scanned_value.is_err()) { ret Err(scanned_value.unwrap_err()); }
+        const value_end: usize = parser.offset;
+        var slot: usize = 0;
+        for (slot < keys.len() && keys[slot] != key.as_str()) { slot = slot + 1; }
+        if (slot == keys.len()) { ret Err(JsonError.UnknownKey); }
+        if (spans[2 * slot + 1] != 0) { ret Err(JsonError.DuplicateKey); }
+        spans.set(2 * slot, value_start);
+        spans.set(2 * slot + 1, value_end);
+        parser.skip_whitespace();
+        if (parser.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+        if (parser.byte() == 125) { ret Ok(spans); }
+        if (parser.byte() != 44) { ret Err(JsonError.InvalidToken); }
+        parser.offset = parser.offset + 1; parser.skip_whitespace();
+    }
+    ret Ok(spans);
+}
+
+// `object_fields_with_limits` with the default limits (1 MiB, depth 64).
+pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], JsonError] {
+    ret object_fields_with_limits(source, keys, 1048576, 64);
 }
 
 @test

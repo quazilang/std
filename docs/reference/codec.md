@@ -84,6 +84,63 @@ Decode a JSON string holding an RFC 3339 timestamp (offsets are normalized
 to UTC). Non-strings are TypeMismatch; malformed or out-of-range text is
 InvalidValue.
 
+### `object_fields`
+
+```quazi
+pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], DecodeError]
+```
+
+The value ranges of the expected `keys` of the JSON object `source` (see
+`json.object_fields`).
+
+### `field_bool`
+
+```quazi
+pub fn field_bool(source: str, spans: &Array[usize], index: usize) Result[bool, DecodeError]
+```
+
+A required boolean field.
+
+### `field_i64`
+
+```quazi
+pub fn field_i64(source: str, spans: &Array[usize], index: usize) Result[i64, DecodeError]
+```
+
+A required `i64` field.
+
+### `field_string`
+
+```quazi
+pub fn field_string(source: str, spans: &Array[usize], index: usize) Result[String, DecodeError]
+```
+
+A required string field.
+
+### `optional_bool`
+
+```quazi
+pub fn optional_bool(source: str, spans: &Array[usize], index: usize) Result[Option[bool], DecodeError]
+```
+
+An optional boolean field.
+
+### `optional_i64`
+
+```quazi
+pub fn optional_i64(source: str, spans: &Array[usize], index: usize) Result[Option[i64], DecodeError]
+```
+
+An optional `i64` field.
+
+### `optional_string`
+
+```quazi
+pub fn optional_string(source: str, spans: &Array[usize], index: usize) Result[Option[String], DecodeError]
+```
+
+An optional string field.
+
 ## `EncodeError`
 
 ```quazi

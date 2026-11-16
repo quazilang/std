@@ -110,6 +110,26 @@ pub fn object_field(source: str, key: str) Result[Option[String], JsonError]
 The raw JSON text of field `key` in the object `source`, or `None` when
 the object has no such field.
 
+### `object_fields_with_limits`
+
+```quazi
+pub fn object_fields_with_limits(source: str, keys: &Array[str], max_input: usize, max_depth: usize) Result[Array[usize], JsonError]
+```
+
+Where each expected key's value lies in the object `source`: entries
+`2 * i` and `2 * i + 1` are the byte range of `keys[i]`'s raw JSON value,
+both zero when the object does not contain the key. A key outside `keys`
+is `UnknownKey` and a repeated key is `DuplicateKey` (maintainer answer
+В19В: an error rather than silence).
+
+### `object_fields`
+
+```quazi
+pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], JsonError]
+```
+
+`object_fields_with_limits` with the default limits (1 MiB, depth 64).
+
 ## `JsonError`
 
 ```quazi
@@ -123,6 +143,7 @@ pub enum JsonError {
     InvalidNumber,
     TrailingData,
     DuplicateKey,
+    UnknownKey,
     ObjectLengthMismatch,
     OutputLimit,
 }

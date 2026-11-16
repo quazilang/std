@@ -137,6 +137,12 @@ pub fn decode_bool(source: str) Result[bool, DecodeError] {
 
 // Decodes a JSON string, with input size and nesting limits.
 pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize) Result[String, DecodeError] {
+    // Valid JSON of another type (a number, `true`, ...) is a type mismatch.
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0;
+    for (start < source.bytes_len() && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    if (start == source.bytes_len() || core.str_byte_at(source, start) != 34) { ret Err(DecodeError.TypeMismatch); }
     const decoded: Result[String, JsonError] = json.decode_string_with_limits(source, max_input, max_depth);
     if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
     ret Ok(decoded.unwrap());
@@ -194,6 +200,119 @@ pub fn decode_system_time(source: str) Result[SystemTime, DecodeError] {
     const parsed = SystemTime.parse_rfc3339(text.as_str());
     if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
     Ok(parsed.unwrap())
+}
+
+// ── Object decoding (used by `@derive(Deserialize)`) ─────────────────────────
+// Policy (maintainer answer В19В): an unknown key is `UnknownField`, a
+// repeated key `DuplicateField`, a missing required field `MissingField`; an
+// `Option` field is `None` when its key is missing or its value is `null`.
+
+// The value ranges of the expected `keys` of the JSON object `source` (see
+// `json.object_fields`).
+pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], DecodeError] {
+    const spans = json.object_fields(source, keys);
+    if (spans.is_err()) {
+        ret Err(match spans.unwrap_err() {
+            UnknownKey => DecodeError.UnknownField,
+            DuplicateKey => DecodeError.DuplicateField,
+            InputLimit => DecodeError.InputLimit,
+            DepthLimit => DecodeError.DepthLimit,
+            _ => DecodeError.InvalidJson,
+        });
+    }
+    ret Ok(spans.unwrap());
+}
+
+// The raw JSON value of field `index`, or `None` when the key is missing.
+fn field_text(source: str, spans: &Array[usize], index: usize) Option[String] {
+    const start: usize = spans[2 * index];
+    const end: usize = spans[2 * index + 1];
+    if (end == 0) { ret None; }
+    ret Some(source[start as isize:end as isize]);
+}
+
+// The raw JSON value of a field that may be omitted or `null`.
+fn optional_text(source: str, spans: &Array[usize], index: usize) Option[String] {
+    const text = field_text(source, spans, index);
+    if (text.is_none()) { ret None; }
+    const raw: String = text.unwrap();
+    if (raw.as_str() == "null") { ret None; }
+    ret Some(raw);
+}
+
+// A required boolean field.
+pub fn field_bool(source: str, spans: &Array[usize], index: usize) Result[bool, DecodeError] {
+    const text = field_text(source, spans, index);
+    if (text.is_none()) { ret Err(DecodeError.MissingField); }
+    const raw: String = text.unwrap();
+    ret decode_bool(raw.as_str());
+}
+
+// A required `i64` field.
+pub fn field_i64(source: str, spans: &Array[usize], index: usize) Result[i64, DecodeError] {
+    const text = field_text(source, spans, index);
+    if (text.is_none()) { ret Err(DecodeError.MissingField); }
+    const raw: String = text.unwrap();
+    ret decode_i64(raw.as_str());
+}
+
+// A required string field.
+pub fn field_string(source: str, spans: &Array[usize], index: usize) Result[String, DecodeError] {
+    const text = field_text(source, spans, index);
+    if (text.is_none()) { ret Err(DecodeError.MissingField); }
+    const raw: String = text.unwrap();
+    const decoded: String = decode_string(raw.as_str())?;
+    ret Ok(String.from(decoded.as_str()));
+}
+
+// An optional boolean field.
+pub fn optional_bool(source: str, spans: &Array[usize], index: usize) Result[Option[bool], DecodeError] {
+    const text = optional_text(source, spans, index);
+    if (text.is_none()) { ret Ok(None); }
+    const raw: String = text.unwrap();
+    const value: bool = decode_bool(raw.as_str())?;
+    ret Ok(Some(value));
+}
+
+// An optional `i64` field.
+pub fn optional_i64(source: str, spans: &Array[usize], index: usize) Result[Option[i64], DecodeError] {
+    const text = optional_text(source, spans, index);
+    if (text.is_none()) { ret Ok(None); }
+    const raw: String = text.unwrap();
+    const value: i64 = decode_i64(raw.as_str())?;
+    ret Ok(Some(value));
+}
+
+// An optional string field.
+pub fn optional_string(source: str, spans: &Array[usize], index: usize) Result[Option[String], DecodeError] {
+    const text = optional_text(source, spans, index);
+    if (text.is_none()) { ret Ok(None); }
+    const raw: String = text.unwrap();
+    const decoded: String = decode_string(raw.as_str())?;
+    ret Ok(Some(String.from(decoded.as_str())));
+}
+
+@test
+fn object_fields_reject_unknown_and_duplicate_keys() void {
+    var keys: Array[str] = Array.new();
+    keys.push("name");
+    keys.push("age");
+    keys.push("nick");
+    const source = "{{\"name\": \"Ann\", \"age\": 41, \"nick\": null}}";
+    const spans = object_fields(source, &keys).unwrap();
+    const name = field_string(source, &spans, 0).unwrap();
+    if (name.as_str() != "Ann") { panic("name decoded wrong"); }
+    if (field_i64(source, &spans, 1).unwrap() != 41) { panic("age decoded wrong"); }
+    if (optional_string(source, &spans, 2).unwrap().is_some()) { panic("null must decode as None"); }
+    const missing_source = "{{\"name\": \"Bo\"}}";
+    const missing = object_fields(missing_source, &keys).unwrap();
+    const missing_age: bool = match field_i64(missing_source, &missing, 1) { Err(DecodeError.MissingField) => true, _ => false };
+    if (!missing_age) { panic("a missing required field must be MissingField"); }
+    if (optional_i64(missing_source, &missing, 1).unwrap().is_some()) { panic("a missing optional field must be None"); }
+    const unknown: bool = match object_fields("{{\"name\": \"C\", \"extra\": 1}}", &keys) { Err(DecodeError.UnknownField) => true, _ => false };
+    if (!unknown) { panic("an unknown key must be UnknownField"); }
+    const duplicate: bool = match object_fields("{{\"age\": 1, \"age\": 2}}", &keys) { Err(DecodeError.DuplicateField) => true, _ => false };
+    if (!duplicate) { panic("a repeated key must be DuplicateField"); }
 }
 
 @test
