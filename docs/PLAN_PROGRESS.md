@@ -212,8 +212,8 @@ Evidence: [src/time.qz](../src/time.qz).
 - [x] Wall-clock instants.
 - [x] Civil dates and times.
 - [x] Time zones (`std.timezone.TimeZone`: TZif v1-4 with POSIX footer rules,
-  `load`/`local`/`from_posix`; `tests/timezone.qz`; 2026-11-17; the D-009
-  data-source choice (system discovery) awaits maintainer question В25).
+  `load`/`local`/`from_posix`; `tests/timezone.qz`; 2026-11-17; system
+  database discovery confirmed by maintainer answer В25А).
 - [x] UTC offsets.
 - [x] Unix timestamps.
 - [x] Parsing.
