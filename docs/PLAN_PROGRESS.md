@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 74.6%. Remaining: 25.4%.**
+**Complete: 77.3%. Remaining: 22.7%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -37,7 +37,7 @@ release-readiness probability. New requirements change the denominator.
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 18/19 | 94.7% | 5.3% |
-| Serialization | 9/15 | 60.0% | 40.0% |
+| Serialization | 13/15 | 86.7% | 13.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
 ## Requirements
@@ -231,11 +231,14 @@ Evidence: [src/codec.qz](../src/codec.qz).
 - [x] Ownership-safe JSON object composition under the current compiler.
 - [x] Derived Deserialize (`@derive(Deserialize)` generates
   `Type.from_json`; `object_fields`, `field_*`, `optional_*`; 2026-11-16).
-- [ ] Option field support.
-- [ ] Collection field support.
-- [ ] Nested struct support.
+- [x] Option field support (`optional_json`, `optional_raw`; 2026-11-17).
+- [x] Collection field support (`Array` fields: `array_json`, `array_items`;
+  2026-11-17).
+- [x] Nested struct support (`to_json` / `from_json` of the field type;
+  2026-11-17).
 - [ ] Enum support.
-- [ ] Wider numeric field matrix.
+- [x] Wider numeric field matrix (every integer width, `f32`, `f64`;
+  `decode_<type>`; quazistrap `scripts/check_deserialize.py`; 2026-11-17).
 - [x] Finalize missing/unknown/duplicate/default decode policy (maintainer
   answer В19В: unknown, duplicate and missing keys are errors; `Option`
   fields default to `None`; `object_fields_reject_unknown_and_duplicate_keys`).

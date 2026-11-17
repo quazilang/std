@@ -474,6 +474,40 @@ pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], JsonEr
     ret object_fields_with_limits(source, keys, 1048576, 64);
 }
 
+// Where each element of the array `source` lies: entries `2 * i` and
+// `2 * i + 1` are the byte range of element `i`'s raw JSON value. A valid
+// value that is not an array is `InvalidToken`.
+pub fn array_items_with_limits(source: str, max_input: usize, max_depth: usize) Result[Array[usize], JsonError] {
+    const valid: Result[bool, JsonError] = validate_with_limits(source, max_input, max_depth);
+    if (valid.is_err()) { ret Err(valid.unwrap_err()); }
+    var spans: Array[usize] = Array.new();
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (end - start < 2 || core.str_byte_at(source, start) != 91 || core.str_byte_at(source, end - 1) != 93) { ret Err(JsonError.InvalidToken); }
+    var parser: Parser = Parser { source: source, offset: start + 1, max_depth: max_depth };
+    parser.skip_whitespace();
+    if (!parser.at_end() && parser.byte() == 93) { ret Ok(spans); }
+    for (true) {
+        const value_start: usize = parser.offset;
+        const scanned: Result[bool, JsonError] = parser.value(1);
+        if (scanned.is_err()) { ret Err(scanned.unwrap_err()); }
+        spans.push(value_start);
+        spans.push(parser.offset);
+        parser.skip_whitespace();
+        if (parser.at_end()) { ret Err(JsonError.UnexpectedEnd); }
+        if (parser.byte() == 93) { ret Ok(spans); }
+        if (parser.byte() != 44) { ret Err(JsonError.InvalidToken); }
+        parser.offset = parser.offset + 1; parser.skip_whitespace();
+    }
+    ret Ok(spans);
+}
+
+// `array_items_with_limits` with the default limits (1 MiB, depth 64).
+pub fn array_items(source: str) Result[Array[usize], JsonError] {
+    ret array_items_with_limits(source, 1048576, 64);
+}
+
 @test
 fn validation_depth_counts_each_array_or_object() void {
     if (json.validate_with_limits("0", 1024, 0).is_err()) {
@@ -519,4 +553,19 @@ fn decode_string_handles_escapes_and_surrogates() void {
     const pair: String = decode_string("\"\\ud83d\\ude00\"").unwrap();
     if (pair.as_str() != "\u{1F600}") { panic("surrogate pair decoded wrongly"); }
     if (decode_string("\"\\ud83d\"").is_ok()) { panic("unpaired surrogate accepted"); }
+}
+
+@test
+fn array_items_locate_each_element() void {
+    const source: str = " [1, \"a,b\", [2, 3], {{\"k\": []}}] ";
+    const spans: Array[usize] = array_items(source).unwrap();
+    if (spans.len() != 8) { panic("four elements expected"); }
+    const second: String = source[spans[2] as isize:spans[3] as isize];
+    if (second.as_str() != "\"a,b\"") { panic("string element span is wrong"); }
+    const third: String = source[spans[4] as isize:spans[5] as isize];
+    if (third.as_str() != "[2, 3]") { panic("nested array span is wrong"); }
+    if (array_items("[]").unwrap().len() != 0) { panic("empty array has no elements"); }
+    if (array_items("{{}}").is_ok()) { panic("an object is not an array"); }
+    if (array_items("[1,]").is_ok()) { panic("a trailing comma is invalid"); }
+    ret;
 }

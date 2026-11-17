@@ -130,6 +130,24 @@ pub fn object_fields(source: str, keys: &Array[str]) Result[Array[usize], JsonEr
 
 `object_fields_with_limits` with the default limits (1 MiB, depth 64).
 
+### `array_items_with_limits`
+
+```quazi
+pub fn array_items_with_limits(source: str, max_input: usize, max_depth: usize) Result[Array[usize], JsonError]
+```
+
+Where each element of the array `source` lies: entries `2 * i` and
+`2 * i + 1` are the byte range of element `i`'s raw JSON value. A valid
+value that is not an array is `InvalidToken`.
+
+### `array_items`
+
+```quazi
+pub fn array_items(source: str) Result[Array[usize], JsonError]
+```
+
+`array_items_with_limits` with the default limits (1 MiB, depth 64).
+
 ## `JsonError`
 
 ```quazi

@@ -10,11 +10,38 @@ std.codec — typed serialization contracts built on JSON wire codecs.
 - [`Serialize`](#serialize) (trait)
 - [`bool`](#bool) (methods)
 - [`i64`](#i64) (methods)
+- [`i8`](#i8) (methods)
+- [`i16`](#i16) (methods)
+- [`i32`](#i32) (methods)
+- [`u8`](#u8) (methods)
+- [`u16`](#u16) (methods)
+- [`u32`](#u32) (methods)
+- [`u64`](#u64) (methods)
+- [`isize`](#isize) (methods)
+- [`usize`](#usize) (methods)
+- [`f32`](#f32) (methods)
+- [`f64`](#f64) (methods)
 - [`str`](#str) (methods)
 - [`String`](#string) (methods)
 - [`SystemTime`](#systemtime) (methods)
 
 ## Functions
+
+### `optional_json`
+
+```quazi
+pub fn optional_json[T: Serialize](value: Option[T]) Result[String, EncodeError]
+```
+
+`null` for None, the value's JSON otherwise (derived `Option` fields).
+
+### `array_json`
+
+```quazi
+pub fn array_json[T: Serialize](values: Array[T]) Result[String, EncodeError]
+```
+
+A JSON array of the values' JSON, in order (derived `Array` fields).
 
 ### `object`
 
@@ -141,6 +168,119 @@ pub fn optional_string(source: str, spans: &Array[usize], index: usize) Result[O
 
 An optional string field.
 
+### `field_raw`
+
+```quazi
+pub fn field_raw(source: str, spans: &Array[usize], index: usize) Result[String, DecodeError]
+```
+
+The raw JSON value of a required field (derived nested structs decode it).
+
+### `decode_u64`
+
+```quazi
+pub fn decode_u64(source: str) Result[u64, DecodeError]
+```
+
+Decodes a JSON non-negative integer as `u64`.
+
+### `decode_f64`
+
+```quazi
+pub fn decode_f64(source: str) Result[f64, DecodeError]
+```
+
+Decodes a JSON number as `f64`.
+
+### `decode_i8`
+
+```quazi
+pub fn decode_i8(source: str) Result[i8, DecodeError]
+```
+
+Decodes a JSON integer as `i8`; one outside its range is InvalidValue.
+
+### `decode_i16`
+
+```quazi
+pub fn decode_i16(source: str) Result[i16, DecodeError]
+```
+
+Decodes a JSON integer as `i16`; one outside its range is InvalidValue.
+
+### `decode_i32`
+
+```quazi
+pub fn decode_i32(source: str) Result[i32, DecodeError]
+```
+
+Decodes a JSON integer as `i32`; one outside its range is InvalidValue.
+
+### `decode_u8`
+
+```quazi
+pub fn decode_u8(source: str) Result[u8, DecodeError]
+```
+
+Decodes a JSON integer as `u8`; one outside its range is InvalidValue.
+
+### `decode_u16`
+
+```quazi
+pub fn decode_u16(source: str) Result[u16, DecodeError]
+```
+
+Decodes a JSON integer as `u16`; one outside its range is InvalidValue.
+
+### `decode_u32`
+
+```quazi
+pub fn decode_u32(source: str) Result[u32, DecodeError]
+```
+
+Decodes a JSON integer as `u32`; one outside its range is InvalidValue.
+
+### `decode_isize`
+
+```quazi
+pub fn decode_isize(source: str) Result[isize, DecodeError]
+```
+
+Decodes a JSON integer as `isize` (64-bit targets).
+
+### `decode_usize`
+
+```quazi
+pub fn decode_usize(source: str) Result[usize, DecodeError]
+```
+
+Decodes a JSON non-negative integer as `usize` (64-bit targets).
+
+### `decode_f32`
+
+```quazi
+pub fn decode_f32(source: str) Result[f32, DecodeError]
+```
+
+Decodes a JSON number as `f32`.
+
+### `optional_raw`
+
+```quazi
+pub fn optional_raw(source: str, spans: &Array[usize], index: usize) Result[Option[String], DecodeError]
+```
+
+The raw JSON value of an optional field: `None` when missing or `null`.
+
+### `array_items`
+
+```quazi
+pub fn array_items(source: str) Result[Array[String], DecodeError]
+```
+
+The raw JSON text of each element of the array `source`, in order
+(derived `Array` fields decode each element by its type).
+
 ## `EncodeError`
 
 ```quazi
@@ -217,6 +357,118 @@ pub fn to_json(self: i64) Result[String, EncodeError]
 ```
 
 The JSON text of the value.
+
+## `i8`
+
+### `i8.to_json`
+
+```quazi
+pub fn to_json(self: i8) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `i16`
+
+### `i16.to_json`
+
+```quazi
+pub fn to_json(self: i16) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `i32`
+
+### `i32.to_json`
+
+```quazi
+pub fn to_json(self: i32) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `u8`
+
+### `u8.to_json`
+
+```quazi
+pub fn to_json(self: u8) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `u16`
+
+### `u16.to_json`
+
+```quazi
+pub fn to_json(self: u16) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `u32`
+
+### `u32.to_json`
+
+```quazi
+pub fn to_json(self: u32) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `u64`
+
+### `u64.to_json`
+
+```quazi
+pub fn to_json(self: u64) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `isize`
+
+### `isize.to_json`
+
+```quazi
+pub fn to_json(self: isize) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `usize`
+
+### `usize.to_json`
+
+```quazi
+pub fn to_json(self: usize) Result[String, EncodeError]
+```
+
+The JSON number of the value.
+
+## `f32`
+
+### `f32.to_json`
+
+```quazi
+pub fn to_json(self: f32) Result[String, EncodeError]
+```
+
+The shortest JSON number that decodes back to the value; NaN and
+infinities have no JSON form.
+
+## `f64`
+
+### `f64.to_json`
+
+```quazi
+pub fn to_json(self: f64) Result[String, EncodeError]
+```
+
+The shortest JSON number that decodes back to the value; NaN and
+infinities have no JSON form.
 
 ## `str`
 

@@ -77,6 +77,251 @@ impl Serialize for i64 {
     }
 }
 
+impl Serialize for i8 {
+    // The JSON number of the value.
+    pub fn to_json(self: i8) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for i16 {
+    // The JSON number of the value.
+    pub fn to_json(self: i16) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for i32 {
+    // The JSON number of the value.
+    pub fn to_json(self: i32) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for u8 {
+    // The JSON number of the value.
+    pub fn to_json(self: u8) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for u16 {
+    // The JSON number of the value.
+    pub fn to_json(self: u16) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for u32 {
+    // The JSON number of the value.
+    pub fn to_json(self: u32) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for u64 {
+    // The JSON number of the value.
+    pub fn to_json(self: u64) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for isize {
+    // The JSON number of the value.
+    pub fn to_json(self: isize) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for usize {
+    // The JSON number of the value.
+    pub fn to_json(self: usize) Result[String, EncodeError] {
+        ret Ok(self.to_string());
+    }
+}
+
+impl Serialize for f32 {
+    // The shortest JSON number that decodes back to the value; NaN and
+    // infinities have no JSON form.
+    pub fn to_json(self: f32) Result[String, EncodeError] {
+        ret float_json(self as f64, true);
+    }
+}
+
+impl Serialize for f64 {
+    // The shortest JSON number that decodes back to the value; NaN and
+    // infinities have no JSON form.
+    pub fn to_json(self: f64) Result[String, EncodeError] {
+        ret float_json(self, false);
+    }
+}
+
+// `value * 10^exponent`, scaled in steps that neither overflow nor underflow.
+fn scale_by_ten(value: f64, exponent: i32) f64 {
+    var result: f64 = value;
+    var remaining: i32 = exponent;
+    for (remaining > 256) { result = result * 1e256; remaining = remaining - 256; }
+    for (remaining < -256) { result = result / 1e256; remaining = remaining + 256; }
+    var power: f64 = 1.0;
+    var base: f64 = 10.0;
+    var bits: i32 = remaining;
+    if (bits < 0) { bits = -bits; }
+    for (bits > 0) {
+        if (bits % 2 == 1) { power = power * base; }
+        base = base * base;
+        bits = bits / 2;
+    }
+    if (remaining < 0) { ret result / power; }
+    ret result * power;
+}
+
+// `count` zero characters.
+fn zeros(count: i32) String {
+    var text = String.new();
+    var index: i32 = 0;
+    for (index < count) { text.push_str("0"); index = index + 1; }
+    ret text;
+}
+
+// The JSON spelling of `digits` (no trailing zeros) times
+// 10^(exponent - digit count + 1): plain decimal for moderate exponents,
+// otherwise scientific notation.
+fn render_decimal(negative: bool, digits: str, exponent: i32) String {
+    var text = String.new();
+    if (negative) { text.push_str("-"); }
+    const count: i32 = digits.bytes_len() as i32;
+    if (exponent >= 0 && exponent < 21) {
+        if (count <= exponent + 1) {
+            text.push_str(digits);
+            const padding: String = zeros(exponent + 1 - count);
+            text.push_str(padding.as_str());
+        } else {
+            const whole: String = digits[0:(exponent + 1) as isize];
+            const fraction: String = digits[(exponent + 1) as isize:count as isize];
+            text.push_str(whole.as_str());
+            text.push_str(".");
+            text.push_str(fraction.as_str());
+        }
+        ret text;
+    }
+    if (exponent < 0 && exponent > -7) {
+        text.push_str("0.");
+        const padding: String = zeros(-exponent - 1);
+        text.push_str(padding.as_str());
+        text.push_str(digits);
+        ret text;
+    }
+    const lead: String = digits[0:1];
+    text.push_str(lead.as_str());
+    if (count > 1) {
+        const rest: String = digits[1:count as isize];
+        text.push_str(".");
+        text.push_str(rest.as_str());
+    }
+    text.push_str("e");
+    const power: String = exponent.to_string();
+    text.push_str(power.as_str());
+    ret text;
+}
+
+// The rendering of the `precision`-digit integer `scaled`, with trailing
+// zeros removed.
+fn render_digits(negative: bool, scaled: u64, exponent: i32) String {
+    var digits: u64 = scaled;
+    for (digits > 0 && digits % 10 == 0) { digits = digits / 10; }
+    const text: String = digits.to_string();
+    ret render_decimal(negative, text.as_str(), exponent);
+}
+
+// Whether `text` decodes to exactly `value` (at f32 precision when `single`).
+fn round_trips(text: str, value: f64, single: bool) i32 {
+    const owned = String.from(text);
+    const parsed: Result[f64, ParseError] = owned.parse_f64();
+    if (parsed.is_err()) { ret 2; }
+    const back: f64 = parsed.unwrap();
+    if (single) {
+        const narrow: f32 = back as f32;
+        const target: f32 = value as f32;
+        if (narrow == target) { ret 0; }
+        if (narrow < target) { ret -1; }
+        ret 1;
+    }
+    if (back == value) { ret 0; }
+    if (back < value) { ret -1; }
+    ret 1;
+}
+
+// The shortest decimal (at most 9 digits for f32, 17 for f64) that decodes
+// back to `value`. Candidates come from inexact scaling and are verified by
+// decoding, so the result always round-trips.
+fn float_json(value: f64, single: bool) Result[String, EncodeError] {
+    if (value != value || value - value != 0.0) { ret Err(EncodeError.InvalidValue); }
+    if (value == 0.0) { ret Ok(String.from("0")); }
+    const negative: bool = value < 0.0;
+    var magnitude: f64 = value;
+    if (negative) { magnitude = -value; }
+    var exponent: i32 = 0;
+    var probe: f64 = magnitude;
+    for (probe >= 10.0) { probe = probe / 10.0; exponent = exponent + 1; }
+    for (probe < 1.0) { probe = probe * 10.0; exponent = exponent - 1; }
+    var mantissa: f64 = scale_by_ten(magnitude, -exponent);
+    if (mantissa >= 10.0) { exponent = exponent + 1; mantissa = scale_by_ten(magnitude, -exponent); }
+    if (mantissa < 1.0) { exponent = exponent - 1; mantissa = scale_by_ten(magnitude, -exponent); }
+    var limit: i32 = 17;
+    if (single) { limit = 9; }
+    var precision: i32 = 1;
+    var bound: u64 = 10;
+    for (precision <= limit) {
+        var scaled: u64 = (scale_by_ten(mantissa, precision - 1) + 0.5) as u64;
+        var shown: i32 = exponent;
+        if (scaled >= bound) { scaled = bound / 10; shown = exponent + 1; }
+        const text: String = render_digits(negative, scaled, shown);
+        var order: i32 = round_trips(text.as_str(), value, single);
+        if (order == 0) { ret Ok(text); }
+        if (precision == limit) {
+            // Step the last digit toward the value until it decodes exactly.
+            var steps: i32 = 0;
+            var candidate: u64 = scaled;
+            for (order != 0 && steps < 1000) {
+                const below: bool = (order < 0) != negative;
+                if (below) { candidate = candidate + 1; } else { candidate = candidate - 1; }
+                if (candidate < bound / 10 || candidate >= bound) { ret Err(EncodeError.InvalidValue); }
+                const retry: String = render_digits(negative, candidate, shown);
+                order = round_trips(retry.as_str(), value, single);
+                if (order == 0) { ret Ok(retry); }
+                steps = steps + 1;
+            }
+            ret Err(EncodeError.InvalidValue);
+        }
+        precision = precision + 1;
+        bound = bound * 10;
+    }
+    ret Err(EncodeError.InvalidValue);
+}
+
+// `null` for None, the value's JSON otherwise (derived `Option` fields).
+pub fn optional_json[T: Serialize](value: Option[T]) Result[String, EncodeError] {
+    const null_json: Result[String, EncodeError] = Ok(String.from("null"));
+    ret match value {
+        Some(inner) => inner.to_json(),
+        None => null_json,
+    };
+}
+
+// A JSON array of the values' JSON, in order (derived `Array` fields).
+pub fn array_json[T: Serialize](values: Array[T]) Result[String, EncodeError] {
+    var text = String.from("[");
+    var first: bool = true;
+    for value : values {
+        if (!first) { text.push_str(","); }
+        first = false;
+        const encoded: String = value.to_json()?;
+        text.push_str(encoded.as_str());
+    }
+    text.push_str("]");
+    ret Ok(text);
+}
+
 // Normalize the lower-level JSON composition errors at the typed codec
 // boundary. A caller of Serialize never has to depend on JSON parser internals,
 // while resource-policy failures remain distinguishable for retry or reporting.
@@ -145,7 +390,9 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
     if (start == source.bytes_len() || core.str_byte_at(source, start) != 34) { ret Err(DecodeError.TypeMismatch); }
     const decoded: Result[String, JsonError] = json.decode_string_with_limits(source, max_input, max_depth);
     if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
-    ret Ok(decoded.unwrap());
+    // The copy gives callers a String with no provenance in `source`.
+    const text: String = decoded.unwrap();
+    ret Ok(String.from(text.as_str()));
 }
 
 // Decodes a JSON string.
@@ -292,6 +539,139 @@ pub fn optional_string(source: str, spans: &Array[usize], index: usize) Result[O
     ret Ok(Some(String.from(decoded.as_str())));
 }
 
+// The raw JSON value of a required field (derived nested structs decode it).
+pub fn field_raw(source: str, spans: &Array[usize], index: usize) Result[String, DecodeError] {
+    const text = field_text(source, spans, index);
+    if (text.is_none()) { ret Err(DecodeError.MissingField); }
+    ret Ok(text.unwrap());
+}
+
+// A JSON integer within [minimum, maximum]; another integer is InvalidValue.
+fn decode_ranged(source: str, minimum: i64, maximum: i64) Result[i64, DecodeError] {
+    const value: i64 = decode_i64(source)?;
+    if (value < minimum || value > maximum) { ret Err(DecodeError.InvalidValue); }
+    ret Ok(value);
+}
+
+// Decodes a JSON non-negative integer as `u64`.
+pub fn decode_u64(source: str) Result[u64, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (start == end || !digit(core.str_byte_at(source, start))) {
+        if (start < end && core.str_byte_at(source, start) == 45) { ret Err(DecodeError.InvalidValue); }
+        ret Err(DecodeError.TypeMismatch);
+    }
+    const raw: String = source[start as isize:end as isize];
+    const parsed: Result[u64, ParseError] = raw.parse_u64();
+    if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
+    ret Ok(parsed.unwrap());
+}
+
+// Decodes a JSON number as `f64`.
+pub fn decode_f64(source: str) Result[f64, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0; var end: usize = source.bytes_len();
+    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    if (start == end || (core.str_byte_at(source, start) != 45 && !digit(core.str_byte_at(source, start)))) { ret Err(DecodeError.TypeMismatch); }
+    const raw: String = source[start as isize:end as isize];
+    const parsed: Result[f64, ParseError] = raw.parse_f64();
+    if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
+    const value: f64 = parsed.unwrap();
+    // A number beyond the f64 range has no finite value to decode to.
+    if (value - value != 0.0) { ret Err(DecodeError.InvalidValue); }
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `i8`; one outside its range is InvalidValue.
+pub fn decode_i8(source: str) Result[i8, DecodeError] {
+    const value: i8 = (decode_ranged(source, -128, 127)?) as i8;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `i16`; one outside its range is InvalidValue.
+pub fn decode_i16(source: str) Result[i16, DecodeError] {
+    const value: i16 = (decode_ranged(source, -32768, 32767)?) as i16;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `i32`; one outside its range is InvalidValue.
+pub fn decode_i32(source: str) Result[i32, DecodeError] {
+    const value: i32 = (decode_ranged(source, -2147483648, 2147483647)?) as i32;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `u8`; one outside its range is InvalidValue.
+pub fn decode_u8(source: str) Result[u8, DecodeError] {
+    const value: u8 = (decode_ranged(source, 0, 255)?) as u8;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `u16`; one outside its range is InvalidValue.
+pub fn decode_u16(source: str) Result[u16, DecodeError] {
+    const value: u16 = (decode_ranged(source, 0, 65535)?) as u16;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `u32`; one outside its range is InvalidValue.
+pub fn decode_u32(source: str) Result[u32, DecodeError] {
+    const value: u32 = (decode_ranged(source, 0, 4294967295)?) as u32;
+    ret Ok(value);
+}
+
+// Decodes a JSON integer as `isize` (64-bit targets).
+pub fn decode_isize(source: str) Result[isize, DecodeError] {
+    const value: isize = decode_i64(source)? as isize;
+    ret Ok(value);
+}
+
+// Decodes a JSON non-negative integer as `usize` (64-bit targets).
+pub fn decode_usize(source: str) Result[usize, DecodeError] {
+    const value: usize = decode_u64(source)? as usize;
+    ret Ok(value);
+}
+
+// Decodes a JSON number as `f32`.
+pub fn decode_f32(source: str) Result[f32, DecodeError] {
+    const value: f32 = decode_f64(source)? as f32;
+    const wide: f64 = value as f64;
+    if (wide - wide != 0.0) { ret Err(DecodeError.InvalidValue); }
+    ret Ok(value);
+}
+
+// The raw JSON value of an optional field: `None` when missing or `null`.
+pub fn optional_raw(source: str, spans: &Array[usize], index: usize) Result[Option[String], DecodeError] {
+    ret Ok(optional_text(source, spans, index));
+}
+
+// The raw JSON text of each element of the array `source`, in order
+// (derived `Array` fields decode each element by its type).
+pub fn array_items(source: str) Result[Array[String], DecodeError] {
+    const spans = json.array_items(source);
+    if (spans.is_err()) {
+        ret Err(match spans.unwrap_err() {
+            InputLimit => DecodeError.InputLimit,
+            DepthLimit => DecodeError.DepthLimit,
+            InvalidToken => DecodeError.TypeMismatch,
+            _ => DecodeError.InvalidJson,
+        });
+    }
+    const bounds: Array[usize] = spans.unwrap();
+    var items: Array[String] = Array.new();
+    var index: usize = 0;
+    for (index < bounds.len()) {
+        const start: usize = bounds[index];
+        const end: usize = bounds[index + 1];
+        items.push(source[start as isize:end as isize]);
+        index = index + 2;
+    }
+    ret Ok(items);
+}
+
 @test
 fn object_fields_reject_unknown_and_duplicate_keys() void {
     var keys: Array[str] = Array.new();
@@ -324,4 +704,24 @@ fn system_time_round_trips_through_rfc3339_json() void {
     if (decoded.unix_seconds() != 951827696 || decoded.subsec_nanoseconds() != 5) { panic("timestamp did not round-trip"); }
     if (decode_system_time("\"2000-02-30T00:00:00Z\"").is_ok()) { panic("invalid date decoded"); }
     if (decode_system_time("12").is_ok()) { panic("number decoded as a timestamp"); }
+}
+
+@test
+fn floats_encode_to_the_shortest_round_trip_decimal() void {
+    const cases: [f64; 12] = [0.000000123, 1e-300, 0.000123456789, 123.456789012345678, 0.1, 2.5, -1.5, 1e21, 123456789012345680000.0, 5e-324, 1.7976931348623157e308, -0.3];
+    const expected: [str; 12] = ["1.23e-7", "1e-300", "0.000123456789", "123.45678901234568", "0.1", "2.5", "-1.5", "1e21", "123456789012345690000", "5e-324", "1.7976931348623157e308", "-0.3"];
+    var index: usize = 0;
+    for (index < 12) {
+        const text: String = cases[index].to_json().unwrap();
+        if (text.as_str() != expected[index]) { panic("float spelling differs"); }
+        const back: f64 = decode_f64(text.as_str()).unwrap();
+        if (back != cases[index]) { panic("float does not round-trip"); }
+        index = index + 1;
+    }
+    const single: f32 = 0.1;
+    const narrow: String = single.to_json().unwrap();
+    if (narrow.as_str() != "0.1") { panic("f32 uses its own shortest spelling"); }
+    if (decode_f64("1e999").is_ok()) { panic("an infinite f64 decodes"); }
+    if (decode_f32("1e39").is_ok()) { panic("an infinite f32 decodes"); }
+    ret;
 }

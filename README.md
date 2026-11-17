@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 74.6%.**
+**Plan completion: 77.3%.**
 
-**Remaining work: 25.4%.**
+**Remaining work: 22.7%.**
 
 Completion of unfinished plan items:
 
@@ -20,10 +20,10 @@ Completion of unfinished plan items:
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 18/19 | 94.7% | 5.3% |
-| Serialization | 9/15 | 60.0% | 40.0% |
+| Serialization | 13/15 | 86.7% | 13.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
-Counted on 2026-11-10 from the [requirement checklist](docs/PLAN_PROGRESS.md).
+Counted on 2026-11-17 from the [requirement checklist](docs/PLAN_PROGRESS.md).
 Each item has equal weight; its percentage is implemented requirements
 divided by listed requirements. The overall percentage averages those
 fractions before rounding. Pending or failing requirements receive no
@@ -183,10 +183,12 @@ Quazi can express hash/equality bounds and drop-aware slots.
 
 `std.json` currently provides a bounded syntax gate for untrusted JSON, helpers
 for emitting scalar JSON tokens, bounded JSON-string decoding, and top-level
-object-field extraction. `std.codec` provides explicit bounded scalar decoders
-for `bool`, `i64`, and owned `String`. Neither module constructs a dynamic JSON
-tree or supports compiler-derived/struct `Deserialize`; those remain future
-serialization work.
+object-field and array-element extraction. `std.codec` provides bounded
+decoders for `bool`, every integer width, `f32`, `f64`, and owned `String`, and
+the helpers behind compiler-derived `Serialize`/`Deserialize` (scalar,
+`String`, nested struct, `Option`, and `Array` fields). Neither module
+constructs a dynamic JSON tree; enums and maps remain future serialization
+work.
 
 ```quazi
 import std.json;
