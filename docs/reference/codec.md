@@ -8,6 +8,7 @@ std.codec — typed serialization contracts built on JSON wire codecs.
 - [`EncodeError`](#encodeerror) (enum)
 - [`DecodeError`](#decodeerror) (enum)
 - [`Serialize`](#serialize) (trait)
+- [`Deserialize`](#deserialize) (trait)
 - [`bool`](#bool) (methods)
 - [`i64`](#i64) (methods)
 - [`i8`](#i8) (methods)
@@ -24,6 +25,8 @@ std.codec — typed serialization contracts built on JSON wire codecs.
 - [`str`](#str) (methods)
 - [`String`](#string) (methods)
 - [`SystemTime`](#systemtime) (methods)
+- [`DocumentError`](#documenterror) (enum)
+- [`Document`](#document) (struct)
 
 ## Functions
 
@@ -335,8 +338,20 @@ pub trait Serialize {
 }
 ```
 
-Implementations must produce exactly one JSON value. Future compiler derives
-implement this trait for supported non-generic structs.
+Implementations must produce exactly one JSON value. `@serde("json")` and
+`@derive(Serialize)` generate it for structs (D-026).
+
+## `Deserialize`
+
+```quazi
+pub trait Deserialize {
+    @associated fn from_json(source: str) Result[Self, DecodeError];
+}
+```
+
+A type decodable from one JSON value: `T.from_json(text)` through a
+`T: Deserialize` bound. `@serde("json")` and `@derive(Deserialize)`
+generate it for structs (D-026).
 
 ## `bool`
 
@@ -499,3 +514,96 @@ pub fn to_json(self: SystemTime) Result[String, EncodeError]
 ```
 
 The time as a JSON string in RFC 3339 format.
+
+## `DocumentError`
+
+```quazi
+pub enum DocumentError {
+    // Reading or writing the file failed (the FsError message is kept).
+    Io(String),
+    Decode(DecodeError),
+    Encode(EncodeError),
+    // `save()` on a document that was parsed rather than loaded.
+    NoPath,
+}
+```
+
+Why a document operation failed.
+
+### `DocumentError.message`
+
+```quazi
+pub fn message(self: DocumentError) String
+```
+
+A short English description of the error, for display.
+
+## `Document`
+
+```quazi
+pub struct Document { /* internal fields */ }
+```
+
+A JSON document (D-026): its text and the file it came from. `decode`
+reads the whole value into a type, `encode` replaces it, `save` writes it
+back.
+  var doc = codec.Document.load("user.json")?;
+  var user: User = doc.decode[User]()?;
+  doc.encode(user)?;
+  doc.save()?;
+
+### `Document.parse`
+
+```quazi
+pub fn parse(text: str) Document
+```
+
+A document over `text` with no file.
+
+### `Document.load`
+
+```quazi
+pub fn load(path: str) Result[Document, DocumentError]
+```
+
+The document stored in the file at `path`.
+
+### `Document.decode`
+
+```quazi
+pub fn decode[T: Deserialize](self: &Document) Result[T, DocumentError]
+```
+
+The document's value decoded as `T`.
+
+### `Document.encode`
+
+```quazi
+pub fn encode[T: Serialize](self: &Document!, value: T) Result[bool, DocumentError]
+```
+
+Replace the document's value with `value`.
+
+### `Document.text`
+
+```quazi
+pub fn text(self: &Document) str
+```
+
+The document's JSON text.
+
+### `Document.save`
+
+```quazi
+pub fn save(self: &Document) Result[bool, DocumentError]
+```
+
+Write the document back to the file it was loaded from.
+
+### `Document.save_as`
+
+```quazi
+pub fn save_as(self: &Document, path: str) Result[bool, DocumentError]
+```
+
+Write the document to `path`.

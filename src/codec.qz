@@ -2,6 +2,7 @@
 import std.core;
 import std.json;
 import std.json.JsonError;
+import std.fs;
 import std.time.SystemTime;
 
 // Why a value could not be encoded.
@@ -52,14 +53,18 @@ impl DecodeError {
     }
 }
 
-// Implementations must produce exactly one JSON value. Future compiler derives
-// implement this trait for supported non-generic structs.
+// Implementations must produce exactly one JSON value. `@serde("json")` and
+// `@derive(Serialize)` generate it for structs (D-026).
 pub trait Serialize {
     fn to_json(self: Self) Result[String, EncodeError];
 }
 
-// Quazi traits currently require a receiver, so typed decode starts as explicit
-// free functions. A static Deserialize trait needs receiverless trait methods.
+// A type decodable from one JSON value: `T.from_json(text)` through a
+// `T: Deserialize` bound. `@serde("json")` and `@derive(Deserialize)`
+// generate it for structs (D-026).
+pub trait Deserialize {
+    @associated fn from_json(source: str) Result[Self, DecodeError];
+}
 impl Serialize for bool {
     // The JSON text of the value.
     pub fn to_json(self: bool) Result[String, EncodeError] {
@@ -724,4 +729,83 @@ fn floats_encode_to_the_shortest_round_trip_decimal() void {
     if (decode_f64("1e999").is_ok()) { panic("an infinite f64 decodes"); }
     if (decode_f32("1e39").is_ok()) { panic("an infinite f32 decodes"); }
     ret;
+}
+
+// Why a document operation failed.
+pub enum DocumentError {
+    // Reading or writing the file failed (the FsError message is kept).
+    Io(String),
+    Decode(DecodeError),
+    Encode(EncodeError),
+    // `save()` on a document that was parsed rather than loaded.
+    NoPath,
+}
+
+impl DocumentError {
+    // A short English description of the error, for display.
+    pub fn message(self: DocumentError) String {
+        ret match self {
+            Io(text) => text,
+            Decode(error) => String.from(error.message()),
+            Encode(error) => String.from(error.message()),
+            NoPath => String.from("the document has no file path; use save_as"),
+        };
+    }
+}
+
+// A JSON document (D-026): its text and the file it came from. `decode`
+// reads the whole value into a type, `encode` replaces it, `save` writes it
+// back.
+//   var doc = codec.Document.load("user.json")?;
+//   var user: User = doc.decode[User]()?;
+//   doc.encode(user)?;
+//   doc.save()?;
+pub struct Document {
+    text: String,
+    path: String,
+}
+
+impl Document {
+    // A document over `text` with no file.
+    pub fn parse(text: str) Document {
+        Document { text: String.from(text), path: String.new() }
+    }
+
+    // The document stored in the file at `path`.
+    pub fn load(path: str) Result[Document, DocumentError] {
+        const read = fs.read_to_string(path);
+        if (read.is_err()) { ret Err(DocumentError.Io(String.from(read.unwrap_err().message()))); }
+        ret Ok(Document { text: read.unwrap(), path: String.from(path) });
+    }
+
+    // The document's value decoded as `T`.
+    pub fn decode[T: Deserialize](self: &Document) Result[T, DocumentError] {
+        const decoded: Result[T, DecodeError] = T.from_json(self.text.as_str());
+        if (decoded.is_err()) { ret Err(DocumentError.Decode(decoded.unwrap_err())); }
+        ret Ok(decoded.unwrap());
+    }
+
+    // Replace the document's value with `value`.
+    pub fn encode[T: Serialize](self: &Document!, value: T) Result[bool, DocumentError] {
+        const encoded: Result[String, EncodeError] = value.to_json();
+        if (encoded.is_err()) { ret Err(DocumentError.Encode(encoded.unwrap_err())); }
+        self.text = encoded.unwrap();
+        ret Ok(true);
+    }
+
+    // The document's JSON text.
+    pub fn text(self: &Document) str { self.text.as_str() }
+
+    // Write the document back to the file it was loaded from.
+    pub fn save(self: &Document) Result[bool, DocumentError] {
+        if (self.path.bytes_len() == 0) { ret Err(DocumentError.NoPath); }
+        ret self.save_as(self.path.as_str());
+    }
+
+    // Write the document to `path`.
+    pub fn save_as(self: &Document, path: str) Result[bool, DocumentError] {
+        const written = fs.write(path, self.text.as_str());
+        if (written.is_err()) { ret Err(DocumentError.Io(String.from(written.unwrap_err().message()))); }
+        ret Ok(true);
+    }
 }
