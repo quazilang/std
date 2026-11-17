@@ -250,7 +250,9 @@ Evidence: [src/codec.qz](../src/codec.qz).
 - [x] Finalize missing/unknown/duplicate/default decode policy (maintainer
   answer В19В: unknown, duplicate and missing keys are errors; `Option`
   fields default to `None`; `object_fields_reject_unknown_and_duplicate_keys`).
-- [ ] Complete source/QZI/target-native codec regression matrix.
+- [ ] Complete source/QZI/target-native codec regression matrix (source, QZI
+  without sources, COFF and Windows under Wine pass in quazistrap
+  `scripts/check_deserialize.py --wine`; real Windows and NetBSD runs pending).
 
 ### Library-wide safety / other modules
 
