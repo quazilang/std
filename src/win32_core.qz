@@ -57,6 +57,19 @@ pub unsafe fn get_exit_code_process(handle: usize, exit_code: *u32) i32;
 @api("TerminateProcess")
 pub unsafe fn terminate_process(handle: usize, exit_code: u32) i32;
 
+// The Win32 function `CreatePipe` (see its Microsoft documentation).
+@api("CreatePipe")
+pub unsafe fn create_pipe(read_pipe: *usize, write_pipe: *usize, attributes: *u8, size: u32) i32;
+
+// The Win32 function `SetHandleInformation` (see its Microsoft documentation).
+@api("SetHandleInformation")
+pub unsafe fn set_handle_information(handle: usize, mask: u32, flags: u32) i32;
+
+// The Win32 function `PeekNamedPipe` (see its Microsoft documentation).
+@api("PeekNamedPipe")
+pub unsafe fn peek_named_pipe(pipe: usize, buffer: *u8, size: u32, read: *u32,
+    available: *u32, left: *u32) i32;
+
 // The Win32 function `CloseHandle` (see its Microsoft documentation).
 @api("CloseHandle")
 pub unsafe fn close_handle(handle: usize) i32;

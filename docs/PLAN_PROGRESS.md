@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 72.8%. Remaining: 27.2%.**
+**Complete: 74.6%. Remaining: 25.4%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -31,7 +31,7 @@ release-readiness probability. New requirements change the denominator.
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
 | Operating-system APIs | 7/10 | 70.0% | 30.0% |
-| Processes | 11/16 | 68.8% | 31.2% |
+| Processes | 14/16 | 87.5% | 12.5% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
@@ -102,15 +102,19 @@ Evidence: [src/process.qz](../src/process.qz).
   Linux; D-021, 2026-11-10).
 - [x] Per-child working directory (`Command.current_dir`, Linux; also PATH
   lookup; D-021, 2026-11-10).
-- [ ] Piped standard streams.
-- [ ] Owned binary output capture.
+- [x] Piped standard streams (`Command.output` connects the child's stdout and
+  stderr to pipes on Linux and Windows; 2026-11-17).
+- [x] Owned binary output capture (`Output { status, stdout: Array[u8],
+  stderr: Array[u8] }`).
 - [x] Timeout/cancellation API (`Child.wait_timeout` polls with back-off until a
   deadline; `wait_or_terminate` cancels a child that overruns; restored on
   2026-11-15 by maintainer answer В17).
 - [x] Windows CreateProcessW runtime (UTF-16 command line quoted for
   CommandLineToArgvW, wait/try_wait/terminate/close, Command PATH lookup and
   current_dir; `scripts/check_windows_process.py` under Wine, 2026-11-16).
-- [ ] Large-output and simultaneous stdout/stderr regressions.
+- [x] Large-output and simultaneous stdout/stderr regressions (both pipes are
+  drained concurrently: 3 MB + 2 MB in `command_output_captures_both_streams_concurrently`;
+  Windows capture under Wine in `scripts/check_windows_process.py`).
 - [ ] Automatic Child scope cleanup.
 - [ ] Complete target-native argv/status/termination/cleanup matrix.
 

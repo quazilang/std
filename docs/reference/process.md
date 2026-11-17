@@ -14,6 +14,7 @@ CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
 - [`ExitStatus`](#exitstatus) (enum)
 - [`Child`](#child) (struct)
 - [`Command`](#command) (struct)
+- [`Output`](#output) (struct)
 
 ## Functions
 
@@ -223,6 +224,15 @@ pub fn spawn(self: &Command) Result[Child, ProcessError]
 
 Starts the program and returns its Child.
 
+### `Command.output`
+
+```quazi
+pub fn output(self: &Command) Result[Output, ProcessError]
+```
+
+Runs the program to completion, capturing its standard output and
+standard error (read concurrently, so a large output cannot block it).
+
 ### `Command.status`
 
 ```quazi
@@ -230,3 +240,16 @@ pub fn status(self: &Command) Result[ExitStatus, ProcessError]
 ```
 
 Runs the program to completion and returns its exit status.
+
+## `Output`
+
+```quazi
+pub struct Output {
+    status: ExitStatus,
+    stdout: Array[u8],
+    stderr: Array[u8],
+}
+```
+
+The exit status and the bytes a child wrote to its standard output and
+standard error (`Command.output`).

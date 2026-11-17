@@ -113,6 +113,31 @@ pub fn terminate_process(handle: usize, exit_code: u32) i32
 
 The Win32 function `TerminateProcess` (see its Microsoft documentation).
 
+### `create_pipe`
+
+```quazi
+pub fn create_pipe(read_pipe: *usize, write_pipe: *usize, attributes: *u8, size: u32) i32
+```
+
+The Win32 function `CreatePipe` (see its Microsoft documentation).
+
+### `set_handle_information`
+
+```quazi
+pub fn set_handle_information(handle: usize, mask: u32, flags: u32) i32
+```
+
+The Win32 function `SetHandleInformation` (see its Microsoft documentation).
+
+### `peek_named_pipe`
+
+```quazi
+pub fn peek_named_pipe(pipe: usize, buffer: *u8, size: u32, read: *u32,
+    available: *u32, left: *u32) i32
+```
+
+The Win32 function `PeekNamedPipe` (see its Microsoft documentation).
+
 ### `close_handle`
 
 ```quazi

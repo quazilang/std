@@ -55,6 +55,8 @@ fn main() i32 {
     println("command {}", match status { ExitStatus.Code(code) => code, ExitStatus.Signal(_) => -1 });
     println("missing {}", process.spawn("C:\\\\definitely\\\\missing.exe", Array.new()).is_err());
     println("env unsupported {}", process.Command.new("cmd.exe").env("A", "1").status().is_err());
+    const captured = process.Command.new("cmd.exe").arg("/c").arg("echo hello& echo oops 1>&2& exit 3").output().unwrap();
+    println("output {} {} {}", match captured.status { ExitStatus.Code(code) => code, ExitStatus.Signal(_) => -1 }, captured.stdout.len(), captured.stderr.len());
     ret 0;
 }
 """
@@ -74,6 +76,7 @@ C:\\windows
 command 0
 missing true
 env unsupported true
+output 3 7 7
 """
 
 
@@ -105,7 +108,7 @@ def main():
         assert result.returncode == 0, result.stdout + result.stderr
         assert output == EXPECTED, output
     print("PASS windows process: CreateProcessW exit codes, exact argv quoting, try_wait/terminate/close, "
-          "Command PATH lookup and current_dir, spawn errors (Wine)")
+          "Command PATH lookup, current_dir and output capture, spawn errors (Wine)")
 
 
 if __name__ == "__main__":

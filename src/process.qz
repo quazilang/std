@@ -67,7 +67,7 @@ impl Child {
     // excludes argv[0]; the runtime supplies `program` as the first argument.
     pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
         @cfg(target_os = "windows") {
-            ret windows_spawn(program, true, &args, "");
+            unsafe { ret windows_spawn(program, true, &args, "", 0); }
         }
         var handle: usize = 0;
         var error: i32 = 0;
@@ -421,7 +421,19 @@ impl Command {
             var arguments: Array[str] = Array.new();
             for index : 0..self.arguments.count { arguments.push(self.arguments.get(index)); }
             // Without an application name Windows searches PATH (adding `.exe`).
-            ret windows_spawn(self.program.as_str(), false, &arguments, self.directory.as_str());
+            unsafe { ret windows_spawn(self.program.as_str(), false, &arguments, self.directory.as_str(), 0); }
+        }
+        Err(ProcessError.SpawnFailed(38))
+    }
+
+    // Runs the program to completion, capturing its standard output and
+    // standard error (read concurrently, so a large output cannot block it).
+    pub fn output(self: &Command) Result[Output, ProcessError] {
+        @cfg(target_os = "linux") {
+            ret command_output_linux(self);
+        }
+        @cfg(target_os = "windows") {
+            ret command_output_windows(self);
         }
         Err(ProcessError.SpawnFailed(38))
     }
@@ -478,6 +490,14 @@ fn resolve_program(command: &Command) Option[String] {
 
 @cfg(target_os = "linux")
 fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
+    unsafe { ret command_spawn_linux_with(command, 0); }
+}
+
+// Starts the command; with `streams` (four i32: stdout read/write, stderr
+// read/write pipe ends) the child's standard output and error go to the
+// write ends, which the parent then closes.
+@cfg(target_os = "linux")
+unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child, ProcessError] {
     const resolved = resolve_program(command);
     if (resolved.is_none()) { ret Err(ProcessError.SpawnFailed(2)); }
     const path: String = resolved.unwrap();
@@ -555,6 +575,11 @@ fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
                 const changed: i32 = unix.chdir(directory);
                 if (changed < 0) { failure = -changed; }
             }
+            if (failure == 0 && streams != 0) {
+                if (unix.dup2(*((streams + 4) as *i32), 1) < 0 || unix.dup2(*((streams + 12) as *i32), 2) < 0) {
+                    failure = 9;
+                }
+            }
             if (failure == 0) { failure = -unix.execve(path.as_str(), argv, envp); }
             *(pipe as *i32) = failure;
             unix.write(write_end, pipe, 4);
@@ -565,6 +590,10 @@ fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
     var child_error: i32 = 0;
     unsafe {
         unix.close(write_end);
+        if (streams != 0) {
+            unix.close(*((streams + 4) as *i32));
+            unix.close(*((streams + 12) as *i32));
+        }
         reported = unix.read(read_end, pipe, 4);
         unix.close(read_end);
         child_error = *(pipe as *i32);
@@ -580,6 +609,98 @@ fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
         ret Err(ProcessError.SpawnFailed(child_error));
     }
     Ok(Child { handle: pid as usize })
+}
+
+// The exit status and the bytes a child wrote to its standard output and
+// standard error (`Command.output`).
+pub struct Output {
+    status: ExitStatus,
+    stdout: Array[u8],
+    stderr: Array[u8],
+}
+
+@cfg(target_os = "linux")
+fn command_output_linux(command: &Command) Result[Output, ProcessError] {
+    var streams: *u8 = 0;
+    unsafe { streams = core.malloc(16); }
+    if (streams == 0) { ret Err(ProcessError.SpawnFailed(12)); }
+    var made: i32 = 0;
+    unsafe {
+        made = unix.pipe2(streams, 524288);
+        if (made >= 0) {
+            made = unix.pipe2(streams + 8, 524288);
+            if (made < 0) { unix.close(*(streams as *i32)); unix.close(*((streams + 4) as *i32)); }
+        }
+    }
+    if (made < 0) {
+        unsafe { core.free(streams); }
+        ret Err(ProcessError.SpawnFailed(-made));
+    }
+    var out_fd: i32 = 0;
+    var err_fd: i32 = 0;
+    unsafe {
+        out_fd = *(streams as *i32);
+        err_fd = *((streams + 8) as *i32);
+    }
+    var spawned: Result[Child, ProcessError] = Err(ProcessError.SpawnFailed(12));
+    unsafe { spawned = command_spawn_linux_with(command, streams); }
+    unsafe { core.free(streams); }
+    if (spawned.is_err()) {
+        unsafe { unix.close(out_fd); }
+        unsafe { unix.close(err_fd); }
+        ret Err(spawned.unwrap_err());
+    }
+    const child: Child = spawned.unwrap();
+    var stdout: Array[u8] = Array.new();
+    var stderr: Array[u8] = Array.new();
+    var buffer: *u8 = 0;
+    var fds: *u8 = 0;
+    unsafe {
+        buffer = core.malloc(65536);
+        fds = core.malloc(16);
+    }
+    var out_open: bool = true;
+    var err_open: bool = true;
+    for ((out_open || err_open) && buffer != 0 && fds != 0) {
+        // struct pollfd { int fd; short events; short revents; } x 2; a
+        // negative fd is ignored.
+        unsafe {
+            core.memset(fds, 0, 16);
+            *(fds as *i32) = if out_open { out_fd } else { -1 };
+            *((fds + 4) as *i16) = 1;
+            *((fds + 8) as *i32) = if err_open { err_fd } else { -1 };
+            *((fds + 12) as *i16) = 1;
+            unix.poll(fds, 2, -1);
+        }
+        var revents: i16 = 0;
+        unsafe { revents = *((fds + 6) as *i16); }
+        if (out_open && revents != 0) {
+            var count: isize = 0;
+            unsafe { count = unix.read(out_fd, buffer, 65536); }
+            if (count <= 0) { unsafe { unix.close(out_fd); } out_open = false; }
+            for index : 0..(if count > 0 { count as usize } else { 0 }) {
+                unsafe { stdout.push(*(buffer + index)); }
+            }
+        }
+        unsafe { revents = *((fds + 14) as *i16); }
+        if (err_open && revents != 0) {
+            var count: isize = 0;
+            unsafe { count = unix.read(err_fd, buffer, 65536); }
+            if (count <= 0) { unsafe { unix.close(err_fd); } err_open = false; }
+            for index : 0..(if count > 0 { count as usize } else { 0 }) {
+                unsafe { stderr.push(*(buffer + index)); }
+            }
+        }
+    }
+    unsafe {
+        if (buffer != 0) { core.free(buffer); }
+        if (fds != 0) { core.free(fds); }
+    }
+    if (out_open) { unsafe { unix.close(out_fd); } }
+    if (err_open) { unsafe { unix.close(err_fd); } }
+    const waited = child.wait()?;
+    if (waited.is_none()) { ret Err(ProcessError.WaitFailed(-1)); }
+    Ok(Output { status: waited.unwrap(), stdout: stdout, stderr: stderr })
 }
 
 // ── Windows ─────────────────────────────────────────────────────────────────
@@ -675,8 +796,10 @@ unsafe fn windows_utf16(text: *u8, length: usize) *u16 {
 
 // Starts `program` with `arguments` (program is argv[0]). With `exact`, the
 // program path is used as is; otherwise Windows searches PATH.
+// With `stdio` (three handles: input, output, error) the child uses those
+// standard handles.
 @cfg(target_os = "windows")
-fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: str) Result[Child, ProcessError] {
+unsafe fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: str, stdio: *u8) Result[Child, ProcessError] {
     var line = ByteBuffer.new();
     var built: bool = line.push_argument(program);
     for index : 0..arguments.len() {
@@ -699,6 +822,13 @@ fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: s
             core.memset(startup, 0, 104);
             core.memset(information, 0, 24);
             *(startup as *u32) = 104;
+            if (stdio != 0) {
+                // STARTF_USESTDHANDLES and hStdInput/Output/Error.
+                *((startup + 60) as *u32) = 256;
+                *((startup + 80) as *usize) = *(stdio as *usize);
+                *((startup + 88) as *usize) = *((stdio + 8) as *usize);
+                *((startup + 96) as *usize) = *((stdio + 16) as *usize);
+            }
             // Inherit the standard handles, like the Linux runtime.
             result = win32_core.create_process_w(application, command_line, 0, 0, 1, 0, 0, current, startup, information);
             if (result == 0) {
@@ -734,4 +864,87 @@ fn windows_wait(handle: usize, milliseconds: u32) Result[Option[ExitStatus], Pro
     unsafe { read = win32_core.get_exit_code_process(handle, &code); }
     if (read == 0) { ret Err(ProcessError.WaitFailed(windows_error())); }
     ret Ok(Some(ExitStatus.Code(code as i32)));
+}
+
+// Moves the bytes available on `pipe` into `output`; false once the writer
+// closed it (ERROR_BROKEN_PIPE) or reading failed.
+@cfg(target_os = "windows")
+unsafe fn windows_drain(pipe: usize, buffer: *u8, output: &Array[u8]!) bool {
+    var available: u32 = 0;
+    if (win32_core.peek_named_pipe(pipe, 0, 0, 0, &available, 0) == 0) { ret false; }
+    if (available == 0) { ret true; }
+    var count: u32 = available;
+    if (count > 65536) { count = 65536; }
+    var read: u32 = 0;
+    if (win32_core.read_file(pipe, buffer, count, &read, 0) == 0) { ret false; }
+    for index : 0..(read as usize) { output.push(*(buffer + index)); }
+    ret true;
+}
+
+@cfg(target_os = "windows")
+fn command_output_windows(command: &Command) Result[Output, ProcessError] {
+    if (command.clear_environment || command.variables.count > 0 || command.removed.count > 0) {
+        ret Err(ProcessError.SpawnFailed(50));
+    }
+    var stdout: Array[u8] = Array.new();
+    var stderr: Array[u8] = Array.new();
+    var out_read: usize = 0;
+    var out_write: usize = 0;
+    var err_read: usize = 0;
+    var err_write: usize = 0;
+    var spawned: Result[Child, ProcessError] = Err(ProcessError.SpawnFailed(8));
+    unsafe {
+        // SECURITY_ATTRIBUTES { nLength, lpSecurityDescriptor, bInheritHandle }:
+        // the write ends are inherited, the read ends stay in this process.
+        const attributes = core.malloc(24);
+        const stdio = core.malloc(24);
+        if (attributes == 0 || stdio == 0) { ret Err(ProcessError.SpawnFailed(8)); }
+        core.memset(attributes, 0, 24);
+        *(attributes as *u32) = 24;
+        *((attributes + 16) as *i32) = 1;
+        if (win32_core.create_pipe(&out_read, &out_write, attributes, 0) == 0
+            || win32_core.create_pipe(&err_read, &err_write, attributes, 0) == 0) {
+            core.free(attributes);
+            core.free(stdio);
+            ret Err(ProcessError.SpawnFailed(windows_error()));
+        }
+        win32_core.set_handle_information(out_read, 1, 0);
+        win32_core.set_handle_information(err_read, 1, 0);
+        *(stdio as *usize) = win32_core.get_std_handle(4294967286);
+        *((stdio + 8) as *usize) = out_write;
+        *((stdio + 16) as *usize) = err_write;
+        var arguments: Array[str] = Array.new();
+        for index : 0..command.arguments.count { arguments.push(command.arguments.get(index)); }
+        spawned = windows_spawn(command.program.as_str(), false, &arguments, command.directory.as_str(), stdio);
+        // Only the child holds the write ends now, so reads end at its exit.
+        win32_core.close_handle(out_write);
+        win32_core.close_handle(err_write);
+        core.free(attributes);
+        core.free(stdio);
+    }
+    if (spawned.is_err()) {
+        unsafe {
+            win32_core.close_handle(out_read);
+            win32_core.close_handle(err_read);
+        }
+        ret Err(spawned.unwrap_err());
+    }
+    const child: Child = spawned.unwrap();
+    unsafe {
+        const buffer = core.malloc(65536);
+        var out_open: bool = buffer != 0;
+        var err_open: bool = buffer != 0;
+        for (out_open || err_open) {
+            if (out_open) { out_open = windows_drain(out_read, buffer, &stdout!); }
+            if (err_open) { err_open = windows_drain(err_read, buffer, &stderr!); }
+            // Without new data, wait briefly instead of spinning.
+            win32_core.wait_for_single_object(child.handle, 1);
+        }
+        if (buffer != 0) { core.free(buffer); }
+        win32_core.close_handle(out_read);
+        win32_core.close_handle(err_read);
+    }
+    const waited = child.wait()?;
+    if (waited.is_none()) { ret Err(ProcessError.WaitFailed(-1)); }
+    Ok(Output { status: waited.unwrap(), stdout: stdout, stderr: stderr })
 }
