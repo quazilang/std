@@ -4,16 +4,16 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 78.9%.**
+**Plan completion: 79.9%.**
 
-**Remaining work: 21.1%.**
+**Remaining work: 20.1%.**
 
 Completion of unfinished plan items:
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
-| Operating-system APIs | 8/10 | 80.0% | 20.0% |
+| Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
@@ -45,8 +45,9 @@ description in the generated [API reference](docs/reference/README.md)
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
-- `os`: Cross-platform host, memory, process, and environment information.
-- `process`: Child processes; `Command` builder with PATH lookup, working directory, and environment (Linux).
+- `os`: Cross-platform host, memory, process, and environment information and changes.
+- `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
+- `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).
 - `thread`: Threading and concurrency primitives.
 - `unix` / `windows`: OS-specific platform bindings.
 

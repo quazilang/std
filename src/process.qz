@@ -5,7 +5,7 @@
 // independent of those platform details. Linux uses the runtime; Windows uses
 // CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
 import std.core;
-import std.os;
+import std.posix;
 @cfg(target_os = "linux")
 import std.unix;
 @cfg(target_os = "windows")
@@ -526,7 +526,7 @@ unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child
     if (!command.clear_environment) {
         // The live environment, including `os.set_env` changes.
         unsafe {
-            const current: *u8 = os.linux_environment();
+            const current: *u8 = posix.linux_environment();
             var index: usize = 0;
             if (current != 0) {
                 for (*((current + index * 8) as **u8) != 0) {

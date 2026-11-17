@@ -6,6 +6,7 @@ import std.unix;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 import std.win32_core;
+import std.posix;
 import std.fs;
 import std.fs.FsError;
 import ./os_memory;
@@ -347,19 +348,13 @@ unsafe fn env_entry_named(entry: *u8, name: str) bool {
     ret *(entry + index) == 61;
 }
 
-// The current Linux environment: a null-terminated array of `NAME=VALUE`
-// C string pointers. Arrays are never freed, so it stays readable.
-pub unsafe fn linux_environment() *u8 {
-    ret *((core.runtime_state() + 112) as **u8);
-}
-
 // Linux: publish a copy of the environment without `name` (and with
 // `name=value` unless `remove`). Writers serialize on a spin lock; readers
 // see the old or the new complete array (docs/internals/runtime-state.md).
 unsafe fn linux_change_env(name: str, value: str, remove: bool) Result[bool, EnvError] {
     const lock: *i64 = (core.runtime_state() + 104) as *i64;
     for (core.atomic_cas(lock, 0, 1) != 0) { yield_cpu(); }
-    const current: *u8 = linux_environment();
+    const current: *u8 = posix.linux_environment();
     var count: usize = 0;
     if (current != 0) {
         for (*((current + count * 8) as **u8) != 0) { count = count + 1; }
@@ -655,111 +650,6 @@ pub fn current_dir() Result[String, fs.FsError] { fs.current_dir() }
 
 // Change the current working directory for the whole process.
 pub fn set_current_dir(path: str) Result[bool, fs.FsError] { fs.set_current_dir(path) }
-
-// Fill buf with the current working directory path (null-terminated).
-// Returns number of bytes written (including null) or negative on error.
-// buf must be at least size bytes long.
-pub unsafe fn cwd(buf: str, size: usize) isize {
-    @cfg(target_os = "linux") { ret unix.getcwd(buf, size); }
-    @cfg(target_os = "netbsd") { ret netbsd.getcwd(buf, size); }
-    ret -1;
-}
-
-// ── Identities ───────────────────────────────────────────────────────────────
-
-// Returns the user ID of the current process.
-pub fn getuid() u32 {
-    @cfg(target_os = "linux") {
-        var r: u32 = 0;
-        unsafe { r = unix.getuid(); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: u32 = 0;
-        unsafe { r = netbsd.getuid(); }
-        ret r;
-    }
-    ret 4294967295 as u32;
-}
-
-// Returns the group ID of the current process.
-pub fn getgid() u32 {
-    @cfg(target_os = "linux") {
-        var r: u32 = 0;
-        unsafe { r = unix.getgid(); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: u32 = 0;
-        unsafe { r = netbsd.getgid(); }
-        ret r;
-    }
-    ret 4294967295 as u32;
-}
-
-// Returns the effective user ID.
-pub fn geteuid() u32 {
-    @cfg(target_os = "linux") {
-        var r: u32 = 0;
-        unsafe { r = unix.geteuid(); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: u32 = 0;
-        unsafe { r = netbsd.geteuid(); }
-        ret r;
-    }
-    ret 4294967295 as u32;
-}
-
-// Returns the effective group ID.
-pub fn getegid() u32 {
-    @cfg(target_os = "linux") {
-        var r: u32 = 0;
-        unsafe { r = unix.getegid(); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: u32 = 0;
-        unsafe { r = netbsd.getegid(); }
-        ret r;
-    }
-    ret 4294967295 as u32;
-}
-
-// ── Signals ───────────────────────────────────────────────────────────────────
-
-// Send signal sig to process pid. Common signals: SIGTERM=15, SIGKILL=9, SIGINT=2.
-pub fn kill(pid: i32, sig: i32) i32 {
-    @cfg(target_os = "linux") {
-        var r: i32 = 0;
-        unsafe { r = unix.kill(pid, sig); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: i32 = 0;
-        unsafe { r = netbsd.kill(pid, sig); }
-        ret r;
-    }
-    ret -1;
-}
-
-// ── Umask ────────────────────────────────────────────────────────────────────
-
-// Set process file-creation mask. Returns previous mask.
-pub fn umask(mask: u32) u32 {
-    @cfg(target_os = "linux") {
-        var r: u32 = 0;
-        unsafe { r = unix.umask(mask); }
-        ret r;
-    }
-    @cfg(target_os = "netbsd") {
-        var r: u32 = 0;
-        unsafe { r = netbsd.umask(mask); }
-        ret r;
-    }
-    ret 4294967295 as u32;
-}
 
 @test
 fn args_start_with_the_program() {

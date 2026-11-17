@@ -18,6 +18,7 @@
 - [`std.os`](os.md)
 - [`std.os_memory`](os_memory.md)
 - [`std.path`](path.md)
+- [`std.posix`](posix.md)
 - [`std.process`](process.md)
 - [`std.random`](random.md)
 - [`std.thread`](thread.md)
