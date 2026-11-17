@@ -55,7 +55,8 @@ fn status(kind: i32, value: i32) ExitStatus {
     ret ExitStatus.Signal(value);
 }
 
-// An owned child-process handle. `wait` and `close` consume the owner.
+// An owned child-process handle. `wait` and `close` consume the owner, and
+// scope cleanup closes a child that neither reached (terminate and reap).
 // `try_wait` borrows it exclusively and clears an exited handle, so later
 // operations on that same local are harmless no-ops.
 pub struct Child {
@@ -162,6 +163,16 @@ impl Child {
         unsafe { result = core.process_close(handle, &error); }
         if (result != 0) { ret Err(ProcessError.CloseFailed(error)); }
         ret Ok(true);
+    }
+
+    // Scope cleanup: a child that was neither waited for nor closed is
+    // closed (a live child is terminated, then reaped). Close errors are
+    // discarded; call `close` to observe them.
+    pub fn free(self: Child) void {
+        // A consumed or reaped child (handle 0) has nothing left to release;
+        // returning here also ends the cleanup of `close`'s own receiver.
+        if (self.handle == 0) { ret; }
+        const ignored: Result[bool, ProcessError] = self.close();
     }
 
     // Wait up to `timeout` for the child to exit: its status, or None when it

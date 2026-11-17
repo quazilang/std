@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 77.3%. Remaining: 22.7%.**
+**Complete: 77.9%. Remaining: 22.1%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -31,7 +31,7 @@ release-readiness probability. New requirements change the denominator.
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
 | Operating-system APIs | 7/10 | 70.0% | 30.0% |
-| Processes | 14/16 | 87.5% | 12.5% |
+| Processes | 15/16 | 93.8% | 6.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
@@ -115,7 +115,9 @@ Evidence: [src/process.qz](../src/process.qz).
 - [x] Large-output and simultaneous stdout/stderr regressions (both pipes are
   drained concurrently: 3 MB + 2 MB in `command_output_captures_both_streams_concurrently`;
   Windows capture under Wine in `scripts/check_windows_process.py`).
-- [ ] Automatic Child scope cleanup.
+- [x] Automatic Child scope cleanup (`Child.free` closes an abandoned child:
+  terminate and reap; `abandoned_child_is_terminated_and_reaped_at_scope_exit`,
+  2026-11-17).
 - [ ] Complete target-native argv/status/termination/cleanup matrix.
 
 ### Networking / TLS
@@ -269,8 +271,8 @@ high-level return is not used for the count.
 Since 2026-11-08 every module, including HTTP Headers/codecs and JSON object
 composition, passes ownership analysis, and `qz test` from the repository root
 passes all 38 `@test` functions (the procfs parser fixtures now live inside
-`src/os_memory.qz`). Process cleanup is
-explicit: there is no automatic `Child.free` hook. Windows process creation
+`src/os_memory.qz`). An abandoned
+`Child` is closed by scope cleanup (since 2026-11-17). Windows process creation
 exists since 2026-11-16 (checked under Wine, not on real Windows); portable
 environment mutation, named time zones, and TLS are absent; UTC civil time
 and RFC 3339 exist since 2026-11-08.

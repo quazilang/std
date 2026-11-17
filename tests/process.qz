@@ -3,6 +3,7 @@
 import std.process;
 import std.time;
 import std.process.ExitStatus;
+import std.fs;
 
 @test
 fn process_spawn_waits_for_an_exact_program_path() void {
@@ -128,4 +129,28 @@ fn command_output_captures_both_streams_concurrently() void {
     const big = process.Command.new("sh").arg("-c").arg("head -c 3000000 /dev/zero >&2; head -c 2000000 /dev/zero").output().unwrap();
     if (big.stdout.len() != 2000000 || big.stderr.len() != 3000000) { panic("large output"); }
     if (process.Command.new("definitely-not-a-quazi-program").output().is_ok()) { panic("missing program"); }
+}
+
+// Start a long sleeper and return its pid; the Child leaves scope here.
+fn abandoned_sleeper_pid() usize {
+    var args: Array[str] = Array.new();
+    args.push("sleep");
+    args.push("30");
+    // `env` execs `sleep` through PATH, so the pid stays the sleeper's.
+    const child: process.Child = match process.spawn("/usr/bin/env", args) {
+        Ok(value) => value,
+        Err(_) => panic("process.spawn failed for /usr/bin/env sleep"),
+    };
+    ret child.handle();
+}
+
+@test
+fn abandoned_child_is_terminated_and_reaped_at_scope_exit() void {
+    @cfg(target_os = "linux") {
+        const pid: usize = abandoned_sleeper_pid();
+        if (pid == 0) { panic("spawned child has no pid"); }
+        // A zombie would keep /proc/<pid>; scope cleanup kills and reaps it.
+        const proc_path: String = "/proc/{pid}";
+        if (fs.exists(proc_path.as_str())) { panic("abandoned child is still alive or unreaped"); }
+    }
 }

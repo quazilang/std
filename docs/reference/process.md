@@ -74,7 +74,8 @@ How a child process ended: `Code(n)` from its exit status, or
 pub struct Child { /* internal fields */ }
 ```
 
-An owned child-process handle. `wait` and `close` consume the owner.
+An owned child-process handle. `wait` and `close` consume the owner, and
+scope cleanup closes a child that neither reached (terminate and reap).
 `try_wait` borrows it exclusively and clears an exited handle, so later
 operations on that same local are harmless no-ops.
 
@@ -122,6 +123,16 @@ pub fn close(self: Child) Result[bool, ProcessError]
 
 Consume this child. The runtime terminates a live child and reaps it,
 so closing cannot leave a Linux zombie behind.
+
+### `Child.free`
+
+```quazi
+pub fn free(self: Child) void
+```
+
+Scope cleanup: a child that was neither waited for nor closed is
+closed (a live child is terminated, then reaped). Close errors are
+discarded; call `close` to observe them.
 
 ### `Child.wait_timeout`
 
