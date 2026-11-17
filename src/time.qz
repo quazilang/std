@@ -16,7 +16,7 @@ import std.netbsd;
 import std.win32_core;
 
 // Why a clock or time conversion failed.
-pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, }
+pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, UnknownZone, InvalidZone, }
 
 impl TimeError {
     // A short English description of the error, for display.
@@ -26,6 +26,8 @@ impl TimeError {
             ClockWentBackwards => "clock moved backwards",
             InvalidFormat => "text is not a valid RFC 3339 timestamp",
             OutOfRange => "time is outside years 0001-9999",
+            UnknownZone => "no time zone data was found for this name",
+            InvalidZone => "time zone data or rule is malformed",
         };
     }
 }
@@ -703,8 +705,8 @@ fn __push_padded(output: String, value: i64, width: usize) String {
     result
 }
 
-// A fixed offset from UTC in whole minutes, -23:59 through +23:59. It is not
-// a time zone: it carries no daylight-saving rules.
+// A fixed offset from UTC (normally whole minutes, -23:59 through +23:59).
+// It is not a time zone: `std.timezone.TimeZone` carries the rules.
 pub struct UtcOffset {
     seconds: i32,
 }
@@ -718,6 +720,13 @@ impl UtcOffset {
         if (hours < -23 || hours > 23 || minutes < 0 || minutes > 59) { ret None; }
         const magnitude: i32 = (if (hours < 0) { -hours } else { hours }) * 3600 + minutes * 60;
         Some(UtcOffset { seconds: if (hours < 0) { -magnitude } else { magnitude } })
+    }
+
+    // An offset of `seconds` east of UTC, within one day either way. Time
+    // zone data may use offsets with seconds (local mean time).
+    pub fn from_seconds(seconds: i32) Option[UtcOffset] {
+        if (seconds <= -86400 || seconds >= 86400) { ret None; }
+        Some(UtcOffset { seconds: seconds })
     }
 
     // Seconds east of UTC.

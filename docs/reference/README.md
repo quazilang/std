@@ -23,6 +23,7 @@
 - [`std.random`](random.md)
 - [`std.thread`](thread.md)
 - [`std.time`](time.md)
+- [`std.timezone`](timezone.md)
 - [`std.unix`](unix.md)
 - [`std.win32_core`](win32_core.md)
 - [`std.windows`](windows.md)

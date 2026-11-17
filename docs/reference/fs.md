@@ -83,6 +83,15 @@ Read a whole UTF-8 file of at most `max_bytes` bytes. A larger file fails
 with TooLarge after reading at most `max_bytes + 1` bytes, so untrusted
 paths cannot force unbounded allocation.
 
+### `read_bytes_with_limit`
+
+```quazi
+pub fn read_bytes_with_limit(path: str, max_bytes: usize) Result[Array[u8], FsError]
+```
+
+Read a whole file of at most `max_bytes` bytes as raw bytes. A larger file
+fails with TooLarge after reading at most `max_bytes + 1` bytes.
+
 ### `exists`
 
 ```quazi

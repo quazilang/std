@@ -1,0 +1,78 @@
+// Named time zones: POSIX rules, TZif data from the system database.
+
+import std.time.SystemTime;
+import std.timezone.TimeZone;
+import std.fs;
+
+fn at(text: str) SystemTime { SystemTime.parse_rfc3339(text).unwrap() }
+
+fn offset(zone: &TimeZone, text: str) i32 {
+    const instant: SystemTime = at(text);
+    zone.offset_at(&instant).seconds()
+}
+
+@test
+fn posix_rules_switch_on_the_rule_dates() void {
+    const kyiv = TimeZone.from_posix("EET-2EEST,M3.5.0/3,M10.5.0/4").unwrap();
+    if (offset(&kyiv, "2024-01-15T12:00:00Z") != 7200) { panic("winter offset"); }
+    if (offset(&kyiv, "2024-07-01T12:00:00Z") != 10800) { panic("summer offset"); }
+    // 2024-03-31 03:00 EET = 01:00 UTC starts EEST.
+    if (offset(&kyiv, "2024-03-31T00:59:59Z") != 7200) { panic("before spring change"); }
+    if (offset(&kyiv, "2024-03-31T01:00:00Z") != 10800) { panic("at spring change"); }
+    // 2024-10-27 04:00 EEST = 01:00 UTC ends it.
+    if (offset(&kyiv, "2024-10-27T00:59:59Z") != 10800) { panic("before autumn change"); }
+    if (offset(&kyiv, "2024-10-27T01:00:00Z") != 7200) { panic("at autumn change"); }
+    const summer: SystemTime = at("2024-07-01T12:00:00Z");
+    if (kyiv.abbreviation_at(&summer).as_str() != "EEST" || !kyiv.is_dst_at(&summer)) { panic("abbreviation"); }
+    const text: String = kyiv.format_rfc3339(&summer).unwrap();
+    if (text.as_str() != "2024-07-01T15:00:00+03:00") { panic("formatted local time"); }
+
+    // Southern hemisphere: daylight time spans the new year.
+    const sydney = TimeZone.from_posix("AEST-10AEDT,M10.1.0,M4.1.0/3").unwrap();
+    if (offset(&sydney, "2024-01-15T00:00:00Z") != 39600) { panic("sydney summer"); }
+    if (offset(&sydney, "2024-07-15T00:00:00Z") != 36000) { panic("sydney winter"); }
+    // Quoted names, fixed zones and Julian dates.
+    const fixed = TimeZone.from_posix("<-03>3").unwrap();
+    if (offset(&fixed, "2024-07-01T00:00:00Z") != -10800) { panic("quoted fixed zone"); }
+    const julian = TimeZone.from_posix("AAA0BBB,J60/0,J300/0").unwrap();
+    if (offset(&julian, "2024-03-01T00:00:00Z") != 3600) { panic("J60 is March 1"); }
+    // A transition 26 hours before New Year's Day falls in the previous year.
+    const shifted = TimeZone.from_posix("AAA3BBB,M1.1.0/-26,M12.5.6/30").unwrap();
+    const new_year: SystemTime = SystemTime.from_unix(757389600, 0).unwrap();
+    if (shifted.offset_at(&new_year).seconds() != -7200) { panic("rule time crossing a year"); }
+    if (TimeZone.from_posix("AAA25").is_ok()) { panic("offset of a day or more accepted"); }
+    // A huge count in a TZif header is malformed data, not a crash.
+    var header: Array[u8] = Array.new();
+    header.push(84); header.push(90); header.push(105); header.push(102); header.push(50);
+    var index: usize = 5;
+    for (index < 44) { header.push(255); index = index + 1; }
+    if (TimeZone.from_tzif("bad", &header).is_ok()) { panic("malformed TZif accepted"); }
+    if (TimeZone.from_posix("X1").is_ok() || TimeZone.from_posix("EET-2EEST,M13.1.0,M1.1.0").is_ok()) {
+        panic("malformed rules accepted");
+    }
+}
+
+@test
+fn system_zones_use_transitions_and_their_footer_rule() void {
+    @cfg(target_os = "linux") {
+        if (!fs.exists("/usr/share/zoneinfo/Europe/Kyiv") && !fs.exists("/etc/zoneinfo/Europe/Kyiv")) { ret; }
+        const kyiv = TimeZone.load("Europe/Kyiv").unwrap();
+        if (kyiv.name() != "Europe/Kyiv") { panic("zone name"); }
+        if (offset(&kyiv, "2024-07-01T12:00:00Z") != 10800) { panic("2024 summer"); }
+        const summer: SystemTime = at("2024-07-01T12:00:00Z");
+        const winter: SystemTime = at("2024-01-15T12:00:00Z");
+        if (kyiv.abbreviation_at(&summer).as_str() != "EEST" || kyiv.abbreviation_at(&winter).as_str() != "EET") { panic("TZif abbreviations"); }
+        if (!kyiv.is_dst_at(&summer) || kyiv.is_dst_at(&winter)) { panic("TZif daylight flags"); }
+        if (offset(&kyiv, "2024-01-15T12:00:00Z") != 7200) { panic("2024 winter"); }
+        // 1985 was Moscow time (+03:00 MSK, +04:00 MSD).
+        if (offset(&kyiv, "1985-07-01T12:00:00Z") != 14400) { panic("1985 summer"); }
+        // Past the stored transitions the footer rule applies.
+        if (offset(&kyiv, "2150-07-01T12:00:00Z") != 10800) { panic("2150 summer"); }
+        const york = TimeZone.load("America/New_York").unwrap();
+        if (offset(&york, "2024-03-10T06:59:59Z") != -18000) { panic("before US change"); }
+        if (offset(&york, "2024-03-10T07:00:00Z") != -14400) { panic("after US change"); }
+        if (TimeZone.load("Not/AZone").is_ok() || TimeZone.load("../etc/passwd").is_ok()) { panic("bad names load"); }
+        const local = TimeZone.local();
+        if (local.is_err()) { panic("local zone"); }
+    }
+}

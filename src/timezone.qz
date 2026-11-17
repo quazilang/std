@@ -1,0 +1,578 @@
+// std.timezone — named time zones from IANA TZif data (RFC 8536).
+//
+// A TimeZone maps an instant to its UTC offset, abbreviation and daylight
+// flag. Transitions come from the TZif file; instants after the last one use
+// the file's POSIX TZ footer rule (e.g. `EET-2EEST,M3.5.0/3,M10.5.0/4`).
+// Leap-second records are ignored: SystemTime counts POSIX seconds.
+import std.core;
+import std.fs;
+import std.os;
+import std.time;
+import std.time.SystemTime;
+import std.time.TimeError;
+import std.time.UtcOffset;
+import std.time.DateTime;
+
+// One local time type: its offset, daylight flag and abbreviation.
+struct ZoneType {
+    offset: i32,
+    dst: bool,
+    abbreviation: String,
+}
+
+// A POSIX TZ rule (`std offset [dst [offset] [,start[/time],end[/time]]]`).
+// Dates use `kind` 0 = Jn (1-365, no Feb 29), 1 = n (0-365), 2 = Mm.w.d.
+struct ZoneRule {
+    present: bool,
+    standard_offset: i32,
+    standard_name: String,
+    has_dst: bool,
+    dst_offset: i32,
+    dst_name: String,
+    start_kind: i32, start_a: i32, start_b: i32, start_c: i32, start_time: i32,
+    end_kind: i32, end_a: i32, end_b: i32, end_c: i32, end_time: i32,
+}
+
+// A time zone: TZif transitions plus an optional POSIX rule for later times.
+pub struct TimeZone {
+    name: String,
+    times: Array[i64],
+    indexes: Array[u8],
+    // Local time types as parallel arrays; an abbreviation is the
+    // `|`-terminated text at `type_names[i]` in `designations`.
+    type_offsets: Array[i32],
+    type_dst: Array[bool],
+    type_names: Array[usize],
+    designations: String,
+    rule: ZoneRule,
+}
+
+fn empty_rule() ZoneRule {
+    ZoneRule {
+        present: false, standard_offset: 0, standard_name: String.from("UTC"),
+        has_dst: false, dst_offset: 0, dst_name: String.new(),
+        start_kind: 0, start_a: 0, start_b: 0, start_c: 0, start_time: 7200,
+        end_kind: 0, end_a: 0, end_b: 0, end_c: 0, end_time: 7200,
+    }
+}
+
+// ── TZif decoding ────────────────────────────────────────────────────────────
+
+fn be32(data: &Array[u8], at: usize) i64 {
+    const value: u64 = ((data[at] as u64) << 24) | ((data[at + 1] as u64) << 16)
+        | ((data[at + 2] as u64) << 8) | (data[at + 3] as u64);
+    // Sign-extend the 32-bit two's-complement value.
+    if (value >= 2147483648) { ret (value as i64) - 4294967296; }
+    ret value as i64;
+}
+
+fn be64(data: &Array[u8], at: usize) i64 {
+    var value: u64 = 0;
+    var index: usize = 0;
+    for (index < 8) {
+        value = (value << 8) | (data[at + index] as u64);
+        index = index + 1;
+    }
+    ret value as i64;
+}
+
+// An unsigned 32-bit count, capped so size arithmetic cannot overflow; a
+// capped count can never fit the data and is rejected as InvalidZone.
+fn count_at(data: &Array[u8], at: usize) usize {
+    var value: i64 = be32(data, at);
+    if (value < 0 || value > 16777216) { value = 16777216; }
+    ret value as usize;
+}
+
+// The size of a TZif data block whose header starts at `header`, with
+// `time_size`-byte transition times.
+fn block_size(data: &Array[u8], header: usize, time_size: usize) usize {
+    const isut: usize = count_at(data, header + 20);
+    const isstd: usize = count_at(data, header + 24);
+    const leap: usize = count_at(data, header + 28);
+    const time: usize = count_at(data, header + 32);
+    const kinds: usize = count_at(data, header + 36);
+    const chars: usize = count_at(data, header + 40);
+    ret time * time_size + time + kinds * 6 + chars + leap * (time_size + 4) + isstd + isut;
+}
+
+fn has_header(data: &Array[u8], at: usize) bool {
+    ret data.len() >= at + 44 && data[at] == 84 && data[at + 1] == 90
+        && data[at + 2] == 105 && data[at + 3] == 102;
+}
+
+// The bytes `data[start..end]` as text (empty unless valid UTF-8).
+fn bytes_text(data: &Array[u8], start: usize, end: usize) String {
+    const length: usize = end - start;
+    var buffer: *u8 = 0;
+    unsafe { buffer = core.malloc(length + 1); }
+    if (buffer == 0) { ret String.new(); }
+    var index: usize = 0;
+    for (index < length) {
+        unsafe { *(buffer + index) = data[start + index]; }
+        index = index + 1;
+    }
+    var valid: bool = false;
+    unsafe {
+        *(buffer + length) = 0;
+        valid = core.is_valid_utf8(buffer, length);
+    }
+    if (!valid) {
+        unsafe { core.free(buffer); }
+        ret String.new();
+    }
+    var text: String = String.new();
+    unsafe { text = String.from_raw(buffer, length, length + 1); }
+    ret text;
+}
+
+impl TimeZone {
+    // Coordinated Universal Time.
+    pub fn utc() TimeZone {
+        TimeZone {
+            name: String.from("UTC"), times: Array.new(), indexes: Array.new(),
+            type_offsets: Array.new(), type_dst: Array.new(), type_names: Array.new(),
+            designations: String.new(), rule: empty_rule(),
+        }
+    }
+
+    // Decode TZif data (versions 1-4). `name` is reported by `name()`.
+    pub fn from_tzif(name: str, data: &Array[u8]) Result[TimeZone, TimeError] {
+        if (!has_header(data, 0)) { ret Err(TimeError.InvalidZone); }
+        var header: usize = 0;
+        var time_size: usize = 4;
+        if (data[4] >= 50) {
+            // Version 2+: skip the 32-bit block and use the 64-bit one.
+            header = 44 + block_size(data, 0, 4);
+            time_size = 8;
+            if (!has_header(data, header)) { ret Err(TimeError.InvalidZone); }
+        }
+        const time_count: usize = count_at(data, header + 32);
+        const type_count: usize = count_at(data, header + 36);
+        const char_count: usize = count_at(data, header + 40);
+        const body: usize = header + 44;
+        if (type_count == 0 || data.len() < body + block_size(data, header, time_size)) {
+            ret Err(TimeError.InvalidZone);
+        }
+        var zone = TimeZone.utc();
+        zone.name = String.from(name);
+        var index: usize = 0;
+        for (index < time_count) {
+            if (time_size == 8) { zone.times.push(be64(data, body + index * 8)); }
+            else { zone.times.push(be32(data, body + index * 4)); }
+            index = index + 1;
+        }
+        const index_base: usize = body + time_count * time_size;
+        index = 0;
+        for (index < time_count) {
+            const kind: u8 = data[index_base + index];
+            if (kind as usize >= type_count) { ret Err(TimeError.InvalidZone); }
+            zone.indexes.push(kind);
+            index = index + 1;
+        }
+        const type_base: usize = index_base + time_count;
+        const char_base: usize = type_base + type_count * 6;
+        // `str` ends at NUL, so the block keeps `|` between abbreviations.
+        var designations: Array[u8] = Array.new();
+        index = 0;
+        for (index < char_count) {
+            const byte: u8 = data[char_base + index];
+            if (byte == 0) { designations.push(124); } else { designations.push(byte); }
+            index = index + 1;
+        }
+        zone.designations = bytes_text(&designations, 0, char_count);
+        index = 0;
+        for (index < type_count) {
+            const at: usize = type_base + index * 6;
+            const designation: usize = data[at + 5] as usize;
+            if (designation >= char_count) { ret Err(TimeError.InvalidZone); }
+            zone.type_offsets.push(be32(data, at) as i32);
+            zone.type_dst.push(data[at + 4] != 0);
+            zone.type_names.push(designation);
+            index = index + 1;
+        }
+        if (time_size == 8) {
+            // The footer: "\n" POSIX-TZ-string "\n" after the 64-bit block.
+            var cursor: usize = body + block_size(data, header, 8);
+            if (cursor < data.len() && data[cursor] == 10) {
+                cursor = cursor + 1;
+                var end: usize = cursor;
+                for (end < data.len() && data[end] != 10) { end = end + 1; }
+                // RFC 8536: the footer ends with a newline.
+                if (end == data.len()) { ret Err(TimeError.InvalidZone); }
+                if (end > cursor) {
+                    const footer: String = bytes_text(data, cursor, end);
+                    zone.rule = parse_rule(footer.as_str())?;
+                }
+            }
+        }
+        ret Ok(zone);
+    }
+
+    // A zone from a POSIX TZ rule such as `CET-1CEST,M3.5.0,M10.5.0/3`.
+    pub fn from_posix(rule: str) Result[TimeZone, TimeError] {
+        var zone = TimeZone.utc();
+        zone.name = String.from(rule);
+        zone.rule = parse_rule(rule)?;
+        ret Ok(zone);
+    }
+
+    // Load an IANA zone such as `Europe/Kyiv` from the system time zone
+    // database: `$TZDIR`, then /usr/share/zoneinfo, /etc/zoneinfo (NixOS) and
+    // /usr/share/lib/zoneinfo. Windows has no TZif database unless TZDIR
+    // points at one. A name with `..` or a leading `/` is UnknownZone.
+    pub fn load(name: str) Result[TimeZone, TimeError] {
+        if (!zone_name_valid(name)) { ret Err(TimeError.UnknownZone); }
+        const configured: String = os.env("TZDIR", "");
+        if (configured.bytes_len() > 0) {
+            const found = load_from(configured.as_str(), name);
+            if (found.is_some()) { ret found.unwrap(); }
+        }
+        const shared = load_from("/usr/share/zoneinfo", name);
+        if (shared.is_some()) { ret shared.unwrap(); }
+        const etc = load_from("/etc/zoneinfo", name);
+        if (etc.is_some()) { ret etc.unwrap(); }
+        const lib = load_from("/usr/share/lib/zoneinfo", name);
+        if (lib.is_some()) { ret lib.unwrap(); }
+        ret Err(TimeError.UnknownZone);
+    }
+
+    // The process's local zone: the `TZ` variable (`:Name`, an IANA name or
+    // a POSIX rule), otherwise /etc/localtime, otherwise UTC.
+    pub fn local() Result[TimeZone, TimeError] {
+        const configured: String = os.env("TZ", "");
+        if (configured.bytes_len() > 0) {
+            const text: str = configured.as_str();
+            var name: String = String.from(text);
+            if (core.str_byte_at(text, 0) == 58) { name = text[1:text.bytes_len() as isize]; }
+            const loaded = TimeZone.load(name.as_str());
+            if (loaded.is_ok()) { ret loaded; }
+            ret TimeZone.from_posix(name.as_str());
+        }
+        const read = fs.read_bytes_with_limit("/etc/localtime", 1048576);
+        if (read.is_ok()) {
+            const data: Array[u8] = read.unwrap();
+            ret TimeZone.from_tzif("localtime", &data);
+        }
+        ret Ok(TimeZone.utc());
+    }
+
+    // The name the zone was loaded under.
+    pub fn name(self: &TimeZone) str { self.name.as_str() }
+
+    // The UTC offset in effect at `instant`.
+    pub fn offset_at(self: &TimeZone, instant: &SystemTime) UtcOffset {
+        const kind: ZoneType = self.type_at(instant.unix_seconds());
+        const offset: Option[UtcOffset] = UtcOffset.from_seconds(kind.offset);
+        if (offset.is_none()) { ret UtcOffset.utc(); }
+        ret offset.unwrap();
+    }
+
+    // Whether daylight-saving time is in effect at `instant`.
+    pub fn is_dst_at(self: &TimeZone, instant: &SystemTime) bool {
+        const kind: ZoneType = self.type_at(instant.unix_seconds());
+        ret kind.dst;
+    }
+
+    // The abbreviation in effect at `instant`, such as `EEST`.
+    pub fn abbreviation_at(self: &TimeZone, instant: &SystemTime) String {
+        const kind: ZoneType = self.type_at(instant.unix_seconds());
+        ret String.from(kind.abbreviation.as_str());
+    }
+
+    // The local wall-clock fields at `instant`; None outside years 0001-9999.
+    pub fn local_time(self: &TimeZone, instant: &SystemTime) Option[DateTime] {
+        const offset: UtcOffset = self.offset_at(instant);
+        ret instant.to_offset(&offset);
+    }
+
+    // RFC 3339 text in this zone, e.g. `2024-07-01T15:00:00+03:00`.
+    pub fn format_rfc3339(self: &TimeZone, instant: &SystemTime) Option[String] {
+        const offset: UtcOffset = self.offset_at(instant);
+        ret instant.format_rfc3339_at(&offset);
+    }
+
+    fn type_at(self: &TimeZone, seconds: i64) ZoneType {
+        const count: usize = self.times.len();
+        if (count == 0 || seconds >= self.times[count - 1]) {
+            if (self.rule.present) { ret self.rule_type(seconds); }
+            if (count == 0) { ret self.stored_type(0); }
+            ret self.stored_type(self.indexes[count - 1] as usize);
+        }
+        if (seconds < self.times[0]) { ret self.stored_type(0); }
+        // The last transition at or before `seconds`.
+        var low: usize = 0;
+        var high: usize = count - 1;
+        for (low < high) {
+            const middle: usize = (low + high + 1) / 2;
+            if (self.times[middle] <= seconds) { low = middle; } else { high = middle - 1; }
+        }
+        ret self.stored_type(self.indexes[low] as usize);
+    }
+
+    fn stored_type(self: &TimeZone, index: usize) ZoneType {
+        if (index >= self.type_offsets.len()) {
+            ret ZoneType { offset: 0, dst: false, abbreviation: String.from("UTC") };
+        }
+        const names: str = self.designations.as_str();
+        const start: usize = self.type_names[index];
+        var end: usize = start;
+        for (end < names.bytes_len() && core.str_byte_at(names, end) != 124) { end = end + 1; }
+        ZoneType {
+            offset: self.type_offsets[index],
+            dst: self.type_dst[index],
+            abbreviation: names[start as isize:end as isize],
+        }
+    }
+
+    fn rule_type(self: &TimeZone, seconds: i64) ZoneType {
+        const standard_offset: i32 = self.rule.standard_offset;
+        if (!self.rule.has_dst) {
+            ret ZoneType { offset: standard_offset, dst: false, abbreviation: String.from(self.rule.standard_name.as_str()) };
+        }
+        // Rule times may reach +/-167 hours, so a transition can fall in
+        // a neighbouring year: take the latest transition at or before
+        // `seconds` among the years around it.
+        const year: i64 = year_of_days(floor_div(seconds + standard_offset as i64, 86400));
+        var latest: i64 = -9223372036854775807;
+        var dst: bool = false;
+        var candidate: i64 = year - 1;
+        for (candidate <= year + 1) {
+            // Start is given in standard time, end in daylight time.
+            const start: i64 = rule_day(candidate, self.rule.start_kind, self.rule.start_a, self.rule.start_b, self.rule.start_c) * 86400
+                + self.rule.start_time as i64 - standard_offset as i64;
+            const end: i64 = rule_day(candidate, self.rule.end_kind, self.rule.end_a, self.rule.end_b, self.rule.end_c) * 86400
+                + self.rule.end_time as i64 - self.rule.dst_offset as i64;
+            if (start <= seconds && start >= latest) { latest = start; dst = true; }
+            if (end <= seconds && end >= latest) { latest = end; dst = false; }
+            candidate = candidate + 1;
+        }
+        if (!dst) {
+            ret ZoneType { offset: standard_offset, dst: false, abbreviation: String.from(self.rule.standard_name.as_str()) };
+        }
+        ZoneType { offset: self.rule.dst_offset, dst: true, abbreviation: String.from(self.rule.dst_name.as_str()) }
+    }
+}
+
+// The zone `root/name` decoded, or None when the file cannot be read.
+fn load_from(root: str, name: str) Option[Result[TimeZone, TimeError]] {
+    const path: String = "{root}/{name}";
+    const read = fs.read_bytes_with_limit(path.as_str(), 1048576);
+    if (read.is_err()) { ret None; }
+    const data: Array[u8] = read.unwrap();
+    Some(TimeZone.from_tzif(name, &data))
+}
+
+fn zone_name_valid(name: str) bool {
+    if (name.bytes_len() == 0 || core.str_byte_at(name, 0) == 47) { ret false; }
+    var index: usize = 0;
+    for (index + 1 < name.bytes_len()) {
+        if (core.str_byte_at(name, index) == 46 && core.str_byte_at(name, index + 1) == 46) { ret false; }
+        index = index + 1;
+    }
+    ret true;
+}
+
+// ── POSIX TZ rules ───────────────────────────────────────────────────────────
+
+struct RuleCursor { text: str, at: usize, }
+
+impl RuleCursor {
+    fn done(self: &RuleCursor) bool { self.at >= self.text.bytes_len() }
+    fn peek(self: &RuleCursor) u8 {
+        if (self.done()) { ret 0; }
+        core.str_byte_at(self.text, self.at)
+    }
+    fn number(self: &RuleCursor!) Option[i32] {
+        const start: usize = self.at;
+        var value: i32 = 0;
+        for (!self.done() && self.peek() >= 48 && self.peek() <= 57 && self.at - start < 4) {
+            value = value * 10 + (self.peek() - 48) as i32;
+            self.at = self.at + 1;
+        }
+        if (self.at == start) { ret None; }
+        Some(value)
+    }
+    // Skips an abbreviation (three or more letters, or `<...>` which may hold
+    // +, - and digits) and returns its byte range as start * 65536 + end, or
+    // None when it is malformed.
+    fn name_range(self: &RuleCursor!) Option[usize] {
+        var start: usize = self.at;
+        var end: usize = self.at;
+        if (self.peek() == 60) {
+            self.at = self.at + 1;
+            start = self.at;
+            for (!self.done() && self.peek() != 62) { self.at = self.at + 1; }
+            if (self.done()) { ret None; }
+            end = self.at;
+            self.at = self.at + 1;
+        } else {
+            for (!self.done() && ((self.peek() >= 65 && self.peek() <= 90) || (self.peek() >= 97 && self.peek() <= 122))) {
+                self.at = self.at + 1;
+            }
+            end = self.at;
+        }
+        if (end - start < 3 || end >= 65536) { ret None; }
+        Some(start * 65536 + end)
+    }
+
+    // One `,date[/time]` transition.
+    fn transition(self: &RuleCursor!) Transition {
+        var result = Transition { valid: false, kind: 1, a: 0, b: 0, c: 0, time: 7200 };
+        if (self.peek() != 44) { ret result; }
+        self.at = self.at + 1;
+        if (self.peek() == 77) {
+            self.at = self.at + 1;
+            result.kind = 2;
+            const month = self.number();
+            if (month.is_none() || self.peek() != 46) { ret result; }
+            self.at = self.at + 1;
+            const week = self.number();
+            if (week.is_none() || self.peek() != 46) { ret result; }
+            self.at = self.at + 1;
+            const day = self.number();
+            if (day.is_none()) { ret result; }
+            result.a = month.unwrap(); result.b = week.unwrap(); result.c = day.unwrap();
+            if (result.a < 1 || result.a > 12 || result.b < 1 || result.b > 5 || result.c > 6) { ret result; }
+        } else if (self.peek() == 74) {
+            self.at = self.at + 1;
+            result.kind = 0;
+            const day = self.number();
+            if (day.is_none()) { ret result; }
+            result.a = day.unwrap();
+            if (result.a < 1 || result.a > 365) { ret result; }
+        } else {
+            const day = self.number();
+            if (day.is_none()) { ret result; }
+            result.a = day.unwrap();
+            if (result.a > 365) { ret result; }
+        }
+        if (self.peek() == 47) {
+            self.at = self.at + 1;
+            const clock = self.clock();
+            if (clock.is_none()) { ret result; }
+            result.time = clock.unwrap();
+        }
+        result.valid = true;
+        ret result;
+    }
+
+    // `[+-]hh[:mm[:ss]]` as seconds (hours up to 167 for rule times).
+    fn clock(self: &RuleCursor!) Option[i32] {
+        var sign: i32 = 1;
+        if (self.peek() == 45) { sign = -1; self.at = self.at + 1; }
+        else if (self.peek() == 43) { self.at = self.at + 1; }
+        const hours: i32 = self.number()?;
+        if (hours > 167) { ret None; }
+        var total: i32 = hours * 3600;
+        if (self.peek() == 58) {
+            self.at = self.at + 1;
+            const minutes: i32 = self.number()?;
+            if (minutes > 59) { ret None; }
+            total = total + minutes * 60;
+            if (self.peek() == 58) {
+                self.at = self.at + 1;
+                const seconds: i32 = self.number()?;
+                if (seconds > 59) { ret None; }
+                total = total + seconds;
+            }
+        }
+        Some(sign * total)
+    }
+}
+
+// A parsed rule date: `kind` 0 = Jn, 1 = n, 2 = Mm.w.d (a, b, c).
+struct Transition { valid: bool, kind: i32, a: i32, b: i32, c: i32, time: i32, }
+
+// A fresh copy of `text[range]` (see `RuleCursor.name_range`).
+fn rule_name(text: str, range: usize) String {
+    const slice: String = text[(range / 65536) as isize:(range % 65536) as isize];
+    String.from(slice.as_str())
+}
+
+fn parse_rule(text: str) Result[ZoneRule, TimeError] {
+    const parsed = parse_rule_fields(text);
+    if (parsed.is_none()) { ret Err(TimeError.InvalidZone); }
+    ret Ok(parsed.unwrap());
+}
+
+fn parse_rule_fields(text: str) Option[ZoneRule] {
+    var cursor = RuleCursor { text: text, at: 0 };
+    var rule = empty_rule();
+    rule.present = true;
+    rule.standard_name = rule_name(text, cursor.name_range()?);
+    // POSIX offsets are west of UTC; store east-of-UTC seconds.
+    rule.standard_offset = -(cursor.clock()?);
+    if (rule.standard_offset <= -86400 || rule.standard_offset >= 86400) { ret None; }
+    if (cursor.done()) { ret Some(rule); }
+    rule.has_dst = true;
+    rule.dst_name = rule_name(text, cursor.name_range()?);
+    rule.dst_offset = rule.standard_offset + 3600;
+    if (!cursor.done() && cursor.peek() != 44) { rule.dst_offset = -(cursor.clock()?); }
+    if (rule.dst_offset <= -86400 || rule.dst_offset >= 86400) { ret None; }
+    // Without explicit dates POSIX leaves them implementation-defined; use
+    // the US rules (second Sunday of March, first Sunday of November).
+    var start = Transition { valid: true, kind: 2, a: 3, b: 2, c: 0, time: 7200 };
+    var end = Transition { valid: true, kind: 2, a: 11, b: 1, c: 0, time: 7200 };
+    if (!cursor.done()) {
+        start = cursor.transition();
+        end = cursor.transition();
+        if (!start.valid || !end.valid) { ret None; }
+    }
+    rule.start_kind = start.kind; rule.start_a = start.a; rule.start_b = start.b; rule.start_c = start.c; rule.start_time = start.time;
+    rule.end_kind = end.kind; rule.end_a = end.a; rule.end_b = end.b; rule.end_c = end.c; rule.end_time = end.time;
+    if (!cursor.done()) { ret None; }
+    Some(rule)
+}
+
+fn days_from_civil(year: i64, month: i64, day: i64) i64 {
+    const y: i64 = if (month <= 2) { year - 1 } else { year };
+    const era: i64 = if (y >= 0) { y / 400 } else { (y - 399) / 400 };
+    const year_of_era: i64 = y - era * 400;
+    const shifted_month: i64 = if (month > 2) { month - 3 } else { month + 9 };
+    const day_of_year: i64 = (153 * shifted_month + 2) / 5 + day - 1;
+    const day_of_era: i64 = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146097 + day_of_era - 719468
+}
+
+fn leap_year(year: i64) bool { (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 }
+
+fn month_days(year: i64, month: i64) i64 {
+    if (month == 2) { ret if (leap_year(year)) { 29 } else { 28 }; }
+    if (month == 4 || month == 6 || month == 9 || month == 11) { ret 30; }
+    31
+}
+
+// Days since 1970-01-01 of a rule date in `year`.
+fn rule_day(year: i64, kind: i32, a: i32, b: i32, c: i32) i64 {
+    const january: i64 = days_from_civil(year, 1, 1);
+    if (kind == 0) {
+        var day: i64 = (a - 1) as i64;
+        if (leap_year(year) && a >= 60) { day = day + 1; }
+        ret january + day;
+    }
+    if (kind == 1) { ret january + a as i64; }
+    const first: i64 = days_from_civil(year, a as i64, 1);
+    // 1970-01-01 was a Thursday (4).
+    var weekday: i64 = (first + 4) % 7;
+    if (weekday < 0) { weekday = weekday + 7; }
+    var day: i64 = 1 + ((c as i64) - weekday + 7) % 7 + ((b - 1) as i64) * 7;
+    if (day > month_days(year, a as i64)) { day = day - 7; }
+    first + day - 1
+}
+
+fn floor_div(value: i64, divisor: i64) i64 {
+    const quotient: i64 = value / divisor;
+    if (value % divisor != 0 && (value < 0) != (divisor < 0)) { ret quotient - 1; }
+    quotient
+}
+
+fn year_of_days(days: i64) i64 {
+    const shifted: i64 = days + 719468;
+    const era: i64 = floor_div(shifted, 146097);
+    const day_of_era: i64 = shifted - era * 146097;
+    const year_of_era: i64 = (day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+    const day_of_year: i64 = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    const month_index: i64 = (5 * day_of_year + 2) / 153;
+    year_of_era + era * 400 + if (month_index >= 10) { 1 } else { 0 }
+}

@@ -552,6 +552,35 @@ pub fn read_to_string_with_limit(path: str, max_bytes: usize) Result[String, FsE
     ret Ok(result);
 }
 
+// Read a whole file of at most `max_bytes` bytes as raw bytes. A larger file
+// fails with TooLarge after reading at most `max_bytes + 1` bytes.
+pub fn read_bytes_with_limit(path: str, max_bytes: usize) Result[Array[u8], FsError] {
+    const opened: Result[File, FsError] = File.open(path);
+    if (opened.is_err()) { ret Err(opened.unwrap_err()); }
+    var file: File = opened.unwrap();
+    var content: Array[u8] = Array.new();
+    const chunk: usize = 4096;
+    var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
+    unsafe { buffer.data = core.malloc(chunk); }
+    if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
+    for (true) {
+        var count: isize = -1;
+        unsafe { count = file.read(buffer.data, chunk); }
+        if (count < 0) {
+            @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+            ret Err(fs_error(count as i32));
+        }
+        if (count == 0) { break; }
+        var index: usize = 0;
+        for (index < count as usize) {
+            unsafe { content.push(*(buffer.data + index)); }
+            index = index + 1;
+        }
+        if (content.len() > max_bytes) { ret Err(FsError.TooLarge); }
+    }
+    ret Ok(content);
+}
+
 // Whether something (file, directory, link target) exists at `path`.
 pub fn exists(path: str) bool {
     @cfg(target_os = "linux") {

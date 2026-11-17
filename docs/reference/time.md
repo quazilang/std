@@ -35,7 +35,7 @@ milliseconds (the platform sleep granularity); saturates at u64::MAX ms.
 ## `TimeError`
 
 ```quazi
-pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, }
+pub enum TimeError { ClockUnavailable, ClockWentBackwards, InvalidFormat, OutOfRange, UnknownZone, InvalidZone, }
 ```
 
 Why a clock or time conversion failed.
@@ -466,8 +466,8 @@ leap seconds are not representable. The offset is applied to give UTC.
 pub struct UtcOffset { /* internal fields */ }
 ```
 
-A fixed offset from UTC in whole minutes, -23:59 through +23:59. It is not
-a time zone: it carries no daylight-saving rules.
+A fixed offset from UTC (normally whole minutes, -23:59 through +23:59).
+It is not a time zone: `std.timezone.TimeZone` carries the rules.
 
 ### `UtcOffset.utc`
 
@@ -484,6 +484,15 @@ pub fn from_hours_minutes(hours: i32, minutes: i32) Option[UtcOffset]
 ```
 
 `hours` carries the sign; `minutes` is 0-59 (e.g. (-5, 30) is -05:30).
+
+### `UtcOffset.from_seconds`
+
+```quazi
+pub fn from_seconds(seconds: i32) Option[UtcOffset]
+```
+
+An offset of `seconds` east of UTC, within one day either way. Time
+zone data may use offsets with seconds (local mean time).
 
 ### `UtcOffset.seconds`
 

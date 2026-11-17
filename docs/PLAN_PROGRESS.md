@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 79.9%. Remaining: 20.1%.**
+**Complete: 80.5%. Remaining: 19.5%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -36,7 +36,7 @@ release-readiness probability. New requirements change the denominator.
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
-| Time | 18/19 | 94.7% | 5.3% |
+| Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 13/15 | 86.7% | 13.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
@@ -211,7 +211,8 @@ Evidence: [src/time.qz](../src/time.qz).
 - [x] Unit-safe minute/hour constructors.
 - [x] Wall-clock instants.
 - [x] Civil dates and times.
-- [ ] Time zones.
+- [x] Time zones (`std.timezone.TimeZone`: TZif v1-4 with POSIX footer rules,
+  `load`/`local`/`from_posix`; `tests/timezone.qz`; 2026-11-17).
 - [x] UTC offsets.
 - [x] Unix timestamps.
 - [x] Parsing.
@@ -278,7 +279,7 @@ passes all 38 `@test` functions (the procfs parser fixtures now live inside
 `src/os_memory.qz`). An abandoned
 `Child` is closed by scope cleanup (since 2026-11-17). Windows process creation
 exists since 2026-11-16 (checked under Wine, not on real Windows); environment
-mutation exists since 2026-11-17; named time zones and TLS are absent; UTC civil time
+mutation exists since 2026-11-17; named time zones exist since 2026-11-17; TLS is absent; UTC civil time
 and RFC 3339 exist since 2026-11-08.
 
 The bounded receiver fixture excludes Headers/codec operations. The full HTTP

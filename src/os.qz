@@ -419,6 +419,8 @@ pub fn set_env(name: str, value: str) Result[bool, EnvError] {
         @cfg(target_os = "netbsd") {
             error = -netbsd.setenv(name_text, value_text);
         }
+        // Other targets (macOS) have no environment backend yet: ENOSYS.
+        @cfg(target_os = "macos") { error = 38; }
         core.free(name_text); core.free(value_text);
         if (error != 0) { ret Err(EnvError.Native(error)); }
     }
@@ -443,6 +445,7 @@ pub fn remove_env(name: str) Result[bool, EnvError] {
         @cfg(target_os = "netbsd") {
             error = -netbsd.unsetenv(name_text);
         }
+        @cfg(target_os = "macos") { error = 38; }
         core.free(name_text);
         if (error != 0) { ret Err(EnvError.Native(error)); }
     }

@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 79.9%.**
+**Plan completion: 80.5%.**
 
-**Remaining work: 20.1%.**
+**Remaining work: 19.5%.**
 
 Completion of unfinished plan items:
 
@@ -19,7 +19,7 @@ Completion of unfinished plan items:
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
-| Time | 18/19 | 94.7% | 5.3% |
+| Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 13/15 | 86.7% | 13.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
@@ -49,6 +49,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
 - `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).
 - `thread`: Threading and concurrency primitives.
+- `time` / `timezone`: Durations, clocks, civil time, RFC 3339, and named IANA time zones (TZif, POSIX TZ rules).
 - `unix` / `windows`: OS-specific platform bindings.
 
 Application code should normally use `std.fs` and `std.os`. Their Linux paths
