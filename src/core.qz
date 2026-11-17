@@ -104,6 +104,11 @@ pub unsafe fn free(ptr: *u8) void;
 @intrinsic("quazi.realloc")
 pub unsafe fn realloc(ptr: *u8, size: usize) *u8;
 
+// The process runtime state block (128 bytes, zero-initialized); the
+// environment owns +104 and +112 (quazistrap docs/internals/runtime-state.md).
+@intrinsic("quazi.runtime.state")
+pub unsafe fn runtime_state() *u8;
+
 // Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
 @intrinsic("quazi.memcpy")
 pub unsafe fn memcpy(dst: *u8, src: *u8, n: usize) *u8;

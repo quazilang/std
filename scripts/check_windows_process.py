@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Check std.process on Windows (CreateProcessW) under Wine: exit codes,
 argv quoting that CommandLineToArgvW reads back exactly, try_wait /
-terminate / close, Command PATH lookup and current_dir, and spawn errors.
+terminate / close, Command PATH lookup and current_dir, process and Command
+environment changes, and spawn errors.
 Usage: check_windows_process.py QZ WINE"""
 
 import os
@@ -24,6 +25,7 @@ fn main() i32 {
 """
 
 PARENT = """import std.io.println;
+import std.os;
 import std.process;
 import std.process.ExitStatus;
 fn code_of(status: Option[ExitStatus]) i32 {
@@ -54,7 +56,14 @@ fn main() i32 {
     const status = process.Command.new("cmd.exe").arg("/c").arg("cd").current_dir("C:\\\\windows").status().unwrap();
     println("command {}", match status { ExitStatus.Code(code) => code, ExitStatus.Signal(_) => -1 });
     println("missing {}", process.spawn("C:\\\\definitely\\\\missing.exe", Array.new()).is_err());
-    println("env unsupported {}", process.Command.new("cmd.exe").env("A", "1").status().is_err());
+    os.set_env("QUAZI_PARENT", "inherited").unwrap();
+    println("env read {}", os.env("QUAZI_PARENT", "missing"));
+    const inherited = process.Command.new("cmd.exe").arg("/c").arg("echo %QUAZI_PARENT%").output().unwrap();
+    const added = process.Command.new("cmd.exe").arg("/c").arg("echo %QUAZI_CHILD%").env("QUAZI_CHILD", "set").output().unwrap();
+    const removed = process.Command.new("cmd.exe").arg("/c").arg("echo %QUAZI_PARENT%").env_remove("quazi_parent").output().unwrap();
+    const replaced = process.Command.new("cmd.exe").arg("/c").arg("echo %QUAZI_PARENT%").env("Quazi_Parent", "replaced").output().unwrap();
+    println("env child {} {} {} {}", inherited.stdout.len(), added.stdout.len(), removed.stdout.len(), replaced.stdout.len());
+    println("env removed {} {}", os.remove_env("QUAZI_PARENT").unwrap(), os.env_present("QUAZI_PARENT"));
     const captured = process.Command.new("cmd.exe").arg("/c").arg("echo hello& echo oops 1>&2& exit 3").output().unwrap();
     println("output {} {} {}", match captured.status { ExitStatus.Code(code) => code, ExitStatus.Signal(_) => -1 }, captured.stdout.len(), captured.stderr.len());
     ret 0;
@@ -75,7 +84,9 @@ closed true
 C:\\windows
 command 0
 missing true
-env unsupported true
+env read inherited
+env child 11 5 16 10
+env removed true false
 output 3 7 7
 """
 
@@ -108,7 +119,7 @@ def main():
         assert result.returncode == 0, result.stdout + result.stderr
         assert output == EXPECTED, output
     print("PASS windows process: CreateProcessW exit codes, exact argv quoting, try_wait/terminate/close, "
-          "Command PATH lookup, current_dir and output capture, spawn errors (Wine)")
+          "Command PATH lookup, current_dir and output capture, environment changes, spawn errors (Wine)")
 
 
 if __name__ == "__main__":

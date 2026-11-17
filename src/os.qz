@@ -279,6 +279,200 @@ pub unsafe fn getenv(name: str) *u8 {
     ret core.getenv(name);
 }
 
+// Why an environment change was rejected.
+pub enum EnvError {
+    // The name is empty or contains `=` or a NUL byte.
+    InvalidName,
+    // The value contains a NUL byte.
+    InvalidValue,
+    AllocationFailed,
+    // A platform error code (NetBSD errno, Windows GetLastError).
+    Native(i32),
+}
+
+impl EnvError {
+    // A short English description of the error, for display.
+    pub fn message(self: EnvError) str {
+        ret match self {
+            InvalidName => "environment variable name is empty or contains '=' or NUL",
+            InvalidValue => "environment variable value contains NUL",
+            AllocationFailed => "out of memory while changing the environment",
+            Native(_) => "the platform rejected the environment change",
+        };
+    }
+}
+
+fn env_text_has_nul(text: str) bool {
+    var index: usize = 0;
+    for (index < text.bytes_len()) {
+        if (core.str_byte_at(text, index) == 0) { ret true; }
+        index = index + 1;
+    }
+    ret false;
+}
+
+fn env_name_valid(name: str) bool {
+    if (name.bytes_len() == 0 || env_text_has_nul(name)) { ret false; }
+    var index: usize = 0;
+    for (index < name.bytes_len()) {
+        if (core.str_byte_at(name, index) == 61) { ret false; }
+        index = index + 1;
+    }
+    ret true;
+}
+
+// A malloc'd NUL-terminated copy of `prefix` + `suffix`, or 0.
+unsafe fn env_c_text(prefix: str, separator: bool, suffix: str) *u8 {
+    const head: usize = prefix.bytes_len();
+    var total: usize = head;
+    if (separator) { total = total + 1 + suffix.bytes_len(); }
+    const text: *u8 = core.malloc(total + 1);
+    if (text == 0) { ret 0; }
+    core.memcpy(text, core.str_as_ptr(prefix), head);
+    if (separator) {
+        *(text + head) = 61;
+        core.memcpy(text + head + 1, core.str_as_ptr(suffix), suffix.bytes_len());
+    }
+    *(text + total) = 0;
+    ret text;
+}
+
+// Whether the C string `entry` is `name=...`.
+unsafe fn env_entry_named(entry: *u8, name: str) bool {
+    var index: usize = 0;
+    for (index < name.bytes_len()) {
+        if (*(entry + index) != core.str_byte_at(name, index)) { ret false; }
+        index = index + 1;
+    }
+    ret *(entry + index) == 61;
+}
+
+// The current Linux environment: a null-terminated array of `NAME=VALUE`
+// C string pointers. Arrays are never freed, so it stays readable.
+pub unsafe fn linux_environment() *u8 {
+    ret *((core.runtime_state() + 112) as **u8);
+}
+
+// Linux: publish a copy of the environment without `name` (and with
+// `name=value` unless `remove`). Writers serialize on a spin lock; readers
+// see the old or the new complete array (docs/internals/runtime-state.md).
+unsafe fn linux_change_env(name: str, value: str, remove: bool) Result[bool, EnvError] {
+    const lock: *i64 = (core.runtime_state() + 104) as *i64;
+    for (core.atomic_cas(lock, 0, 1) != 0) { yield_cpu(); }
+    const current: *u8 = linux_environment();
+    var count: usize = 0;
+    if (current != 0) {
+        for (*((current + count * 8) as **u8) != 0) { count = count + 1; }
+    }
+    const replacement: *u8 = core.malloc((count + 2) * 8);
+    if (replacement == 0) {
+        core.atomic_cas(lock, 1, 0);
+        ret Err(EnvError.AllocationFailed);
+    }
+    var kept: usize = 0;
+    var found: bool = false;
+    var index: usize = 0;
+    for (index < count) {
+        const entry: *u8 = *((current + index * 8) as **u8);
+        if (env_entry_named(entry, name)) {
+            found = true;
+        } else {
+            *((replacement + kept * 8) as **u8) = entry;
+            kept = kept + 1;
+        }
+        index = index + 1;
+    }
+    if (!remove) {
+        const entry: *u8 = env_c_text(name, true, value);
+        if (entry == 0) {
+            core.free(replacement);
+            core.atomic_cas(lock, 1, 0);
+            ret Err(EnvError.AllocationFailed);
+        }
+        *((replacement + kept * 8) as **u8) = entry;
+        kept = kept + 1;
+    }
+    *((replacement + kept * 8) as **u8) = 0;
+    // One aligned 8-byte store publishes the array; only lock holders write it.
+    *((core.runtime_state() + 112) as **u8) = replacement;
+    core.atomic_cas(lock, 1, 0);
+    if (remove) { ret Ok(found); }
+    ret Ok(true);
+}
+
+// Sets environment variable `name` to `value` for this process and the
+// children it starts afterwards. Safe to call from several threads: on
+// Linux each change publishes a new environment copy (earlier copies stay
+// allocated, since another thread may be reading them).
+pub fn set_env(name: str, value: str) Result[bool, EnvError] {
+    if (!env_name_valid(name)) { ret Err(EnvError.InvalidName); }
+    if (env_text_has_nul(value)) { ret Err(EnvError.InvalidValue); }
+    @cfg(target_os = "linux") {
+        unsafe { ret linux_change_env(name, value, false); }
+    }
+    unsafe {
+        const name_text: *u8 = env_c_text(name, false, "");
+        const value_text: *u8 = env_c_text(value, false, "");
+        if (name_text == 0 || value_text == 0) {
+            core.free(name_text); core.free(value_text);
+            ret Err(EnvError.AllocationFailed);
+        }
+        var error: i32 = 0;
+        @cfg(target_os = "windows") {
+            if (win32_core.set_environment(name_text, value_text) == 0) { error = win32_core.last_error() as i32; }
+        }
+        @cfg(target_os = "netbsd") {
+            error = -netbsd.setenv(name_text, value_text);
+        }
+        core.free(name_text); core.free(value_text);
+        if (error != 0) { ret Err(EnvError.Native(error)); }
+    }
+    ret Ok(true);
+}
+
+// Removes environment variable `name` from this process (and later
+// children): `Ok(true)` when it was set, `Ok(false)` when it was not.
+pub fn remove_env(name: str) Result[bool, EnvError] {
+    if (!env_name_valid(name)) { ret Err(EnvError.InvalidName); }
+    @cfg(target_os = "linux") {
+        unsafe { ret linux_change_env(name, "", true); }
+    }
+    const present: bool = env_present(name);
+    unsafe {
+        const name_text: *u8 = env_c_text(name, false, "");
+        if (name_text == 0) { ret Err(EnvError.AllocationFailed); }
+        var error: i32 = 0;
+        @cfg(target_os = "windows") {
+            if (win32_core.set_environment(name_text, 0) == 0 && present) { error = win32_core.last_error() as i32; }
+        }
+        @cfg(target_os = "netbsd") {
+            error = -netbsd.unsetenv(name_text);
+        }
+        core.free(name_text);
+        if (error != 0) { ret Err(EnvError.Native(error)); }
+    }
+    ret Ok(present);
+}
+
+// Whether environment variable `name` is set (even to an empty value).
+pub fn env_present(name: str) bool {
+    @cfg(target_os = "windows") {
+        unsafe {
+            const name_text: *u8 = env_c_text(name, false, "");
+            if (name_text == 0) { ret false; }
+            var probe: *u8 = core.malloc(1);
+            if (probe == 0) { core.free(name_text); ret false; }
+            win32_core.set_last_error(0);
+            const length: u32 = win32_core.environment(name_text, probe, 1);
+            const error: u32 = win32_core.last_error();
+            core.free(probe); core.free(name_text);
+            // ERROR_ENVVAR_NOT_FOUND (203) marks a missing variable.
+            ret length > 0 || error != 203;
+        }
+    }
+    unsafe { ret core.getenv(name) != 0; }
+}
+
 // Return an owned copy of an environment variable. Callers do not need to
 // manage the platform buffer or call free; String is destroyed automatically
 // at the end of its lexical lifetime.

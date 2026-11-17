@@ -259,6 +259,31 @@ pub fn environment(name: *u8, buf: *u8, capacity: u32) u32
 
 The Win32 function `GetEnvironmentVariableA` (see its Microsoft documentation).
 
+### `environment_strings`
+
+```quazi
+pub fn environment_strings() *u8
+```
+
+The Win32 function `GetEnvironmentStringsA` (see its Microsoft documentation).
+
+### `free_environment_strings`
+
+```quazi
+pub fn free_environment_strings(block: *u8) i32
+```
+
+The Win32 function `FreeEnvironmentStringsA` (see its Microsoft documentation).
+
+### `set_environment`
+
+```quazi
+pub fn set_environment(name: *u8, value: *u8) i32
+```
+
+The Win32 function `SetEnvironmentVariableA` (see its Microsoft documentation).
+A null `value` removes the variable.
+
 ### `find_first`
 
 ```quazi
@@ -290,6 +315,14 @@ pub fn last_error() u32
 ```
 
 The Win32 function `GetLastError` (see its Microsoft documentation).
+
+### `set_last_error`
+
+```quazi
+pub fn set_last_error(code: u32) void
+```
+
+The Win32 function `SetLastError` (see its Microsoft documentation).
 
 ### `process_snapshot`
 

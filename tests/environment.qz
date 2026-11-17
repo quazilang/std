@@ -1,0 +1,68 @@
+// Process environment mutation: reads, child processes and threads see it.
+
+import std.os;
+import std.process;
+import std.thread;
+import std.process.ExitStatus;
+
+@test
+fn set_and_remove_env_change_reads_and_children() void {
+    const name: str = "QUAZI_ENV_TEST_VALUE";
+    if (os.env_present(name)) { panic("test variable already set"); }
+    if (!os.set_env(name, "first value").unwrap()) { panic("set_env reported no change"); }
+    const read: String = os.env(name, "missing");
+    if (read.as_str() != "first value") { panic("env did not read the new value"); }
+    if (!os.set_env(name, "second").unwrap()) { panic("overwrite reported no change"); }
+    const again: String = os.env(name, "missing");
+    if (again.as_str() != "second") { panic("env did not read the overwritten value"); }
+    if (!os.set_env("QUAZI_ENV_TEST_EMPTY", "").unwrap()) { panic("empty value"); }
+    if (!os.env_present("QUAZI_ENV_TEST_EMPTY")) { panic("an empty value is still present"); }
+
+    // A child started afterwards inherits the change.
+    const output = process.Command.new("sh").arg("-c").arg("printf %s \"$QUAZI_ENV_TEST_VALUE\"").output().unwrap();
+    if (output.stdout.len() != 6 || output.stdout.get(0) != 115) { panic("child did not inherit the variable"); }
+
+    if (!os.remove_env(name).unwrap()) { panic("remove_env missed a set variable"); }
+    if (os.env_present(name)) { panic("removed variable is still present"); }
+    if (os.remove_env(name).unwrap()) { panic("removing twice reported a change"); }
+    const gone = process.Command.new("sh").arg("-c").arg("printf %s \"${{QUAZI_ENV_TEST_VALUE-unset}}\"").output().unwrap();
+    if (gone.stdout.len() != 5) { panic("child still saw the removed variable"); }
+    os.remove_env("QUAZI_ENV_TEST_EMPTY").unwrap();
+}
+
+@test
+fn invalid_environment_names_and_values_are_rejected() void {
+    if (os.set_env("", "x").is_ok()) { panic("empty name accepted"); }
+    if (os.set_env("A=B", "x").is_ok()) { panic("name with '=' accepted"); }
+    if (os.remove_env("A=B").is_ok()) { panic("remove accepted a name with '='"); }
+}
+
+fn set_many(prefix: str) i32 {
+    var index: i32 = 0;
+    for (index < 200) {
+        const name: String = "{prefix}_{index}";
+        os.set_env(name.as_str(), "v").unwrap();
+        index = index + 1;
+    }
+    ret 0;
+}
+
+fn writer_a() i32 { ret set_many("QUAZI_ENV_THREAD_A"); }
+fn writer_b() i32 { ret set_many("QUAZI_ENV_THREAD_B"); }
+
+@test
+fn concurrent_environment_writers_lose_no_update() void {
+    const first = thread.spawn(writer_a).unwrap();
+    const second = thread.spawn(writer_b).unwrap();
+    first.join().unwrap();
+    second.join().unwrap();
+    var index: i32 = 0;
+    for (index < 200) {
+        const a: String = "QUAZI_ENV_THREAD_A_{index}";
+        const b: String = "QUAZI_ENV_THREAD_B_{index}";
+        if (!os.env_present(a.as_str()) || !os.env_present(b.as_str())) { panic("a concurrent update was lost"); }
+        os.remove_env(a.as_str()).unwrap();
+        os.remove_env(b.as_str()).unwrap();
+        index = index + 1;
+    }
+}

@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 77.9%. Remaining: 22.1%.**
+**Complete: 78.9%. Remaining: 21.1%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -30,7 +30,7 @@ release-readiness probability. New requirements change the denominator.
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
 | Filesystem / I/O | 14/16 | 87.5% | 12.5% |
-| Operating-system APIs | 7/10 | 70.0% | 30.0% |
+| Operating-system APIs | 8/10 | 80.0% | 20.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
 | Networking / TLS | 10/17 | 58.8% | 41.2% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
@@ -80,7 +80,10 @@ Evidence: [src/os.qz](../src/os.qz).
 - [x] Host/CPU/memory/display metadata queries.
 - [x] Process/parent identifiers.
 - [x] Sleep and scheduler-yield helpers.
-- [ ] Portable environment mutation.
+- [x] Portable environment mutation (`os.set_env`/`remove_env`/`env_present`;
+  Linux copy-on-write envp in the runtime state block, Windows
+  SetEnvironmentVariableA, NetBSD setenv; Windows `Command.env*` via an ANSI
+  block; `tests/environment.qz`, `check_windows_process.py`; 2026-11-17).
 - [x] Portable owned cwd query and cwd changes.
 - [x] Portable standard-library argument access (`os.args()`: Linux
   /proc/self/cmdline, Windows GetCommandLineW/CommandLineToArgvW; 2026-11-10).
@@ -273,8 +276,8 @@ composition, passes ownership analysis, and `qz test` from the repository root
 passes all 38 `@test` functions (the procfs parser fixtures now live inside
 `src/os_memory.qz`). An abandoned
 `Child` is closed by scope cleanup (since 2026-11-17). Windows process creation
-exists since 2026-11-16 (checked under Wine, not on real Windows); portable
-environment mutation, named time zones, and TLS are absent; UTC civil time
+exists since 2026-11-16 (checked under Wine, not on real Windows); environment
+mutation exists since 2026-11-17; named time zones and TLS are absent; UTC civil time
 and RFC 3339 exist since 2026-11-08.
 
 The bounded receiver fixture excludes Headers/codec operations. The full HTTP

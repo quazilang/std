@@ -190,6 +190,15 @@ pub fn realloc(ptr: *u8, size: usize) *u8
 
 Returns pointer to resized block (may differ from ptr), or null on failure.
 
+### `runtime_state`
+
+```quazi
+pub fn runtime_state() *u8
+```
+
+The process runtime state block (128 bytes, zero-initialized); the
+environment owns +104 and +112 (quazistrap docs/internals/runtime-state.md).
+
 ### `memcpy`
 
 ```quazi

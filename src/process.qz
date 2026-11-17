@@ -5,6 +5,7 @@
 // independent of those platform details. Linux uses the runtime; Windows uses
 // CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
 import std.core;
+import std.os;
 @cfg(target_os = "linux")
 import std.unix;
 @cfg(target_os = "windows")
@@ -68,7 +69,7 @@ impl Child {
     // excludes argv[0]; the runtime supplies `program` as the first argument.
     pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
         @cfg(target_os = "windows") {
-            unsafe { ret windows_spawn(program, true, &args, "", 0); }
+            unsafe { ret windows_spawn(program, true, &args, "", 0, 0); }
         }
         var handle: usize = 0;
         var error: i32 = 0;
@@ -226,7 +227,8 @@ pub fn spawn(program: str, args: Array[str]) Result[Child, ProcessError] {
 // A program name without `/` is looked up in PATH (the PATH the child will
 // see). Arguments are passed as given, without a shell. On Windows the
 // arguments are quoted for CommandLineToArgvW and PATH lookup is Windows'
-// own; environment changes report SpawnFailed(50) there. Other targets
+// own, and an environment change passes an ANSI environment block (names
+// compare ASCII case-insensitively, like Windows). Other targets
 // report SpawnFailed(38) (ENOSYS).
 
 // An owned list of NUL-terminated strings, also usable as an argv/envp
@@ -418,21 +420,25 @@ impl Command {
         command
     }
 
+    fn has_environment_changes(self: &Command) bool {
+        ret self.clear_environment || self.variables.count > 0 || self.removed.count > 0;
+    }
+
     // Starts the program and returns its Child.
     pub fn spawn(self: &Command) Result[Child, ProcessError] {
         @cfg(target_os = "linux") {
             ret command_spawn_linux(self);
         }
         @cfg(target_os = "windows") {
-            // Environment changes need a UTF-16 environment block, which is
-            // not built yet: report ERROR_NOT_SUPPORTED rather than ignore them.
-            if (self.clear_environment || self.variables.count > 0 || self.removed.count > 0) {
-                ret Err(ProcessError.SpawnFailed(50));
-            }
+            var block = windows_environment_block(self);
+            if (block.length == 0 && self.has_environment_changes()) { ret Err(ProcessError.SpawnFailed(8)); }
             var arguments: Array[str] = Array.new();
             for index : 0..self.arguments.count { arguments.push(self.arguments.get(index)); }
             // Without an application name Windows searches PATH (adding `.exe`).
-            unsafe { ret windows_spawn(self.program.as_str(), false, &arguments, self.directory.as_str(), 0); }
+            var spawned: Result[Child, ProcessError] = Err(ProcessError.SpawnFailed(8));
+            unsafe { spawned = windows_spawn(self.program.as_str(), false, &arguments, self.directory.as_str(), 0, block.data); }
+            block.free();
+            ret spawned;
         }
         Err(ProcessError.SpawnFailed(38))
     }
@@ -518,41 +524,20 @@ unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child
     // is prepared before fork; the child only makes system calls.
     var environment = CStrings.new();
     if (!command.clear_environment) {
-        var capacity: usize = 65536;
-        var inherited: *u8 = 0;
-        unsafe { inherited = core.malloc(capacity + 1); }
-        if (inherited == 0) { ret Err(ProcessError.SpawnFailed(12)); }
-        var length: usize = 0;
-        var fd: i32 = -1;
-        unsafe { fd = unix.open("/proc/self/environ", 0, 0); }
-        if (fd >= 0) {
-            for (true) {
-                if (length == capacity) {
-                    capacity = capacity * 2;
-                    unsafe { inherited = core.realloc(inherited, capacity + 1); }
-                    if (inherited == 0) { ret Err(ProcessError.SpawnFailed(12)); }
-                }
-                var count: isize = 0;
-                unsafe { count = unix.read(fd, inherited + length, capacity - length); }
-                if (count <= 0) { break; }
-                length = length + (count as usize);
-            }
-            unsafe { unix.close(fd); }
-        }
-        var scan: usize = 0;
-        for (scan < length) {
-            var end: usize = scan;
-            unsafe {
-                for (end < length && *(inherited + end) != 0) { end = end + 1; }
-                *(inherited + end) = 0;
-                const entry: str = core.str_from_ptr(inherited + scan);
-                if (!command.removed.names(entry, false) && !command.variables.names(entry, true)) {
-                    environment.push(entry);
+        // The live environment, including `os.set_env` changes.
+        unsafe {
+            const current: *u8 = os.linux_environment();
+            var index: usize = 0;
+            if (current != 0) {
+                for (*((current + index * 8) as **u8) != 0) {
+                    const entry: str = core.str_from_ptr(*((current + index * 8) as **u8));
+                    if (!command.removed.names(entry, false) && !command.variables.names(entry, true)) {
+                        environment.push(entry);
+                    }
+                    index = index + 1;
                 }
             }
-            scan = end + 1;
         }
-        unsafe { core.free(inherited); }
     }
     for index : 0..command.variables.count { environment.push(command.variables.get(index)); }
     if (environment.count == 0) { environment.push("QUAZI_EMPTY_ENVIRONMENT=1"); }
@@ -785,6 +770,85 @@ impl ByteBuffer {
     }
 }
 
+fn ascii_lower(byte: u8) u8 {
+    if (byte >= 65 && byte <= 90) { ret byte + 32; }
+    ret byte;
+}
+
+// Whether `entry` (`NAME=VALUE`) names the key of `other`: all of `other`,
+// or its part before `=` when `pair`. Windows names ignore ASCII case.
+fn windows_same_key(entry: str, other: str, pair: bool) bool {
+    var key_length: usize = other.bytes_len();
+    if (pair) {
+        var index: usize = 0;
+        for (index < key_length && core.str_byte_at(other, index) != 61) { index = index + 1; }
+        key_length = index;
+    }
+    if (entry.bytes_len() <= key_length) { ret false; }
+    var index: usize = 0;
+    for (index < key_length) {
+        if (ascii_lower(core.str_byte_at(entry, index)) != ascii_lower(core.str_byte_at(other, index))) { ret false; }
+        index = index + 1;
+    }
+    ret core.str_byte_at(entry, key_length) == 61;
+}
+
+fn windows_overridden(command: &Command, entry: str) bool {
+    for index : 0..command.removed.count {
+        if (windows_same_key(entry, command.removed.get(index), false)) { ret true; }
+    }
+    for index : 0..command.variables.count {
+        if (windows_same_key(entry, command.variables.get(index), true)) { ret true; }
+    }
+    ret false;
+}
+
+fn push_entry(block: &ByteBuffer!, entry: str) bool {
+    var ok: bool = true;
+    var index: usize = 0;
+    for (ok && index < entry.bytes_len()) {
+        ok = block.push(core.str_byte_at(entry, index));
+        index = index + 1;
+    }
+    ret ok && block.push(0);
+}
+
+// The child's ANSI environment block (`NAME=VALUE\0...\0`) when the command
+// changes the environment; an empty buffer (inherit) otherwise, or when out
+// of memory (callers check `has_environment_changes`).
+fn windows_environment_block(command: &Command) ByteBuffer {
+    var block = ByteBuffer.new();
+    if (!command.has_environment_changes()) { ret block; }
+    var ok: bool = true;
+    @cfg(target_os = "windows") {
+        if (!command.clear_environment) {
+            unsafe {
+                const inherited: *u8 = win32_core.environment_strings();
+                if (inherited != 0) {
+                    var offset: usize = 0;
+                    for (ok && *(inherited + offset) != 0) {
+                        const entry: str = core.str_from_ptr(inherited + offset);
+                        if (!windows_overridden(command, entry)) { ok = push_entry(&block!, entry); }
+                        offset = offset + entry.bytes_len() + 1;
+                    }
+                    win32_core.free_environment_strings(inherited);
+                }
+            }
+        }
+    }
+    for index : 0..command.variables.count {
+        if (ok) { ok = push_entry(&block!, command.variables.get(index)); }
+    }
+    // An empty environment still needs its two terminating NULs.
+    if (ok && block.length == 0) { ok = block.push(0); }
+    if (ok) { ok = block.push(0); }
+    if (!ok) {
+        block.free();
+        ret ByteBuffer.new();
+    }
+    ret block;
+}
+
 // A NUL-terminated UTF-16 copy of `length` UTF-8 bytes at `text`; 0 when
 // the conversion or allocation fails. The caller frees it.
 @cfg(target_os = "windows")
@@ -810,7 +874,7 @@ unsafe fn windows_utf16(text: *u8, length: usize) *u16 {
 // With `stdio` (three handles: input, output, error) the child uses those
 // standard handles.
 @cfg(target_os = "windows")
-unsafe fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: str, stdio: *u8) Result[Child, ProcessError] {
+unsafe fn windows_spawn(program: str, exact: bool, arguments: &Array[str], directory: str, stdio: *u8, environment: *u8) Result[Child, ProcessError] {
     var line = ByteBuffer.new();
     var built: bool = line.push_argument(program);
     for index : 0..arguments.len() {
@@ -841,7 +905,8 @@ unsafe fn windows_spawn(program: str, exact: bool, arguments: &Array[str], direc
                 *((startup + 96) as *usize) = *((stdio + 16) as *usize);
             }
             // Inherit the standard handles, like the Linux runtime.
-            result = win32_core.create_process_w(application, command_line, 0, 0, 1, 0, 0, current, startup, information);
+            // A non-null `environment` is an ANSI block (no CREATE_UNICODE_ENVIRONMENT).
+            result = win32_core.create_process_w(application, command_line, 0, 0, 1, 0, environment, current, startup, information);
             if (result == 0) {
                 error = windows_error();
             } else {
@@ -894,9 +959,8 @@ unsafe fn windows_drain(pipe: usize, buffer: *u8, output: &Array[u8]!) bool {
 
 @cfg(target_os = "windows")
 fn command_output_windows(command: &Command) Result[Output, ProcessError] {
-    if (command.clear_environment || command.variables.count > 0 || command.removed.count > 0) {
-        ret Err(ProcessError.SpawnFailed(50));
-    }
+    var block = windows_environment_block(command);
+    if (block.length == 0 && command.has_environment_changes()) { ret Err(ProcessError.SpawnFailed(8)); }
     var stdout: Array[u8] = Array.new();
     var stderr: Array[u8] = Array.new();
     var out_read: usize = 0;
@@ -926,7 +990,7 @@ fn command_output_windows(command: &Command) Result[Output, ProcessError] {
         *((stdio + 16) as *usize) = err_write;
         var arguments: Array[str] = Array.new();
         for index : 0..command.arguments.count { arguments.push(command.arguments.get(index)); }
-        spawned = windows_spawn(command.program.as_str(), false, &arguments, command.directory.as_str(), stdio);
+        spawned = windows_spawn(command.program.as_str(), false, &arguments, command.directory.as_str(), stdio, block.data);
         // Only the child holds the write ends now, so reads end at its exit.
         win32_core.close_handle(out_write);
         win32_core.close_handle(err_write);

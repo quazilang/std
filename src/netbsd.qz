@@ -8,6 +8,10 @@ import std.core;
 
 @api("__errno")
 unsafe fn __errno_location() *i32;
+@api("setenv")
+unsafe fn __setenv(name: *u8, value: *u8, overwrite: i32) i32;
+@api("unsetenv")
+unsafe fn __unsetenv(name: *u8) i32;
 @api("open")
 unsafe fn __open(path: *u8, flags: i32, mode: u32) i32;
 @api("close")
@@ -334,4 +338,16 @@ pub unsafe fn shutdown(fd: i32, mode: i32) i32 {
     const result: i32 = __shutdown(fd, mode);
     if (result < 0) { ret __err(); }
     ret result;
+}
+
+// Set (overwriting) an environment variable; 0 or negative errno.
+pub unsafe fn setenv(name: *u8, value: *u8) i32 {
+    if (__setenv(name, value, 1) == 0) { ret 0; }
+    ret -(*__errno_location());
+}
+
+// Remove an environment variable; 0 or negative errno.
+pub unsafe fn unsetenv(name: *u8) i32 {
+    if (__unsetenv(name) == 0) { ret 0; }
+    ret -(*__errno_location());
 }

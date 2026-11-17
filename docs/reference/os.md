@@ -7,6 +7,7 @@ falls back to unix.* for Linux-specific calls.
 ## Contents
 
 - [Functions](#functions)
+- [`EnvError`](#enverror) (enum)
 
 ## Functions
 
@@ -69,6 +70,43 @@ pub fn getenv(name: str) *u8
 
 Returns a pointer to the value of environment variable name, or null if not set.
 Result is a null-terminated C string pointer — treat as unsafe.
+
+### `linux_environment`
+
+```quazi
+pub fn linux_environment() *u8
+```
+
+The current Linux environment: a null-terminated array of `NAME=VALUE`
+C string pointers. Arrays are never freed, so it stays readable.
+
+### `set_env`
+
+```quazi
+pub fn set_env(name: str, value: str) Result[bool, EnvError]
+```
+
+Sets environment variable `name` to `value` for this process and the
+children it starts afterwards. Safe to call from several threads: on
+Linux each change publishes a new environment copy (earlier copies stay
+allocated, since another thread may be reading them).
+
+### `remove_env`
+
+```quazi
+pub fn remove_env(name: str) Result[bool, EnvError]
+```
+
+Removes environment variable `name` from this process (and later
+children): `Ok(true)` when it was set, `Ok(false)` when it was not.
+
+### `env_present`
+
+```quazi
+pub fn env_present(name: str) bool
+```
+
+Whether environment variable `name` is set (even to an empty value).
 
 ### `env`
 
@@ -225,3 +263,27 @@ pub fn umask(mask: u32) u32
 ```
 
 Set process file-creation mask. Returns previous mask.
+
+## `EnvError`
+
+```quazi
+pub enum EnvError {
+    // The name is empty or contains `=` or a NUL byte.
+    InvalidName,
+    // The value contains a NUL byte.
+    InvalidValue,
+    AllocationFailed,
+    // A platform error code (NetBSD errno, Windows GetLastError).
+    Native(i32),
+}
+```
+
+Why an environment change was rejected.
+
+### `EnvError.message`
+
+```quazi
+pub fn message(self: EnvError) str
+```
+
+A short English description of the error, for display.

@@ -354,3 +354,19 @@ pub fn shutdown(fd: i32, mode: i32) i32
 
 NetBSD libc `shutdown`, returning a negative errno on failure like the
 Linux system call of the same name.
+
+### `setenv`
+
+```quazi
+pub fn setenv(name: *u8, value: *u8) i32
+```
+
+Set (overwriting) an environment variable; 0 or negative errno.
+
+### `unsetenv`
+
+```quazi
+pub fn unsetenv(name: *u8) i32
+```
+
+Remove an environment variable; 0 or negative errno.
