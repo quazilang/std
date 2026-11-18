@@ -30,6 +30,9 @@ fractions before rounding. Pending or failing requirements receive no
 credit. These figures measure checklist coverage, not remaining effort
 or production readiness.
 
+On Linux, `qz test` passes all 97 standard-library tests, including the
+TCP and UDP cases that need local sockets.
+
 ## Modules Overview
 
 Every public function, type and method is listed with its signature and

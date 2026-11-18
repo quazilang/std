@@ -287,8 +287,8 @@ high-level return is not used for the count.
 
 Since 2026-11-08 every module, including HTTP Headers/codecs and JSON object
 composition, passes ownership analysis, and `qz test` from the repository root
-passes all 86 `@test` functions (2026-11-18) (the procfs parser fixtures now live inside
-`src/os_memory.qz`). An abandoned
+passes all 97 `@test` functions (2026-11-18). The procfs parser fixtures live
+inside `src/os_memory.qz`. An abandoned
 `Child` is closed by scope cleanup (since 2026-11-17). Windows process creation
 exists since 2026-11-16 (checked under Wine, not on real Windows); environment
 mutation exists since 2026-11-17; named time zones exist since 2026-11-17; TLS is absent; UTC civil time

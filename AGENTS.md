@@ -104,7 +104,8 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   exact `@repr(C)` callback.
 - `std.thread.Thread.spawn` accepts the `ThreadCallback` `@repr(C)` alias
   `fn(*u8) *u8`, identical on every target (Windows uses the low 32 bits of
-  the result as the exit code), so universal QZIs share its callers. Callbacks must be compatible exported functions; ordinary
+  the result as the exit code), so a QZI can share the same caller code across
+  targets. Callbacks must be compatible exported functions. Ordinary
   Quazi closures and arbitrary values cannot cross the native thread ABI. The
   low-level spawn contract returns zero on allocation or OS thread-creation
   failure; joining a zero handle is a no-op.
