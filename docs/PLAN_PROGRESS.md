@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 80.5%. Remaining: 19.5%.**
+**Complete: 81.7%. Remaining: 18.3%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -29,10 +29,10 @@ release-readiness probability. New requirements change the denominator.
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 14/16 | 87.5% | 12.5% |
+| Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 10/17 | 58.8% | 41.2% |
+| Networking / TLS | 11/17 | 64.7% | 35.3% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -57,7 +57,9 @@ Evidence: [src/fs.qz](../src/fs.qz).
 - [x] Structured portable FsError surface.
 - [x] Buffered reader/writer abstractions (`LineReader` with UTF-8-checked lines,
   `BufferedWriter` with flush and flush-on-drop; 64 KiB buffers; 2026-11-10).
-- [ ] Common streaming reader/writer interfaces.
+- [x] Common streaming reader/writer interfaces (`std.stream`: `Reader`/`Writer`,
+  `IoError`, `copy`, `BufReader`/`BufWriter`; `File`, `Stdin`, `Stdout`,
+  `Stderr`; D-025 В26А; `tests/streams.qz`, 2026-11-18).
 - [x] Structured path abstraction (`std.path.Path`: join, parent, file_name, stem,
   extension, is_absolute, components, lexical normalize; Windows separators and
   drive roots; 2026-11-10).
@@ -137,7 +139,9 @@ Evidence: [src/net.qz](../src/net.qz).
 - [x] Structured NetError surface.
 - [x] Deterministic transport/receiver regression fixtures.
 - [x] Timeout/deadline API.
-- [ ] Common streaming-I/O integration.
+- [x] Common streaming-I/O integration (`TcpStream` implements
+  `stream.Reader`/`stream.Writer`, 2026-11-18; no loopback test yet because
+  `TcpStream.connect` needs the system linker for `getaddrinfo`).
 - [ ] Maintained TLS transport backend.
 - [ ] Certificate-chain verification.
 - [ ] Hostname verification.

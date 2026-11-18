@@ -1,6 +1,7 @@
 // std.net — structured IPv4 TCP, UDP, and HTTP/1.1 client/server APIs.
 // HTTPS intentionally stays separate: transport security requires a TLS module.
 import std.core;
+import std.stream;
 import std.time.Duration;
 import std.ffi.{c_char, CString, CStringError};
 import std.unix;
@@ -1562,4 +1563,72 @@ fn tcp_shutdown_read_keeps_the_sending_half_open() void {
     if (received.as_str() != "x") { panic("data sent after read shutdown was lost"); }
     client.close();
     server.close();
+}
+
+fn stream_error(error: NetError) stream.IoError {
+    const kind: i32 = match &error {
+        TimedOut => 1,
+        WouldBlock => 2,
+        ConnectionReset => 3,
+        NotConnected => 3,
+        _ => 0,
+    };
+    if (kind == 1) { ret stream.timed_out_error(); }
+    if (kind == 2) { ret stream.would_block_error(); }
+    if (kind == 3) { ret stream.closed_error(); }
+    ret stream.other_error(error.message());
+}
+
+// TCP stream as a byte stream (D-025, В26А).
+impl stream.Reader for TcpStream {
+    // Up to `max` received bytes; empty when the peer closed.
+    fn read_bytes(self: &TcpStream!, max: usize) Result[Array[u8], stream.IoError] {
+        var chunk: Array[u8] = Array.new();
+        if (max == 0) { ret Ok(chunk); }
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(max); }
+        if (buffer == 0) { ret Err(stream.other_error("out of memory")); }
+        var count: isize = -1;
+        unsafe { count = self.recv(buffer, max); }
+        if (count < 0) {
+            unsafe { core.free(buffer); }
+            ret Err(stream.native_error((-count) as i32));
+        }
+        var index: usize = 0;
+        for (index < count as usize) {
+            unsafe { chunk.push(*(buffer + index)); }
+            index = index + 1;
+        }
+        unsafe { core.free(buffer); }
+        ret Ok(chunk);
+    }
+}
+
+impl stream.Writer for TcpStream {
+    // Sends all of `data`.
+    fn write_bytes(self: &TcpStream!, data: &Array[u8]) Result[usize, stream.IoError] {
+        var offset: usize = 0;
+        const length: usize = data.len();
+        var buffer: *u8 = 0;
+        unsafe { buffer = stream.packed_bytes(data); }
+        if (buffer == 0) { ret Err(stream.other_error("out of memory")); }
+        for (offset < length) {
+            var sent: Result[usize, NetError] = Ok(0);
+            unsafe { sent = self.send_raw(buffer + offset, length - offset); }
+            if (sent.is_err()) {
+                unsafe { core.free(buffer); }
+                ret Err(stream_error(sent.unwrap_err()));
+            }
+            const count: usize = sent.unwrap();
+            if (count == 0) {
+                unsafe { core.free(buffer); }
+                ret Err(stream.closed_error());
+            }
+            offset = offset + count;
+        }
+        unsafe { core.free(buffer); }
+        ret Ok(length);
+    }
+    // TCP has no user-space buffer here.
+    fn flush(self: &TcpStream!) Result[bool, stream.IoError] { ret Ok(true); }
 }

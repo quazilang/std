@@ -4,6 +4,7 @@
 // finds File.free and inserts it on every lexical exit, including early return.
 // Application code normally never calls close/free explicitly.
 import std.core;
+import std.stream;
 import std.unix;
 @cfg(target_os = "netbsd")
 import std.netbsd;
@@ -1644,4 +1645,54 @@ fn path_methods_open_write_and_remove_files() void {
     if (!file.remove().unwrap() || file.exists()) { panic("remove"); }
     rmdir("/tmp/quazi_path_methods_test/nested").unwrap();
     rmdir("/tmp/quazi_path_methods_test").unwrap();
+}
+
+// File as a byte stream (D-025, В26А).
+impl stream.Reader for File {
+    // Up to `max` bytes; empty at end of file.
+    fn read_bytes(self: &File!, max: usize) Result[Array[u8], stream.IoError] {
+        var chunk: Array[u8] = Array.new();
+        if (max == 0) { ret Ok(chunk); }
+        var buffer: FsRawBuffer = FsRawBuffer { data: 0 };
+        unsafe { buffer.data = core.malloc(max); }
+        if (buffer.data == 0) { ret Err(stream.other_error("out of memory")); }
+        var count: isize = -1;
+        unsafe { count = self.read(buffer.data, max); }
+        if (count < 0) { ret Err(stream.native_error((-count) as i32)); }
+        var index: usize = 0;
+        for (index < count as usize) {
+            unsafe { chunk.push(*(buffer.data + index)); }
+            index = index + 1;
+        }
+        ret Ok(chunk);
+    }
+}
+
+impl stream.Writer for File {
+    // Writes all of `data`, repeating partial writes.
+    fn write_bytes(self: &File!, data: &Array[u8]) Result[usize, stream.IoError] {
+        var offset: usize = 0;
+        const length: usize = data.len();
+        var buffer: *u8 = 0;
+        unsafe { buffer = stream.packed_bytes(data); }
+        if (buffer == 0) { ret Err(stream.other_error("out of memory")); }
+        for (offset < length) {
+            var count: isize = -1;
+            unsafe { count = self.write_raw(buffer + offset, length - offset); }
+            if (count <= 0) {
+                unsafe { core.free(buffer); }
+                if (count == 0) { ret Err(stream.closed_error()); }
+                ret Err(stream.native_error((-count) as i32));
+            }
+            offset = offset + count as usize;
+        }
+        unsafe { core.free(buffer); }
+        ret Ok(length);
+    }
+    // Pushes written data to the device (`sync`).
+    fn flush(self: &File!) Result[bool, stream.IoError] {
+        const synced = self.sync();
+        if (synced.is_err()) { ret Err(stream.other_error(synced.unwrap_err().message())); }
+        ret Ok(true);
+    }
 }

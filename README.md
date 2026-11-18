@@ -4,18 +4,18 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 80.5%.**
+**Plan completion: 81.7%.**
 
-**Remaining work: 19.5%.**
+**Remaining work: 18.3%.**
 
 Completion of unfinished plan items:
 
 | Plan item | Implemented requirements | Complete | Remaining |
 | --- | --- | --- | --- |
-| Filesystem / I/O | 14/16 | 87.5% | 12.5% |
+| Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 10/17 | 58.8% | 41.2% |
+| Networking / TLS | 11/17 | 64.7% | 35.3% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -23,7 +23,7 @@ Completion of unfinished plan items:
 | Serialization | 13/15 | 86.7% | 13.3% |
 | Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
 
-Counted on 2026-11-17 from the [requirement checklist](docs/PLAN_PROGRESS.md).
+Counted on 2026-11-18 from the [requirement checklist](docs/PLAN_PROGRESS.md).
 Each item has equal weight; its percentage is implemented requirements
 divided by listed requirements. The overall percentage averages those
 fractions before rounding. Pending or failing requirements receive no
@@ -40,6 +40,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `collections`: Fallible, non-panicking `usize` map and set types.
 - `fs`: Cross-platform owned files, whole-file reads, directory listing (`read_dir` returns `Array[DirEntry]`), `Path` methods (`is_dir`, `read_dir`, ...), and metadata operations.
 - `io`: Standard input, output, and error streams handling.
+- `stream`: `Reader`/`Writer` byte streams with `IoError`, `copy`, and `BufReader`/`BufWriter` adapters.
 - `path`: Lexical `Path` manipulation (join, parent, names, extensions, normalize).
 - `json`: Bounded JSON syntax validation and safe JSON string-token encoding.
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.

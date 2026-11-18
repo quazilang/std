@@ -1,0 +1,243 @@
+// std.stream — byte streams: `Reader`, `Writer` and their `IoError`
+// (D-025, maintainer answer В26А). Files, TCP streams and the standard
+// streams implement them; `copy` moves bytes from any Reader to any Writer.
+import std.core;
+
+// Why a streaming read or write failed.
+pub enum IoError {
+    // The other end is gone (a closed file or socket).
+    Closed,
+    WouldBlock,
+    TimedOut,
+    Interrupted,
+    // A platform error code.
+    Native(i32),
+    Other(String),
+}
+
+impl IoError {
+    // A short English description of the error, for display.
+    pub fn message(self: IoError) String {
+        ret match self {
+            Closed => String.from("the stream is closed"),
+            WouldBlock => String.from("the operation would block"),
+            TimedOut => String.from("the operation timed out"),
+            Interrupted => String.from("the operation was interrupted"),
+            Native(code) => "native I/O error {code}",
+            Other(text) => text,
+        };
+    }
+}
+
+// `IoError.Other(text)`, for modules that construct errors through `stream`.
+pub fn other_error(text: str) IoError { ret IoError.Other(String.from(text)); }
+// `IoError.Native(code)`.
+pub fn native_error(code: i32) IoError { ret IoError.Native(code); }
+// `IoError.Closed`.
+pub fn closed_error() IoError { ret IoError.Closed; }
+// `IoError.TimedOut`.
+pub fn timed_out_error() IoError { ret IoError.TimedOut; }
+// `IoError.WouldBlock`.
+pub fn would_block_error() IoError { ret IoError.WouldBlock; }
+
+// `data` packed into a contiguous malloc'd byte buffer (Array elements are
+// word slots), or 0 when allocation fails; the caller frees it with
+// `core.free`.
+pub unsafe fn packed_bytes(data: &Array[u8]) *u8 {
+    const length: usize = data.len();
+    var buffer: *u8 = core.malloc(length + 1);
+    if (buffer == 0) { ret buffer; }
+    var index: usize = 0;
+    for (index < length) {
+        *(buffer + index) = data.get(index);
+        index = index + 1;
+    }
+    ret buffer;
+}
+
+// A source of bytes. `read_bytes` returns up to `max` bytes; an empty array
+// means the end of the input.
+pub trait Reader {
+    fn read_bytes(self: &Self!, max: usize) Result[Array[u8], IoError];
+}
+
+// A sink of bytes. `write_bytes` writes all of `data` (repeating partial
+// writes) or fails; `flush` pushes buffered bytes to their destination.
+pub trait Writer {
+    fn write_bytes(self: &Self!, data: &Array[u8]) Result[usize, IoError];
+    fn flush(self: &Self!) Result[bool, IoError];
+}
+
+// Copy everything `reader` produces into `writer`, then flush it; the number
+// of bytes copied.
+pub fn copy[R: Reader, W: Writer](reader: &R!, writer: &W!) Result[u64, IoError] {
+    var total: u64 = 0;
+    for (true) {
+        const chunk: Array[u8] = reader.read_bytes(65536)?;
+        if (chunk.len() == 0) { break; }
+        const written: usize = writer.write_bytes(&chunk)?;
+        total = total + written as u64;
+    }
+    writer.flush()?;
+    ret Ok(total);
+}
+
+// Collects bytes in memory: a Writer for tests and for building payloads.
+pub struct ByteSink { data: Array[u8], }
+
+impl ByteSink {
+    // An empty sink.
+    pub fn new() ByteSink { ret ByteSink { data: Array.new() }; }
+    // The bytes written so far.
+    pub fn contents(self: &ByteSink) &Array[u8] { ret &self.data; }
+}
+
+impl Writer for ByteSink {
+    // Appends `data`.
+    fn write_bytes(self: &ByteSink!, data: &Array[u8]) Result[usize, IoError] {
+        var index: usize = 0;
+        for (index < data.len()) {
+            self.data.push(data.get(index));
+            index = index + 1;
+        }
+        ret Ok(data.len());
+    }
+    // Nothing is buffered.
+    fn flush(self: &ByteSink!) Result[bool, IoError] { ret Ok(true); }
+}
+
+// Reads bytes from an in-memory array (a Reader for tests and parsers).
+pub struct ByteSource { data: Array[u8], position: usize, }
+
+impl ByteSource {
+    // A source over `data`.
+    pub fn new(data: Array[u8]) ByteSource { ret ByteSource { data: data, position: 0 }; }
+}
+
+impl Reader for ByteSource {
+    // The next up to `max` bytes.
+    fn read_bytes(self: &ByteSource!, max: usize) Result[Array[u8], IoError] {
+        var chunk: Array[u8] = Array.new();
+        for (chunk.len() < max && self.position < self.data.len()) {
+            chunk.push(self.data.get(self.position));
+            self.position = self.position + 1;
+        }
+        ret Ok(chunk);
+    }
+}
+
+// Reads from `inner` in large chunks and serves small reads from memory.
+pub struct BufReader[R: Reader] {
+    inner: R,
+    buffer: Array[u8],
+    position: usize,
+    capacity: usize,
+}
+
+impl BufReader[R] {
+    // A reader that fetches 8 KiB from `inner` at a time.
+    pub fn new(inner: R) BufReader[R] { ret BufReader.with_capacity(inner, 8192); }
+
+    // A reader that fetches `capacity` bytes (at least 1) at a time.
+    pub fn with_capacity(inner: R, capacity: usize) BufReader[R] {
+        var size: usize = capacity;
+        if (size == 0) { size = 1; }
+        ret BufReader { inner: inner, buffer: Array.new(), position: 0, capacity: size };
+    }
+
+    // The wrapped reader; bytes still buffered are dropped.
+    pub fn into_inner(self: BufReader[R]) R { ret self.inner; }
+
+    // Whether all buffered bytes were consumed (refilling it if so); false
+    // at the end of the input.
+    fn fill(self: &BufReader[R]!) Result[bool, IoError] {
+        if (self.position < self.buffer.len()) { ret Ok(true); }
+        self.buffer = self.inner.read_bytes(self.capacity)?;
+        self.position = 0;
+        ret Ok(self.buffer.len() > 0);
+    }
+
+    // The bytes up to and including the next `delimiter`, or the rest of the
+    // input when it has none; empty at the end of the input.
+    pub fn read_until(self: &BufReader[R]!, delimiter: u8) Result[Array[u8], IoError] {
+        var line: Array[u8] = Array.new();
+        for (self.fill()?) {
+            const byte: u8 = self.buffer.get(self.position);
+            self.position = self.position + 1;
+            line.push(byte);
+            if (byte == delimiter) { break; }
+        }
+        ret Ok(line);
+    }
+}
+
+impl Reader for BufReader[R] {
+    // Up to `max` buffered bytes, refilling the buffer when it is empty.
+    fn read_bytes(self: &BufReader[R]!, max: usize) Result[Array[u8], IoError] {
+        var chunk: Array[u8] = Array.new();
+        if (max == 0 || !self.fill()?) { ret Ok(chunk); }
+        for (chunk.len() < max && self.position < self.buffer.len()) {
+            chunk.push(self.buffer.get(self.position));
+            self.position = self.position + 1;
+        }
+        ret Ok(chunk);
+    }
+}
+
+// Collects small writes in memory and passes them to `inner` in large
+// chunks. Buffered bytes reach `inner` only on `flush` or when the buffer
+// fills: call `flush` before dropping the writer.
+pub struct BufWriter[W: Writer] {
+    inner: W,
+    buffer: Array[u8],
+    capacity: usize,
+}
+
+impl BufWriter[W] {
+    // A writer that passes 8 KiB to `inner` at a time.
+    pub fn new(inner: W) BufWriter[W] { ret BufWriter.with_capacity(inner, 8192); }
+
+    // A writer that passes `capacity` bytes (at least 1) at a time.
+    pub fn with_capacity(inner: W, capacity: usize) BufWriter[W] {
+        var size: usize = capacity;
+        if (size == 0) { size = 1; }
+        ret BufWriter { inner: inner, buffer: Array.new(), capacity: size };
+    }
+
+    // The wrapped writer, after passing it the buffered bytes (not flushed).
+    pub fn into_inner(self: BufWriter[W]) Result[W, IoError] {
+        var writer: BufWriter[W] = self;
+        writer.drain()?;
+        ret Ok(writer.inner);
+    }
+
+    // The number of bytes waiting for `flush`.
+    pub fn buffered(self: &BufWriter[W]) usize { ret self.buffer.len(); }
+
+    // Pass the buffered bytes to `inner` without flushing it.
+    fn drain(self: &BufWriter[W]!) Result[bool, IoError] {
+        if (self.buffer.len() == 0) { ret Ok(true); }
+        self.inner.write_bytes(&self.buffer)?;
+        self.buffer = Array.new();
+        ret Ok(true);
+    }
+}
+
+impl Writer for BufWriter[W] {
+    // Buffers `data`, passing the buffer on whenever it reaches capacity.
+    fn write_bytes(self: &BufWriter[W]!, data: &Array[u8]) Result[usize, IoError] {
+        var index: usize = 0;
+        for (index < data.len()) {
+            self.buffer.push(data.get(index));
+            index = index + 1;
+            if (self.buffer.len() >= self.capacity) { self.drain()?; }
+        }
+        ret Ok(data.len());
+    }
+
+    // Passes the buffered bytes to `inner`, then flushes it.
+    fn flush(self: &BufWriter[W]!) Result[bool, IoError] {
+        self.drain()?;
+        ret self.inner.flush();
+    }
+}

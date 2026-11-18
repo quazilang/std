@@ -21,6 +21,7 @@
 - [`std.posix`](posix.md)
 - [`std.process`](process.md)
 - [`std.random`](random.md)
+- [`std.stream`](stream.md)
 - [`std.thread`](thread.md)
 - [`std.time`](time.md)
 - [`std.timezone`](timezone.md)

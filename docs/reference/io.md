@@ -9,6 +9,7 @@ UTF-8 contract: all str/&str parameters are valid UTF-8.
 - [`Stdout`](#stdout) (struct)
 - [`Stderr`](#stderr) (struct)
 - [`ReadError`](#readerror) (enum)
+- [`Stdin`](#stdin) (struct)
 
 ## Functions
 
@@ -95,6 +96,23 @@ pub fn readkey() Result[String, ReadError]
 ```
 
 Read one complete UTF-8 scalar value. EOF returns an empty String.
+
+### `copy`
+
+```quazi
+pub fn copy[R: stream.Reader, W: stream.Writer](reader: &R!, writer: &W!) Result[u64, stream.IoError]
+```
+
+Copy everything `reader` produces into `writer`, then flush it (see
+`stream.copy`).
+
+### `stdin`
+
+```quazi
+pub fn stdin() Stdin
+```
+
+The standard input stream.
 
 ## `Stdout`
 
@@ -192,3 +210,11 @@ pub enum ReadError {
 
 Why reading standard input failed (`EndOfInput` when the input is
 closed).
+
+## `Stdin`
+
+```quazi
+pub struct Stdin { fd: i32, }
+```
+
+Standard input as a byte stream; get it with `io.stdin()`.

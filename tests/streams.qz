@@ -1,0 +1,84 @@
+// Streaming Reader/Writer (D-025, В26А).
+
+import std.stream;
+import std.fs;
+import std.fs.File;
+import std.core;
+
+fn bytes_of(text: str) Array[u8] {
+    var data: Array[u8] = Array.new();
+    var index: usize = 0;
+    for (index < text.bytes_len()) {
+        data.push(core.str_byte_at(text, index));
+        index = index + 1;
+    }
+    ret data;
+}
+
+@test
+fn copy_moves_every_byte_between_streams() void {
+    var source = stream.ByteSource.new(bytes_of("hello streaming world"));
+    var sink = stream.ByteSink.new();
+    const copied: u64 = stream.copy(&source!, &sink!).unwrap();
+    if (copied != 21 || sink.contents().len() != 21) { panic("copied byte count"); }
+    if (sink.contents().get(6) != 115) { panic("copied byte value"); }
+}
+
+@test
+fn files_read_and_write_through_the_stream_traits() void {
+    const path = "/tmp/quazi_streams_test.txt";
+    var output = File.create(path).unwrap();
+    var data: Array[u8] = Array.new();
+    var index: usize = 0;
+    for (index < 200000) { data.push((index % 251) as u8); index = index + 1; }
+    const written: usize = output.write_bytes(&data).unwrap();
+    output.flush().unwrap();
+    output.close().unwrap();
+    if (written != 200000) { panic("file write count"); }
+    var input = File.open(path).unwrap();
+    var sink = stream.ByteSink.new();
+    const copied: u64 = stream.copy(&input!, &sink!).unwrap();
+    if (copied != 200000) { panic("file copy count"); }
+    if (sink.contents().get(199999) != (199999 % 251) as u8) { panic("file copy content"); }
+    fs.remove(path).unwrap();
+}
+
+
+@test
+fn buffered_readers_split_input_by_delimiter() void {
+    var reader = stream.BufReader.with_capacity(stream.ByteSource.new(bytes_of("ab\ncd\nef")), 3);
+    const first: Array[u8] = reader.read_until(10).unwrap();
+    if (first.len() != 3 || first.get(2) != 10) { panic("first line"); }
+    const second: Array[u8] = reader.read_until(10).unwrap();
+    if (second.len() != 3 || second.get(0) != 99) { panic("second line"); }
+    const single: Array[u8] = reader.read_bytes(1).unwrap();
+    if (single.len() != 1 || single.get(0) != 101) { panic("small read"); }
+    const rest: Array[u8] = reader.read_until(10).unwrap();
+    if (rest.len() != 1 || rest.get(0) != 102) { panic("unterminated tail"); }
+    const end: Array[u8] = reader.read_until(10).unwrap();
+    if (end.len() != 0) { panic("end of input"); }
+}
+
+@test
+fn buffered_writers_hold_bytes_until_full_or_flushed() void {
+    var writer = stream.BufWriter.with_capacity(stream.ByteSink.new(), 4);
+    const small: Array[u8] = bytes_of("ab");
+    writer.write_bytes(&small).unwrap();
+    if (writer.buffered() != 2) { panic("buffered small write"); }
+    const more: Array[u8] = bytes_of("cdef");
+    writer.write_bytes(&more).unwrap();
+    if (writer.buffered() != 2) { panic("drain at capacity"); }
+    writer.flush().unwrap();
+    if (writer.buffered() != 0) { panic("flush"); }
+    const sink = writer.into_inner().unwrap();
+    if (sink.contents().len() != 6 || sink.contents().get(5) != 102) { panic("flushed bytes"); }
+}
+
+@test
+fn copy_works_through_buffered_adapters() void {
+    var reader = stream.BufReader.new(stream.ByteSource.new(bytes_of("hello buffered world")));
+    var writer = stream.BufWriter.new(stream.ByteSink.new());
+    const copied: u64 = stream.copy(&reader!, &writer!).unwrap();
+    const sink = writer.into_inner().unwrap();
+    if (copied != 20 || sink.contents().len() != 20) { panic("buffered copy"); }
+}

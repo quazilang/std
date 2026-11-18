@@ -10,6 +10,7 @@ import std.core.free;
 import std.core.realloc;
 import std.core.str_as_ptr;
 import std.win32_core;
+import std.stream;
 import std.unix;
 @cfg(target_os = "netbsd")
 import std.netbsd;
@@ -550,3 +551,82 @@ pub fn readkey() Result[String, ReadError] {
     ret Ok(result);
 }
 
+
+// ── Streaming I/O (D-025, maintainer answer В26А) ────────────────────────────
+// The traits live in `std.stream`; the standard streams implement them here.
+
+// Copy everything `reader` produces into `writer`, then flush it (see
+// `stream.copy`).
+pub fn copy[R: stream.Reader, W: stream.Writer](reader: &R!, writer: &W!) Result[u64, stream.IoError] {
+    ret stream.copy(reader, writer);
+}
+
+// Run a raw read of up to `max` bytes from `fd`.
+unsafe fn read_raw_chunk(max: usize, fd: i32) Result[Array[u8], stream.IoError] {
+    var chunk: Array[u8] = Array.new();
+    if (max == 0) { ret Ok(chunk); }
+    const buffer: *u8 = malloc(max);
+    if (buffer == 0) { ret Err(stream.other_error("out of memory")); }
+    const count: isize = sys_read(fd, buffer, max);
+    if (count < 0) {
+        free(buffer);
+        ret Err(stream.native_error((-count) as i32));
+    }
+    var index: usize = 0;
+    for (index < count as usize) {
+        chunk.push(*(buffer + index));
+        index = index + 1;
+    }
+    free(buffer);
+    ret Ok(chunk);
+}
+
+// Write all `data` to `fd` through the raw write.
+unsafe fn write_raw_all(fd: i32, data: &Array[u8]) Result[usize, stream.IoError] {
+    var offset: usize = 0;
+    const length: usize = data.len();
+    const base: *u8 = stream.packed_bytes(data);
+    if (base == 0) { ret Err(stream.other_error("out of memory")); }
+    for (offset < length) {
+        const count: isize = raw_write_bytes(fd, base + offset, length - offset);
+        if (count <= 0) {
+            free(base);
+            if (count == 0) { ret Err(stream.closed_error()); }
+            ret Err(stream.native_error((-count) as i32));
+        }
+        offset = offset + count as usize;
+    }
+    free(base);
+    ret Ok(length);
+}
+
+// Standard input as a byte stream; get it with `io.stdin()`.
+pub struct Stdin { fd: i32, }
+
+// The standard input stream.
+pub fn stdin() Stdin { ret Stdin { fd: 0 }; }
+
+impl stream.Reader for Stdin {
+    // Up to `max` bytes of standard input; empty at end of input.
+    fn read_bytes(self: &Stdin!, max: usize) Result[Array[u8], stream.IoError] {
+        unsafe { ret read_raw_chunk(max, self.fd); }
+    }
+}
+
+impl stream.Writer for Stdout {
+    // Writes all of `data` to standard output.
+    fn write_bytes(self: &Stdout!, data: &Array[u8]) Result[usize, stream.IoError] {
+        unsafe { ret write_raw_all(self.fd, data); }
+    }
+    // Standard output is unbuffered here.
+    fn flush(self: &Stdout!) Result[bool, stream.IoError] { ret Ok(true); }
+}
+
+impl stream.Writer for Stderr {
+    // Writes all of `data` to standard error.
+    fn write_bytes(self: &Stderr!, data: &Array[u8]) Result[usize, stream.IoError] {
+        unsafe { ret write_raw_all(self.fd, data); }
+    }
+    // Standard error is unbuffered.
+    fn flush(self: &Stderr!) Result[bool, stream.IoError] { ret Ok(true); }
+}
