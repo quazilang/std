@@ -1,6 +1,8 @@
 # `std` API reference
 
 - [`std.codec`](codec.md)
+- [`std.collections.hash_map`](collections/hash_map.md)
+- [`std.collections.hash_set`](collections/hash_set.md)
 - [`std.collections.map`](collections/map.md)
 - [`std.collections`](collections/mod.md)
 - [`std.collections.set`](collections/set.md)

@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 81.7%.**
+**Plan completion: 82.8%.**
 
-**Remaining work: 18.3%.**
+**Remaining work: 17.2%.**
 
 Completion of unfinished plan items:
 
@@ -21,7 +21,7 @@ Completion of unfinished plan items:
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 13/15 | 86.7% | 13.3% |
-| Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
+| Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
 
 Counted on 2026-11-18 from the [requirement checklist](docs/PLAN_PROGRESS.md).
 Each item has equal weight; its percentage is implemented requirements
@@ -164,6 +164,10 @@ release data, process snapshots, and Win32. They do not execute shell commands
 and do not require callers to manually free returned `String` values.
 
 ## Collections
+
+`HashMap[K, V]` and `HashSet[K]` own their entries. Keys implement
+`Hash + Eq`, insertion returns a storage error when growth fails, and
+`HashMap.find` gives an index for borrowed key and value access.
 
 `Map` currently stores `usize -> usize`, and `Set` stores `usize`. Constructors
 and insertion are fallible; lookup uses `Option` instead of exiting the process:

@@ -1,0 +1,139 @@
+// Generic HashMap/HashSet over prelude Hash + Eq keys (D-023 В22Б, D-025 В23А).
+
+import std.collections.HashMap;
+import std.collections.HashSet;
+
+@test
+fn hash_map_inserts_replaces_and_finds_string_keys() void {
+    var ages: HashMap[String, i32] = HashMap.new();
+    if (!ages.insert(String.from("ann"), 31).unwrap()) { panic("new key"); }
+    if (!ages.insert(String.from("bob"), 40).unwrap()) { panic("second key"); }
+    if (ages.insert(String.from("ann"), 32).unwrap()) { panic("replace reports false"); }
+    const ann = String.from("ann");
+    if (ages.len() != 2 || *ages.value_at(ages.find(&ann).unwrap()) != 32) { panic("replaced value"); }
+    const nobody = String.from("eve");
+    if (ages.contains(&nobody) || ages.find(&nobody).is_some()) { panic("missing key"); }
+}
+
+@test
+fn hash_map_survives_growth_and_removal() void {
+    var squares: HashMap[u64, u64] = HashMap.new();
+    var key: u64 = 0;
+    for (key < 1000) {
+        squares.insert(key, key * key).unwrap();
+        key = key + 1;
+    }
+    if (squares.len() != 1000) { panic("grown length"); }
+    key = 0;
+    for (key < 1000) {
+        if (key % 3 == 0 && !squares.remove(&key)) { panic("remove"); }
+        key = key + 1;
+    }
+    if (squares.len() != 666) { panic("length after removal"); }
+    key = 0;
+    for (key < 1000) {
+        if (squares.contains(&key) == (key % 3 == 0)) { panic("membership after removal"); }
+        if (key % 3 != 0 && *squares.value_at(squares.find(&key).unwrap()) != key * key) { panic("value after moves"); }
+        key = key + 1;
+    }
+    const gone: u64 = 3;
+    if (squares.remove(&gone)) { panic("second remove"); }
+    var index: usize = 0;
+    var sum: u64 = 0;
+    for (index < squares.len()) {
+        if (*squares.value_at(index) != *squares.key_at(index) * *squares.key_at(index)) { panic("entry pairs"); }
+        sum = sum + *squares.key_at(index);
+        index = index + 1;
+    }
+    if (sum != 332667) { panic("entry keys"); }
+}
+
+@test
+fn hash_map_owns_string_values_through_churn() void {
+    var names: HashMap[i32, String] = HashMap.new();
+    var round: i32 = 0;
+    for (round < 200) {
+        names.insert(round % 17, "value {round}").unwrap();
+        if (round % 5 == 0) {
+            const victim: i32 = round % 13;
+            names.remove(&victim);
+        }
+        round = round + 1;
+    }
+    const sixteen: i32 = 16;
+    if (!names.contains(&sixteen) || names.value_at(names.find(&sixteen).unwrap()).as_str() != "value 186") { panic("latest value"); }
+    names.clear();
+    if (!names.is_empty()) { panic("clear"); }
+}
+
+@test
+fn hash_set_tracks_unique_strings() void {
+    var seen: HashSet[String] = HashSet.new();
+    if (!seen.insert(String.from("a")).unwrap() || !seen.insert(String.from("b")).unwrap()) { panic("insert"); }
+    if (seen.insert(String.from("a")).unwrap()) { panic("duplicate"); }
+    const a = String.from("a");
+    if (!seen.contains(&a) || seen.len() != 2) { panic("contains"); }
+    if (!seen.remove(&a) || seen.contains(&a) || seen.len() != 1) { panic("remove"); }
+    if (seen.value_at(0).as_str() != "b") { panic("remaining value"); }
+}
+
+struct CollidingKey { label: String }
+
+impl Hash for CollidingKey {
+    fn hash(self: &CollidingKey) u64 { ret 15; }
+}
+
+impl Eq for CollidingKey {
+    fn eq(self: &CollidingKey, other: &CollidingKey) bool {
+        ret self.label.as_str() == other.label.as_str();
+    }
+}
+
+@test
+fn hash_map_preserves_colliding_owned_keys_and_values() void {
+    var map: HashMap[CollidingKey, String] = HashMap.new();
+    var index: i32 = 0;
+    for (index < 48) {
+        map.insert(CollidingKey { label: "key {index}" }, "value {index}").unwrap();
+        index = index + 1;
+    }
+    index = 0;
+    for (index < 48) {
+        const key = CollidingKey { label: "key {index}" };
+        if (index % 2 == 0 && !map.remove(&key)) { panic("remove colliding key"); }
+        index = index + 1;
+    }
+    index = 0;
+    for (index < 48) {
+        const key = CollidingKey { label: "key {index}" };
+        const position = map.find(&key);
+        if (index % 2 == 0) {
+            if (position.is_some()) { panic("removed key still present"); }
+        } else {
+            const expected = "value {index}";
+            if (map.value_at(position.unwrap()).as_str() != expected.as_str()) { panic("colliding key lost"); }
+        }
+        index = index + 1;
+    }
+    map.clear();
+    const key = CollidingKey { label: String.from("reused") };
+    if (!map.insert(key, String.from("reused")).unwrap() || map.len() != 1) { panic("reusable map"); }
+}
+
+@test
+fn array_reserve_preserves_elements_and_reports_capacity_overflow() void {
+    var values: Array[[i32; 2]] = Array.empty();
+    if (!values.try_reserve(2).unwrap()) { panic("initial reservation"); }
+    values.push([1, 2]);
+    if (values.try_reserve(1).unwrap()) { panic("unnecessary growth"); }
+    if (!values.try_reserve(40).unwrap()) { panic("growth"); }
+    const failure = values.try_reserve(0xFFFFFFFFFFFFFFFF);
+    match failure {
+        Err(ArrayReserveError.CapacityOverflow) => 0,
+        _ => panic("capacity overflow"),
+    };
+    values.push([3, 4]);
+    const first = values.get_ref(0);
+    const second = values.get_ref(1);
+    if (first[1] != 2 || second[0] != 3) { panic("elements after reservation"); }
+}

@@ -53,9 +53,8 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   represented with `Option`, never by terminating the process. `Map` and `Set`
   use exclusive `clear()` for reusable storage release and consuming `free(self)`
   for lexical destruction.
-- Until the language has hash/equality/drop trait bounds for raw table slots,
-  `Map` and `Set` intentionally store `usize` values rather than pretending to
-  be sound generic containers.
+- `Map` and `Set` retain their `usize` API. `HashMap` and `HashSet` own generic
+  entries in drop-aware arrays and require `Hash + Eq` for keys.
 - `std.fs.File` owns an operating-system handle. Its idempotent `free(self)`
   destructor closes the handle automatically at lexical scope exit, including
   early returns; callers should use `close()` only when they need an earlier,

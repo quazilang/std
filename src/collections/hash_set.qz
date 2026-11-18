@@ -1,0 +1,39 @@
+// std.collections.hash_set — a generic set of `Hash + Eq` values.
+import ./hash_map.HashMap;
+
+// A set that owns its values (a `HashMap` without payloads).
+pub struct HashSet[K: Hash + Eq] {
+    map: HashMap[K, bool],
+}
+
+impl HashSet[K] {
+    // An empty set.
+    pub fn new() HashSet[K] {
+        const map: HashMap[K, bool] = HashMap.new();
+        ret HashSet { map: map };
+    }
+
+    // The number of values.
+    pub fn len(self: &HashSet[K]) usize { ret self.map.len(); }
+
+    // Whether the set has no values.
+    pub fn is_empty(self: &HashSet[K]) bool { ret self.map.is_empty(); }
+
+    // Add `value`: true when it was not in the set (otherwise it is dropped).
+    // If capacity or allocation fails, existing values are preserved.
+    pub fn insert(self: &HashSet[K]!, value: K) Result[bool, ArrayReserveError] {
+        ret self.map.insert(value, true);
+    }
+
+    // Whether the set has `value`.
+    pub fn contains(self: &HashSet[K], value: &K) bool { ret self.map.contains(value); }
+
+    // Remove and drop `value`; false when it was not in the set.
+    pub fn remove(self: &HashSet[K]!, value: &K) bool { ret self.map.remove(value); }
+
+    // Value number `index` (0 to `len() - 1`); panics when out of range.
+    pub fn value_at(self: &HashSet[K], index: usize) &K { ret self.map.key_at(index); }
+
+    // Remove and drop every value.
+    pub fn clear(self: &HashSet[K]!) void { self.map.clear(); }
+}

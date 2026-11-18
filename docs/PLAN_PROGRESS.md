@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 81.7%. Remaining: 18.3%.**
+**Complete: 82.8%. Remaining: 17.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -38,7 +38,7 @@ release-readiness probability. New requirements change the denominator.
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 13/15 | 86.7% | 13.3% |
-| Library-wide safety / other modules | 7/9 | 77.8% | 22.2% |
+| Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
 
 ## Requirements
 
@@ -268,7 +268,9 @@ Evidence: [AGENTS.md](../AGENTS.md).
 - [x] OS-backed secure random primitives.
 - [x] Owned dynamic-library handles with unsafe symbol casts.
 - [x] Owned text and local view migration.
-- [ ] Sound generic hash/equality/drop-aware collections.
+- [x] Fallible, drop-aware generic `HashMap` and `HashSet` with `Hash + Eq` keys.
+  [Regression tests](../tests/hash_collections.qz) cover owned keys and values,
+  replacement, capacity growth, collisions, removal, and reuse.
 - [x] Passing full standard-library suite including HTTP/JSON.
 - [ ] Final public API/documentation/target consistency audit.
 

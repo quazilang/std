@@ -6,3 +6,5 @@ pub import ./map.Map;
 pub import ./map.MapError;
 pub import ./set.Set;
 pub import ./set.SetError;
+pub import ./hash_map.HashMap;
+pub import ./hash_set.HashSet;

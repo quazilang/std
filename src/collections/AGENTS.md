@@ -39,5 +39,11 @@ returns `Result[bool, SetError]`, where `true` means a new key was added.
 - Capacity starts at 16 and doubles at 75% occupancy.
 - Every allocation path frees earlier allocations before returning an error.
 - Growth checks both capacity doubling and the conversion from slots to bytes.
-- Generic owned storage is deferred until the language can express Hash/Eq and
-  drop behavior for raw slots. Do not reintroduce fake unconstrained generics.
+- `HashMap[K, V]` and `HashSet[K]` use dense, drop-aware `Array` storage with a
+  separate probing index and require `K: Hash + Eq`. Their empty state allocates
+  nothing. Reserve entry and index storage before changing any logical entry.
+- A live probing slot refers to a dense entry by index. When removal fills a
+  hole with the last dense entry, update that entry's probing slot.
+- `HashMap.find` reports absence with `Option[usize]`. The indexed accessors
+  borrow existing storage. Indices are invalidated by a removal that moves
+  entries and by `clear`.

@@ -1,0 +1,156 @@
+// std.collections.hash_map — a generic hash map over `Hash + Eq` keys.
+//
+// Entries are stored densely, in insertion order, in `keys` and `values`;
+// removing an entry moves the last one into its place. `slots` is an
+// open-addressed index over the entries with linear probing: 0 is an empty
+// slot, 1 a deleted one and `n + 2` refers to entry `n`. Its length is a power
+// of two. At most three quarters of its slots are used or deleted.
+
+// A hash map from `K` to `V` that owns its keys and values.
+pub struct HashMap[K: Hash + Eq, V] {
+    keys: Array[K],
+    values: Array[V],
+    slots: Array[usize],
+    deleted: usize,
+}
+
+// `count` empty slots.
+fn __empty_slots(count: usize) Result[Array[usize], ArrayReserveError] {
+    var slots: Array[usize] = Array.empty();
+    slots.try_reserve(count)?;
+    var index: usize = 0;
+    for (index < count) {
+        slots.push(0);
+        index = index + 1;
+    }
+    ret Ok(slots);
+}
+
+impl HashMap[K, V] {
+    // An empty map.
+    pub fn new() HashMap[K, V] {
+        ret HashMap { keys: Array.empty(), values: Array.empty(), slots: Array.empty(), deleted: 0 };
+    }
+
+    // The number of entries.
+    pub fn len(self: &HashMap[K, V]) usize { ret self.keys.len(); }
+
+    // Whether the map has no entries.
+    pub fn is_empty(self: &HashMap[K, V]) bool { ret self.keys.len() == 0; }
+
+    // The first slot probed for `key`.
+    fn home(self: &HashMap[K, V], key: &K) usize {
+        ret (key.hash() % (self.slots.len() as u64)) as usize;
+    }
+
+    // The slot that refers to entry `index`.
+    fn slot_of(self: &HashMap[K, V], index: usize) usize {
+        const mask: usize = self.slots.len() - 1;
+        var slot: usize = self.home(self.keys.get_ref(index));
+        for (self.slots.get(slot) != index + 2) { slot = (slot + 1) & mask; }
+        ret slot;
+    }
+
+    // Point the first empty or deleted slot on `index`'s probe path at it.
+    fn place(self: &HashMap[K, V]!, index: usize) void {
+        const mask: usize = self.slots.len() - 1;
+        var slot: usize = self.home(self.keys.get_ref(index));
+        for (self.slots.get(slot) > 1) { slot = (slot + 1) & mask; }
+        if (self.slots.get(slot) == 1) { self.deleted = self.deleted - 1; }
+        self.slots.set(slot, index + 2);
+    }
+
+    // Rebuild the index with room for one more entry, dropping deleted slots.
+    fn reserve_one(self: &HashMap[K, V]!) Result[bool, ArrayReserveError] {
+        const len: usize = self.keys.len();
+        self.keys.try_reserve(len + 1)?;
+        self.values.try_reserve(len + 1)?;
+        const capacity: usize = self.slots.len();
+        if (len + self.deleted < capacity - capacity / 4) { ret Ok(false); }
+        var target: usize = capacity;
+        if (capacity == 0) { target = 16; }
+        else if (len >= capacity / 2) { target = capacity * 2; }
+        self.slots = __empty_slots(target)?;
+        self.deleted = 0;
+        var index: usize = 0;
+        for (index < len) {
+            self.place(index);
+            index = index + 1;
+        }
+        ret Ok(true);
+    }
+
+    // The position of `key`'s entry (for `key_at`/`value_at`), or `None`.
+    pub fn find(self: &HashMap[K, V], key: &K) Option[usize] {
+        if (self.keys.is_empty()) { ret None; }
+        const mask: usize = self.slots.len() - 1;
+        var slot: usize = self.home(key);
+        var probes: usize = 0;
+        for (probes < self.slots.len()) {
+            const marker: usize = self.slots.get(slot);
+            if (marker == 0) { ret None; }
+            if (marker > 1 && self.keys.get_ref(marker - 2).eq(key)) { ret Some(marker - 2); }
+            slot = (slot + 1) & mask;
+            probes = probes + 1;
+        }
+        ret None;
+    }
+
+    // Whether the map has an entry for `key`.
+    pub fn contains(self: &HashMap[K, V], key: &K) bool { ret self.find(key).is_some(); }
+
+    // Store `value` for `key`: true when the key is new, false when an
+    // existing value was replaced (and dropped) and `key` is dropped.
+    // If capacity or allocation fails, existing entries are preserved.
+    pub fn insert(self: &HashMap[K, V]!, key: K, value: V) Result[bool, ArrayReserveError] {
+        const found: Option[usize] = self.find(&key);
+        if (found.is_some()) {
+            self.values.set(found.unwrap(), value);
+            ret Ok(false);
+        }
+        self.reserve_one()?;
+        self.keys.push(key);
+        self.values.push(value);
+        const index: usize = self.keys.len() - 1;
+        self.place(index);
+        ret Ok(true);
+    }
+
+    // The key of entry `index` (0 to `len() - 1`, insertion order until a
+    // removal moves the last entry); panics when out of range.
+    pub fn key_at(self: &HashMap[K, V], index: usize) &K { ret self.keys.get_ref(index); }
+
+    // The value of entry `index`; panics when out of range.
+    pub fn value_at(self: &HashMap[K, V], index: usize) &V { ret self.values.get_ref(index); }
+
+    // Remove and drop `key`'s entry; false when there is none.
+    pub fn remove(self: &HashMap[K, V]!, key: &K) bool {
+        const found: Option[usize] = self.find(key);
+        if (found.is_none()) { ret false; }
+        const index: usize = found.unwrap();
+        const slot: usize = self.slot_of(index);
+        self.slots.set(slot, 1);
+        self.deleted = self.deleted + 1;
+        const last: usize = self.keys.len() - 1;
+        if (index != last) {
+            const last_slot: usize = self.slot_of(last);
+            self.slots.set(last_slot, index + 2);
+            const moved_key: K = self.keys.remove(last);
+            const moved_value: V = self.values.remove(last);
+            self.keys.set(index, moved_key);
+            self.values.set(index, moved_value);
+        } else {
+            const removed_key: K = self.keys.remove(last);
+            const removed_value: V = self.values.remove(last);
+        }
+        ret true;
+    }
+
+    // Remove and drop every entry.
+    pub fn clear(self: &HashMap[K, V]!) void {
+        self.keys = Array.empty();
+        self.values = Array.empty();
+        self.slots = Array.empty();
+        self.deleted = 0;
+    }
+}
