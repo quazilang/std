@@ -248,8 +248,8 @@ Evidence: [src/codec.qz](../src/codec.qz).
   2026-11-17).
 - [x] Nested struct support (`to_json` / `from_json` of the field type;
   2026-11-17).
-- [x] Enum support (externally tagged JSON, optional `@tag("name")` per
-  variant, maintainer answer В27; `enum_input`/`enum_payload` helpers;
+- [x] Enum support (externally tagged JSON, optional `@serde` keys per
+  variant, maintainer answers В27 and В27Б; `enum_input`/`enum_payload` helpers;
   quazistrap `scripts/check_enum_codec.py`, including a library QZI consumer;
   2026-11-18).
 - [x] Wider numeric field matrix (every integer width, `f32`, `f64`;

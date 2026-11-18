@@ -197,8 +197,8 @@ object-field and array-element extraction. `std.codec` provides bounded
 decoders for `bool`, every integer width, `f32`, `f64`, and owned `String`, and
 the helpers behind compiler-derived `Serialize`/`Deserialize` (scalar,
 `String`, nested struct, `Option`, and `Array` fields). Derived enums use
-externally tagged JSON (`"Unit"`, `{"Variant": payload}`) with an optional
-`@tag("name")` per variant. Neither module constructs a dynamic JSON tree;
+externally tagged JSON (`"Unit"`, `{"Variant": payload}`) with optional
+`@serde` keys per variant (`"name"`, `"*:name"`, `"json:name"`; В27Б). Neither module constructs a dynamic JSON tree;
 maps remain future serialization work.
 
 ```quazi
