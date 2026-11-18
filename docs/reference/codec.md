@@ -25,6 +25,7 @@ std.codec — typed serialization contracts built on JSON wire codecs.
 - [`str`](#str) (methods)
 - [`String`](#string) (methods)
 - [`SystemTime`](#systemtime) (methods)
+- [`EnumInput`](#enuminput) (struct)
 - [`DocumentError`](#documenterror) (enum)
 - [`Document`](#document) (struct)
 
@@ -284,6 +285,32 @@ pub fn array_items(source: str) Result[Array[String], DecodeError]
 The raw JSON text of each element of the array `source`, in order
 (derived `Array` fields decode each element by its type).
 
+### `tagged_json`
+
+```quazi
+pub fn tagged_json(tag: str, payload: String) Result[String, EncodeError]
+```
+
+Compose an externally tagged payload case from its tag and encoded payload.
+
+### `tuple_json`
+
+```quazi
+pub fn tuple_json(values: Array[String]) Result[String, EncodeError]
+```
+
+Join already encoded values into a JSON tuple, validating the result.
+
+### `enum_input`
+
+```quazi
+pub fn enum_input(source: str, tags: &Array[str], tag_has_payload: &Array[bool]) Result[EnumInput, DecodeError]
+```
+
+Identify one externally tagged enum case. `tag_has_payload[i]` distinguishes
+the unit string form from the single-field object form for `tags[i]`.
+Unknown tags and mismatched case forms are InvalidValue.
+
 ## `EncodeError`
 
 ```quazi
@@ -514,6 +541,19 @@ pub fn to_json(self: SystemTime) Result[String, EncodeError]
 ```
 
 The time as a JSON string in RFC 3339 format.
+
+## `EnumInput`
+
+```quazi
+pub struct EnumInput {
+    // Zero-based position in the declaration's tag table.
+    index: usize,
+    // The raw JSON value in an object case, or an empty string for a unit case.
+    payload: String,
+}
+```
+
+The selected case and raw payload of an externally tagged JSON enum.
 
 ## `DocumentError`
 

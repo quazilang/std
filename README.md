@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 82.8%.**
+**Plan completion: 83.4%.**
 
-**Remaining work: 17.2%.**
+**Remaining work: 16.6%.**
 
 Completion of unfinished plan items:
 
@@ -20,7 +20,7 @@ Completion of unfinished plan items:
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 19/19 | 100.0% | 0.0% |
-| Serialization | 13/15 | 86.7% | 13.3% |
+| Serialization | 14/15 | 93.3% | 6.7% |
 | Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
 
 Counted on 2026-11-18 from the [requirement checklist](docs/PLAN_PROGRESS.md).
@@ -193,9 +193,10 @@ for emitting scalar JSON tokens, bounded JSON-string decoding, and top-level
 object-field and array-element extraction. `std.codec` provides bounded
 decoders for `bool`, every integer width, `f32`, `f64`, and owned `String`, and
 the helpers behind compiler-derived `Serialize`/`Deserialize` (scalar,
-`String`, nested struct, `Option`, and `Array` fields). Neither module
-constructs a dynamic JSON tree; enums and maps remain future serialization
-work.
+`String`, nested struct, `Option`, and `Array` fields). Derived enums use
+externally tagged JSON (`"Unit"`, `{"Variant": payload}`) with an optional
+`@tag("name")` per variant. Neither module constructs a dynamic JSON tree;
+maps remain future serialization work.
 
 ```quazi
 import std.json;

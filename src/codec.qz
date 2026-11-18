@@ -677,6 +677,97 @@ pub fn array_items(source: str) Result[Array[String], DecodeError] {
     ret Ok(items);
 }
 
+// The selected case and raw payload of an externally tagged JSON enum.
+pub struct EnumInput {
+    // Zero-based position in the declaration's tag table.
+    index: usize,
+    // The raw JSON value in an object case, or an empty string for a unit case.
+    payload: String,
+}
+
+// Compose an externally tagged payload case from its tag and encoded payload.
+pub fn tagged_json(tag: str, payload: String) Result[String, EncodeError] {
+    var keys: Array[str] = Array.new();
+    keys.push(tag);
+    var values: Array[String] = Array.new();
+    values.push(payload);
+    ret codec.object(keys, values);
+}
+
+// Join already encoded values into a JSON tuple, validating the result.
+pub fn tuple_json(values: Array[String]) Result[String, EncodeError] {
+    var tuple = String.from("[");
+    var index: usize = 0;
+    for (index < values.len()) {
+        const value = values.get_ref(index).as_str();
+        const overhead: usize = if (index == 0) { 1 } else { 2 };
+        if (tuple.bytes_len() > 1048576 - overhead
+            || value.bytes_len() > 1048576 - overhead - tuple.bytes_len()) {
+            ret Err(EncodeError.OutputLimit);
+        }
+        const valid = json.validate(value);
+        if (valid.is_err()) { ret Err(encode_json_error(valid.unwrap_err())); }
+        if (index != 0) { tuple.push_str(","); }
+        tuple.push_str(value);
+        index = index + 1;
+    }
+    tuple.push_str("]");
+    const validation = json.validate(tuple.as_str());
+    if (validation.is_err()) { ret Err(encode_json_error(validation.unwrap_err())); }
+    ret Ok(tuple);
+}
+
+// Identify one externally tagged enum case. `tag_has_payload[i]` distinguishes
+// the unit string form from the single-field object form for `tags[i]`.
+// Unknown tags and mismatched case forms are InvalidValue.
+pub fn enum_input(source: str, tags: &Array[str], tag_has_payload: &Array[bool]) Result[EnumInput, DecodeError] {
+    if (tags.len() != tag_has_payload.len()) { ret Err(DecodeError.InvalidValue); }
+    const validation = json.validate(source);
+    if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
+    var start: usize = 0;
+    for (whitespace(core.str_byte_at(source, start))) { start = start + 1; }
+    const first = core.str_byte_at(source, start);
+    if (first == 34) {
+        const decoded = json.decode_string(source);
+        if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
+        const tag = decoded.unwrap();
+        if (tag.bytes_len() != tag.as_str().bytes_len()) { ret Err(DecodeError.InvalidValue); }
+        var index: usize = 0;
+        for (index < tags.len()) {
+            if (!tag_has_payload.get(index) && tags.get(index) == tag.as_str()) {
+                ret Ok(EnumInput { index: index, payload: String.from("") });
+            }
+            index = index + 1;
+        }
+        ret Err(DecodeError.InvalidValue);
+    }
+    if (first != 123) { ret Err(DecodeError.TypeMismatch); }
+    const fields = json.object_fields(source, tags);
+    if (fields.is_err()) {
+        ret Err(match fields.unwrap_err() {
+            UnknownKey => DecodeError.InvalidValue,
+            DuplicateKey => DecodeError.DuplicateField,
+            InputLimit => DecodeError.InputLimit,
+            DepthLimit => DecodeError.DepthLimit,
+            _ => DecodeError.InvalidJson,
+        });
+    }
+    const spans = fields.unwrap();
+    var selected: Option[usize] = None;
+    var index: usize = 0;
+    for (index < tags.len()) {
+        if (spans[2 * index + 1] != 0) {
+            if (selected.is_some() || !tag_has_payload.get(index)) { ret Err(DecodeError.InvalidValue); }
+            selected = Some(index);
+        }
+        index = index + 1;
+    }
+    if (selected.is_none()) { ret Err(DecodeError.InvalidValue); }
+    const case_index = selected.unwrap();
+    const payload = field_raw(source, &spans, case_index)?;
+    ret Ok(EnumInput { index: case_index, payload: payload });
+}
+
 @test
 fn object_fields_reject_unknown_and_duplicate_keys() void {
     var keys: Array[str] = Array.new();

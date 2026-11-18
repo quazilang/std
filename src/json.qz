@@ -400,7 +400,8 @@ pub fn object_field_with_limits(source: str, key: str, max_input: usize, max_dep
         const scanned_value: Result[bool, JsonError] = parser.value(1);
         if (scanned_value.is_err()) { ret Err(scanned_value.unwrap_err()); }
         const value_end: usize = parser.offset;
-        if (decoded_key.unwrap().as_str() == key) {
+        const decoded = decoded_key.unwrap();
+        if (decoded.bytes_len() == key.bytes_len() && decoded.as_str() == key) {
             if (found.is_some()) { ret Err(JsonError.DuplicateKey); }
             found = Some(source[value_start as isize:value_end as isize]);
         }
@@ -455,7 +456,10 @@ pub fn object_fields_with_limits(source: str, keys: &Array[str], max_input: usiz
         if (scanned_value.is_err()) { ret Err(scanned_value.unwrap_err()); }
         const value_end: usize = parser.offset;
         var slot: usize = 0;
-        for (slot < keys.len() && keys[slot] != key.as_str()) { slot = slot + 1; }
+        for (slot < keys.len()
+            && (keys[slot].bytes_len() != key.bytes_len() || keys[slot] != key.as_str())) {
+            slot = slot + 1;
+        }
         if (slot == keys.len()) { ret Err(JsonError.UnknownKey); }
         if (spans[2 * slot + 1] != 0) { ret Err(JsonError.DuplicateKey); }
         spans.set(2 * slot, value_start);

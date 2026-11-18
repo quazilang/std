@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 82.8%. Remaining: 17.2%.**
+**Complete: 83.4%. Remaining: 16.6%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -37,7 +37,7 @@ release-readiness probability. New requirements change the denominator.
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 19/19 | 100.0% | 0.0% |
-| Serialization | 13/15 | 86.7% | 13.3% |
+| Serialization | 14/15 | 93.3% | 6.7% |
 | Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
 
 ## Requirements
@@ -248,7 +248,10 @@ Evidence: [src/codec.qz](../src/codec.qz).
   2026-11-17).
 - [x] Nested struct support (`to_json` / `from_json` of the field type;
   2026-11-17).
-- [ ] Enum support.
+- [x] Enum support (externally tagged JSON, optional `@tag("name")` per
+  variant, maintainer answer В27; `enum_input`/`enum_payload` helpers;
+  quazistrap `scripts/check_enum_codec.py`, including a library QZI consumer;
+  2026-11-18).
 - [x] Wider numeric field matrix (every integer width, `f32`, `f64`;
   `decode_<type>`; quazistrap `scripts/check_deserialize.py`; 2026-11-17).
 - [x] Finalize missing/unknown/duplicate/default decode policy (maintainer
