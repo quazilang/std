@@ -29,7 +29,8 @@ pub fn thread_spawn(f: ThreadCallback) usize
 
 Spawn a new thread running f. f must be a function pointer.
 Linux: f is called as pthread_start_routine (fn(*u8) *u8).
-Windows: f is called as LPTHREAD_START_ROUTINE (fn(*u8) u32).
+Windows: f is called as LPTHREAD_START_ROUTINE; its exit code is the
+low 32 bits of the result.
 Returns a thread handle (opaque usize) or 0 on failure.
 
 ### `thread_spawn_arg`
@@ -87,11 +88,12 @@ Returns the kernel thread ID of the calling thread (Linux only).
 ## `ThreadCallback`
 
 ```quazi
-pub type ThreadCallback = fn(*u8) u32;
+pub type ThreadCallback = fn(*u8) *u8;
 ```
 
 A native thread entry point: receives the argument pointer and returns
-the exit code.
+the thread result. One signature serves every target: Windows reads the
+low 32 bits of the returned value as the thread exit code.
 
 ## `ThreadError`
 

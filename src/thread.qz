@@ -10,28 +10,17 @@ import std.unix;
 import std.netbsd;
 
 // A native thread entry point: receives the argument pointer and returns
-// the exit code.
-@cfg(target_os = "linux")
+// the thread result. One signature serves every target: Windows reads the
+// low 32 bits of the returned value as the thread exit code.
 @repr(C)
 pub type ThreadCallback = fn(*u8) *u8;
-
-// A native thread entry point: receives the argument pointer and returns
-// the exit code.
-@cfg(target_os = "netbsd")
-@repr(C)
-pub type ThreadCallback = fn(*u8) *u8;
-
-// A native thread entry point: receives the argument pointer and returns
-// the exit code.
-@cfg(target_os = "windows")
-@repr(C)
-pub type ThreadCallback = fn(*u8) u32;
 
 // ── Intrinsics ────────────────────────────────────────────────────────────────
 
 // Spawn a new thread running f. f must be a function pointer.
 // Linux: f is called as pthread_start_routine (fn(*u8) *u8).
-// Windows: f is called as LPTHREAD_START_ROUTINE (fn(*u8) u32).
+// Windows: f is called as LPTHREAD_START_ROUTINE; its exit code is the
+// low 32 bits of the result.
 // Returns a thread handle (opaque usize) or 0 on failure.
 @intrinsic("quazi.thread.spawn")
 pub unsafe fn thread_spawn(f: ThreadCallback) usize;
@@ -107,23 +96,8 @@ unsafe fn __thread_body(block: *u8) void {
     runner(block);
 }
 
-@cfg(target_os = "linux")
 @export("__quazi_std_thread_entry")
 pub unsafe fn __thread_entry(block: *u8) *u8 {
-    __thread_body(block);
-    ret 0;
-}
-
-@cfg(target_os = "netbsd")
-@export("__quazi_std_thread_entry")
-pub unsafe fn __thread_entry(block: *u8) *u8 {
-    __thread_body(block);
-    ret 0;
-}
-
-@cfg(target_os = "windows")
-@export("__quazi_std_thread_entry")
-pub unsafe fn __thread_entry(block: *u8) u32 {
     __thread_body(block);
     ret 0;
 }

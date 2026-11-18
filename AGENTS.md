@@ -102,8 +102,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.
-- `std.thread.Thread.spawn` accepts the target-specific `ThreadCallback`
-  `@repr(C)` alias. Callbacks must be compatible exported functions; ordinary
+- `std.thread.Thread.spawn` accepts the `ThreadCallback` `@repr(C)` alias
+  `fn(*u8) *u8`, identical on every target (Windows uses the low 32 bits of
+  the result as the exit code), so universal QZIs share its callers. Callbacks must be compatible exported functions; ordinary
   Quazi closures and arbitrary values cannot cross the native thread ABI. The
   low-level spawn contract returns zero on allocation or OS thread-creation
   failure; joining a zero handle is a no-op.
