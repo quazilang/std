@@ -64,10 +64,10 @@ fn buffered_writers_hold_bytes_until_full_or_flushed() void {
     var writer = stream.BufWriter.with_capacity(stream.ByteSink.new(), 4);
     const small: Array[u8] = bytes_of("ab");
     writer.write_bytes(&small).unwrap();
-    if (writer.buffered() != 2) { panic("buffered small write"); }
+    if (writer.buffered() != 2 || writer.get_ref().contents().len() != 0) { panic("buffered small write"); }
     const more: Array[u8] = bytes_of("cdef");
     writer.write_bytes(&more).unwrap();
-    if (writer.buffered() != 2) { panic("drain at capacity"); }
+    if (writer.buffered() != 2 || writer.get_ref().contents().len() != 4) { panic("drain at capacity"); }
     writer.flush().unwrap();
     if (writer.buffered() != 0) { panic("flush"); }
     const sink = writer.into_inner().unwrap();

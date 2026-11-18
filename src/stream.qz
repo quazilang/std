@@ -145,6 +145,9 @@ impl BufReader[R] {
         ret BufReader { inner: inner, buffer: Array.new(), position: 0, capacity: size };
     }
 
+    // The wrapped reader.
+    pub fn get_ref(self: &BufReader[R]) &R { ret &self.inner; }
+
     // The wrapped reader; bytes still buffered are dropped.
     pub fn into_inner(self: BufReader[R]) R { ret self.inner; }
 
@@ -203,6 +206,9 @@ impl BufWriter[W] {
         if (size == 0) { size = 1; }
         ret BufWriter { inner: inner, buffer: Array.new(), capacity: size };
     }
+
+    // The wrapped writer (without the bytes still buffered).
+    pub fn get_ref(self: &BufWriter[W]) &W { ret &self.inner; }
 
     // The wrapped writer, after passing it the buffered bytes (not flushed).
     pub fn into_inner(self: BufWriter[W]) Result[W, IoError] {

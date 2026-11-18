@@ -188,6 +188,14 @@ pub fn with_capacity(inner: R, capacity: usize) BufReader[R]
 
 A reader that fetches `capacity` bytes (at least 1) at a time.
 
+### `BufReader.get_ref`
+
+```quazi
+pub fn get_ref(self: &BufReader[R]) &R
+```
+
+The wrapped reader.
+
 ### `BufReader.into_inner`
 
 ```quazi
@@ -230,6 +238,14 @@ pub fn with_capacity(inner: W, capacity: usize) BufWriter[W]
 ```
 
 A writer that passes `capacity` bytes (at least 1) at a time.
+
+### `BufWriter.get_ref`
+
+```quazi
+pub fn get_ref(self: &BufWriter[W]) &W
+```
+
+The wrapped writer (without the bytes still buffered).
 
 ### `BufWriter.into_inner`
 
