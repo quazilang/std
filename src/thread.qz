@@ -39,8 +39,8 @@ pub unsafe fn thread_join(handle: usize) void;
 
 // ── Thread struct ─────────────────────────────────────────────────────────────
 
-// Why a thread could not be started.
-pub enum ThreadError { CreationFailed, }
+// Why a thread could not be started or did not produce its result.
+pub enum ThreadError { CreationFailed, Panicked, }
 
 // A native thread started with a `ThreadCallback`; join it with `join`.
 pub struct Thread {
@@ -69,16 +69,25 @@ impl Thread {
     pub fn handle(self: Thread) usize { ret self.handle; }
 }
 
-// ── JoinHandle[T] (D-019 10b) ─────────────────────────────────────────────────
+// ── JoinHandle[T] (D-019 10b, D-007 / В29А) ──────────────────────────────────
 //
 // `thread.spawn(|| work(n))` runs a Quazi closure on a new OS thread;
 // `join()` waits and returns its result. The closure follows the ordinary
-// capture rules (plain scalars). A panic on the thread still ends the program.
+// capture rules. A panic on the thread is reported and ends only that thread:
+// `join()` returns `Err(ThreadError.Panicked)` after the thread's resources
+// are released (frames the panic abandoned do not run their destructors).
+// A handle that goes out of scope without `join()` waits for the thread.
+// Cancellation is cooperative: `JoinHandle.cancel` sets a flag that code on
+// the thread reads with `thread.cancel_requested()`.
 //
-// Block (32 bytes): +0 closure, +8 type-erased runner, +16 result slot.
+// Block (40 bytes): +0 closure, +8 type-erased runner, +16 result slot,
+// +24 panicked flag, +32 cancel-requested flag.
+
+// Identifies std.thread isolations for `__qo_isolation_arg` ("qzthread").
+fn __thread_tag() u64 { 0x717a746872656164 }
 
 // A thread running a Quazi closure; `join()` waits for it and returns its
-// result.
+// result. Dropping the handle also waits for the thread.
 pub struct JoinHandle[T] {
     block: *u8,
     handle: usize,
@@ -90,15 +99,23 @@ unsafe fn __run_closure[T](block: *u8) void {
     *((block + 16) as *T) = value;
 }
 
-unsafe fn __thread_body(block: *u8) void {
-    // This binding owns the runner closure from here and releases it on return.
+@export("__quazi_std_thread_body")
+pub unsafe fn __thread_body(block: *u8) void {
     const runner: fn(*u8) void = *((block + 8) as *fn(*u8) void);
     runner(block);
 }
 
 @export("__quazi_std_thread_entry")
 pub unsafe fn __thread_entry(block: *u8) *u8 {
-    __thread_body(block);
+    // A panic inside returns here instead of ending the process.
+    if (__qo_isolate(__thread_body, block, __thread_tag())) {
+        *((block + 24) as *i64) = 1;
+        // The panic abandoned the frames that own the runner closure
+        // (`__thread_body`) and the user closure (`__run_closure`) before
+        // they released them.
+        core.free(*((block + 8) as **u8));
+        core.free(*(block as **u8));
+    }
     ret 0;
 }
 
@@ -107,14 +124,16 @@ pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError] {
     var block: *u8 = 0;
     var handle: usize = 0;
     unsafe {
-        block = core.malloc(32);
+        block = core.malloc(40);
         if (block == 0) { ret Err(ThreadError.CreationFailed); }
+        core.memset(block, 0, 40);
         *(block as *fn() T) = f;
         const runner: fn(*u8) void = |b| __run_closure[T](b);
         *((block + 8) as *fn(*u8) void) = runner;
         handle = thread_spawn_arg(__thread_entry, block);
         if (handle == 0) {
             core.free(*((block + 8) as **u8));
+            core.free(*(block as **u8));
             core.free(block);
             ret Err(ThreadError.CreationFailed);
         }
@@ -122,16 +141,63 @@ pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError] {
     Ok(JoinHandle { block: block, handle: handle })
 }
 
+// True when code runs on a thread started by `spawn` whose `JoinHandle`
+// asked it to stop (`cancel`); false elsewhere.
+pub fn cancel_requested() bool {
+    unsafe {
+        const block: *u8 = __qo_isolation_arg(__thread_tag());
+        if (block == 0) { ret false; }
+        ret core.atomic_add((block + 32) as *i64, 0) != 0;
+    }
+}
+
 impl JoinHandle[T] {
-    // Wait for the thread and return its result.
+    // Wait for the thread and return its result, or `Panicked` when it
+    // panicked.
     pub fn join(self: JoinHandle[T]) Result[T, ThreadError] {
-        var value: T;
+        const block: *u8 = self.block;
+        // Receivers alias the caller's value: clear it so the destructor
+        // that still runs for it does not join a second time.
+        self.block = 0;
+        var panicked: bool = false;
         unsafe {
             thread_join(self.handle);
-            value = *((self.block + 16) as *T);
-            core.free(self.block);
+            panicked = *((block + 24) as *i64) != 0;
+        }
+        if (panicked) {
+            unsafe { core.free(block); }
+            ret Err(ThreadError.Panicked);
+        }
+        // Only a thread that finished without panicking wrote its result.
+        var value: T;
+        unsafe {
+            value = *((block + 16) as *T);
+            core.free(block);
         }
         Ok(value)
+    }
+
+    // Ask the thread to stop: `cancel_requested()` on it returns true from
+    // now on. The thread decides where to check and how to finish.
+    pub fn cancel(self: &JoinHandle[T]) void {
+        unsafe {
+            if (self.block != 0) { core.atomic_cas((self.block + 32) as *i64, 0, 1); }
+        }
+    }
+
+    // Waits for the thread when the handle goes out of scope without
+    // `join()`; a finished thread's result is dropped.
+    pub fn free(self: JoinHandle[T]) void {
+        const block: *u8 = self.block;
+        if (block == 0) { ret; }
+        self.block = 0;
+        unsafe {
+            thread_join(self.handle);
+            if (*((block + 24) as *i64) == 0) {
+                const dropped: T = *((block + 16) as *T);
+            }
+            core.free(block);
+        }
     }
 }
 

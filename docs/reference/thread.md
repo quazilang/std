@@ -61,6 +61,15 @@ pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError]
 
 Run `f` on a new OS thread.
 
+### `cancel_requested`
+
+```quazi
+pub fn cancel_requested() bool
+```
+
+True when code runs on a thread started by `spawn` whose `JoinHandle`
+asked it to stop (`cancel`); false elsewhere.
+
 ### `sleep`
 
 ```quazi
@@ -98,10 +107,10 @@ low 32 bits of the returned value as the thread exit code.
 ## `ThreadError`
 
 ```quazi
-pub enum ThreadError { CreationFailed, }
+pub enum ThreadError { CreationFailed, Panicked, }
 ```
 
-Why a thread could not be started.
+Why a thread could not be started or did not produce its result.
 
 ## `Thread`
 
@@ -142,7 +151,7 @@ pub struct JoinHandle[T] { /* internal fields */ }
 ```
 
 A thread running a Quazi closure; `join()` waits for it and returns its
-result.
+result. Dropping the handle also waits for the thread.
 
 ### `JoinHandle.join`
 
@@ -150,7 +159,26 @@ result.
 pub fn join(self: JoinHandle[T]) Result[T, ThreadError]
 ```
 
-Wait for the thread and return its result.
+Wait for the thread and return its result, or `Panicked` when it
+panicked.
+
+### `JoinHandle.cancel`
+
+```quazi
+pub fn cancel(self: &JoinHandle[T]) void
+```
+
+Ask the thread to stop: `cancel_requested()` on it returns true from
+now on. The thread decides where to check and how to finish.
+
+### `JoinHandle.free`
+
+```quazi
+pub fn free(self: JoinHandle[T]) void
+```
+
+Waits for the thread when the handle goes out of scope without
+`join()`; a finished thread's result is dropped.
 
 ## `AtomicI64`
 

@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 88.4%. Remaining: 11.6%.**
+**Complete: 91.9%. Remaining: 8.1%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -34,8 +34,8 @@ release-readiness probability. New requirements change the denominator.
 | Processes | 15/16 | 93.8% | 6.2% |
 | Networking / TLS | 16/17 | 94.1% | 5.9% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
-| Panic handling | 8/10 | 80.0% | 20.0% |
-| Concurrency | 6/12 | 50.0% | 50.0% |
+| Panic handling | 9/10 | 90.0% | 10.0% |
+| Concurrency | 9/12 | 75.0% | 25.0% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 14/15 | 93.3% | 6.7% |
 | Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
@@ -194,25 +194,33 @@ Evidence: companion compiler `quazistrap/prelude/src/panic.qz` and its panic-han
 - [x] Nested/recursive panic behavior (a panic while a panic is handled
   aborts with status 101; companion compiler `5f03491`, regression in
   `scripts/check_stack_overflow.py`; maintainer answer В16А).
-- [ ] Thread/task panic interaction.
+- [x] Thread/task panic interaction (a panic on a `thread.spawn` thread is
+  reported and returned by `join()` as `Err(ThreadError.Panicked)`; custom
+  handlers run only for fatal panics; `scripts/check_thread_isolation.py`,
+  2026-11-19, D-007/В29А).
 - [ ] Target-native custom-handler lifecycle regressions.
 - [x] Resolve the remaining D-006 panic policy (maintainer answer В28,
   2026-11-18; OS-thread panics stay with D-007 under Concurrency).
 
 ### Concurrency
 
-Evidence: [src/thread.qz](../src/thread.qz).
+Evidence: [src/thread.qz](../src/thread.qz),
+[scripts/check_thread_isolation.py](../scripts/check_thread_isolation.py).
 
 - [x] Linux/Windows native thread creation paths.
 - [x] Explicit consuming join.
 - [x] Result[Thread, ThreadError] creation failure.
 - [x] Target-specific exported C callback ABI.
-- [ ] Cancellation policy/API.
+- [x] Cancellation policy/API (cooperative: `JoinHandle.cancel` and
+  `thread.cancel_requested()`, В29А, 2026-11-19).
 - [x] Synchronization primitives.
 - [ ] Defined communication surface.
 - [x] Typed thread result propagation (`spawn` -> `JoinHandle[T]`, `join` -> `Result[T, ThreadError]`, 2026-11-09).
-- [ ] Panic propagation.
-- [ ] Structured automatic joining/cleanup.
+- [x] Panic propagation (isolated thread panics join as
+  `Err(ThreadError.Panicked)` after the block, closure and stack are
+  released, 2026-11-19).
+- [x] Structured automatic joining/cleanup (a dropped `JoinHandle` joins its
+  thread and drops a finished result, 2026-11-19).
 - [ ] Target-native lifetime/failure/synchronization matrix.
 - [ ] Finalize D-007 model and terminology.
 
