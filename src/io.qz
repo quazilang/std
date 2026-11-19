@@ -374,7 +374,12 @@ pub fn read(delimiter: str) Result[String, ReadError] {
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 
     var input_state: *u8 = 0;
+    // A CR that ended the previous read leaves a pending LF to skip; the
+    // flag lives in the runtime state (+120) so it spans calls.
+    var pending_lf: *i64 = 0;
+    unsafe { pending_lf = (core.runtime_state() + 120) as *i64; }
     var skip_lf_after_cr: bool = false;
+    unsafe { skip_lf_after_cr = *pending_lf != 0; *pending_lf = 0; }
     if (delimiter != "\n") {
         unsafe { input_state = __io_begin_immediate_input(); }
     }
@@ -425,16 +430,18 @@ pub fn read(delimiter: str) Result[String, ReadError] {
         unsafe { b = *(buf + len); }
         if (b == 10 && skip_lf_after_cr) {
             skip_lf_after_cr = false;
+            unsafe { *pending_lf = 0; }
             continue;
         }
         skip_lf_after_cr = false;
-        // Windows canonical input reports Enter as CRLF. Discard CR while
-        // readln waits for LF; immediate input reports only CR, normalized to LF.
+        unsafe { *pending_lf = 0; }
+        // CR is normalized to LF and a following LF is skipped, so Windows
+        // CRLF (console or files) and a lone CR each end one line.
         if (b == 13) {
-            if (delimiter == "\n" && input_state == 0) { continue; }
+            // A lone CR ends a line too (old Mac text); CRLF stays one break.
             b = 10;
             skip_lf_after_cr = true;
-            unsafe { *(buf + len) = b; }
+            unsafe { *(buf + len) = b; *pending_lf = 1; }
         }
         // Immediate terminal mode disables kernel/console echo so behavior is
         // identical on Linux and Windows. Redirected input is never echoed.

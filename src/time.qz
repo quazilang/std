@@ -566,6 +566,11 @@ impl SystemTime {
     // RFC 3339 text at a fixed offset, e.g. `2000-02-29T14:34:56+02:00`
     // (`Z` for UTC); None if the local fields leave years 0001-9999.
     pub fn format_rfc3339_at(self: &SystemTime, offset: &UtcOffset) Option[String] {
+        // RFC 3339 offsets have whole minutes: drop the seconds of a local
+        // mean time offset (toward zero) before computing the wall time, so
+        // the text still names this instant.
+        const minutes: UtcOffset = UtcOffset { seconds: (offset.seconds / 60) * 60 };
+        const offset: &UtcOffset = &minutes;
         const local: Option[DateTime] = self.to_offset(offset);
         if (local.is_none()) { ret None; }
         const text: String = local.unwrap().format_rfc3339();
@@ -1056,4 +1061,14 @@ fn intervals_tick_without_drift_and_count_missed_ticks() {
     if (Interval.new(Duration.zero()).is_ok()) { panic("zero period"); }
     var real = Interval.new(Duration.from_milliseconds(5)).unwrap();
     if (real.wait().unwrap() < 1) { panic("wait"); }
+}
+
+@test
+fn rfc3339_text_names_the_instant_for_second_offsets() void {
+    const instant = SystemTime.parse_rfc3339("2000-02-29T12:34:56Z").unwrap();
+    const offset = UtcOffset.from_seconds(7277).unwrap();
+    const text: String = instant.format_rfc3339_at(&offset).unwrap();
+    if (text.as_str() != "2000-02-29T14:35:56+02:01") { panic("offset seconds leaked into the wall time"); }
+    const back = SystemTime.parse_rfc3339(text.as_str()).unwrap();
+    if (back.format_rfc3339().as_str() != "2000-02-29T12:34:56Z") { panic("round trip changed the instant"); }
 }

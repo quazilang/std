@@ -154,3 +154,17 @@ fn abandoned_child_is_terminated_and_reaped_at_scope_exit() void {
         if (fs.exists(proc_path.as_str())) { panic("abandoned child is still alive or unreaped"); }
     }
 }
+
+@test
+fn removed_path_is_not_searched_and_env_clear_wins() void {
+    @cfg(target_os = "linux") {
+        // The program is looked up in the PATH the child will see: none.
+        const missing = process.Command.new("sh").env_remove("PATH").arg("-c").arg("exit 0").status();
+        if (missing.is_ok()) { panic("a removed PATH was still searched"); }
+        // Later calls win: env_clear drops a variable set before it.
+        const status = process.Command.new("/bin/sh").env("QUAZI_CLEARED", "1").env_clear()
+            .arg("-c").arg("test -z \"$QUAZI_CLEARED\"").status().unwrap();
+        const code: i32 = match status { ExitStatus.Code(value) => value, ExitStatus.Signal(_) => -1 };
+        if (code != 0) { panic("env_clear kept a variable set before it"); }
+    }
+}

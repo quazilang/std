@@ -452,7 +452,10 @@ impl Command {
     // Starts the child with only the variables set through `env`.
     pub fn env_clear(self: Command) Command {
         var command = self;
+        // Later calls win: variables set before are cleared too.
         command.clear_environment = true;
+        command.variables = CStrings.new();
+        command.removed = CStrings.new();
         command
     }
 
@@ -512,7 +515,7 @@ fn child_path(command: &Command) String {
         const pair: str = command.variables.get(index);
         if (pair.starts_with("PATH=")) { ret pair[5:pair.len()]; }
     }
-    if (command.clear_environment) { ret String.new(); }
+    if (command.clear_environment || command.removed.names("PATH=", false)) { ret String.new(); }
     var value: *u8 = 0;
     unsafe { value = core.getenv("PATH"); }
     if (value == 0) { ret String.from("/usr/local/bin:/usr/bin:/bin"); }
