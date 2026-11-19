@@ -86,7 +86,7 @@ impl Parser {
                     || core.str_byte_at(self.source, self.offset + 1) != 117) {
                     ret Err(JsonError.InvalidString);
                 }
-                for i : 0..4 {
+                for i : 0..(4 as usize) {
                     if (!hex(core.str_byte_at(self.source, self.offset + 2 + i))) { ret Err(JsonError.InvalidEscape); }
                 }
                 const low: u32 = unicode_escape(self.source, self.offset + 2);
