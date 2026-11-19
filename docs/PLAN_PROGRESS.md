@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 85.8%. Remaining: 14.2%.**
+**Complete: 87.8%. Remaining: 12.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -34,7 +34,7 @@ release-readiness probability. New requirements change the denominator.
 | Processes | 15/16 | 93.8% | 6.2% |
 | Networking / TLS | 15/17 | 88.2% | 11.8% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
-| Panic handling | 6/10 | 60.0% | 40.0% |
+| Panic handling | 8/10 | 80.0% | 20.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 14/15 | 93.3% | 6.7% |
@@ -184,13 +184,18 @@ Evidence: companion compiler `quazistrap/prelude/src/panic.qz` and its panic-han
 - [x] Validated custom panic-handler signature.
 - [x] Default source-location diagnostics.
 - [x] Default exit status 101.
-- [ ] Final custom-handler lifecycle/safety contract.
+- [x] Final custom-handler lifecycle/safety contract (В28: runs once for a
+  fatal panic, no unwinding, no destructor guarantee, default 101; a
+  qoroutine panic reaches `join` even with a custom handler — companion
+  compiler `docs/language/panic.md`, regression in
+  `scripts/check_stack_overflow.py`, 2026-11-19).
 - [x] Nested/recursive panic behavior (a panic while a panic is handled
   aborts with status 101; companion compiler `5f03491`, regression in
   `scripts/check_stack_overflow.py`; maintainer answer В16А).
 - [ ] Thread/task panic interaction.
 - [ ] Target-native custom-handler lifecycle regressions.
-- [ ] Resolve the remaining D-006 panic policy.
+- [x] Resolve the remaining D-006 panic policy (maintainer answer В28,
+  2026-11-18; OS-thread panics stay with D-007 under Concurrency).
 
 ### Concurrency
 
