@@ -158,9 +158,7 @@ impl IniDocument {
     // Frees the document; called automatically at the end of scope.
     pub fn free(self: IniDocument) void {
         self.content.free();
-        self.content = String.new();
         self.path.free();
-        self.path = String.new();
     }
 
     // Replaces the contents with the parsed `content`; on error the previous
