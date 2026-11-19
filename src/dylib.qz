@@ -59,6 +59,16 @@ pub struct DynamicLibrary {
     handle: usize,
 }
 
+// The platform unload call: nonzero on success on Windows (FreeLibrary),
+// zero on success elsewhere (dlclose).
+unsafe fn __unload(handle: usize) i32 {
+    var result: i32 = 0;
+    @cfg(target_os = "windows") { result = win32_core.free_library(handle); }
+    @cfg(target_os = "linux") { result = __linux_close(handle); }
+    @cfg(target_os = "netbsd") { result = __netbsd_close(handle); }
+    result
+}
+
 impl DynamicLibrary {
     // Loads the shared library at `path`.
     pub fn open(path: str) Result[DynamicLibrary, DynamicLibraryError] {
@@ -106,13 +116,13 @@ impl DynamicLibrary {
 
     // Unloads the library now.
     pub fn close(self: DynamicLibrary) Result[bool, DynamicLibraryError] {
-        if (self.handle == 0) { ret Ok(false); }
+        const handle: usize = self.handle;
+        if (handle == 0) { ret Ok(false); }
+        // `self` is dropped when this returns; its `free` must not unload the
+        // library a second time (or call `close` again, which recursed).
+        self.handle = 0;
         var result: i32 = 0;
-        unsafe {
-            @cfg(target_os = "windows") { result = win32_core.free_library(self.handle); }
-            @cfg(target_os = "linux") { result = __linux_close(self.handle); }
-            @cfg(target_os = "netbsd") { result = __netbsd_close(self.handle); }
-        }
+        unsafe { result = __unload(handle); }
         @cfg(target_os = "windows") {
             if (result == 0) {
                 var code: i32 = 0;
@@ -126,13 +136,15 @@ impl DynamicLibrary {
         @cfg(target_os = "netbsd") {
             if (result != 0) { ret Err(DynamicLibraryError.Native(result)); }
         }
-        self.handle = 0;
         ret Ok(true);
     }
 
     // Unloads the library; called automatically at the end of scope.
     pub fn free(self: DynamicLibrary) void {
-        const ignored: Result[bool, DynamicLibraryError] = self.close();
+        if (self.handle != 0) {
+            unsafe { __unload(self.handle); }
+            self.handle = 0;
+        }
     }
 
     // The native library handle.
