@@ -136,12 +136,17 @@ def main():
             print(f"negative lifetime probe {name}: rejected with S10", flush=True)
         # Artifact execution runs the seven new tests; qz test also runs the
         # three existing transport regressions copied with the implementation.
-        calls = re.findall(r"^fn (\w+)\(\) void", tests, re.M)
+        # A test declared under `@cfg(target_os = "...")` is called under the
+        # same condition, so the Windows object omits Linux-only fixtures.
+        calls = re.findall(
+            r"^((?:@.*\n)*)fn (\w+)\(\) void", tests, re.M,
+        )
         entry_calls = []
-        for name in calls:
+        for attributes, name in calls:
             call = name + "();"
-            if name.startswith("linux_"):
-                call = '@cfg(target_os = "linux") { ' + call + " }"
+            cfg = re.search(r'@cfg\(target_os = "(\w+)"\)', attributes)
+            if cfg:
+                call = f'@cfg(target_os = "{cfg.group(1)}") {{ ' + call + " }"
             entry_calls.append(call)
         native = work / "src/roundtrip.qz"
         native.write_text(
