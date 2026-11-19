@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 83.4%.**
+**Plan completion: 85.8%.**
 
-**Remaining work: 16.6%.**
+**Remaining work: 14.2%.**
 
 Completion of unfinished plan items:
 
@@ -15,7 +15,7 @@ Completion of unfinished plan items:
 | Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 11/17 | 64.7% | 35.3% |
+| Networking / TLS | 15/17 | 88.2% | 11.8% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -23,15 +23,17 @@ Completion of unfinished plan items:
 | Serialization | 14/15 | 93.3% | 6.7% |
 | Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
 
-Counted on 2026-11-18 from the [requirement checklist](docs/PLAN_PROGRESS.md).
+Counted on 2026-11-19 from the [requirement checklist](docs/PLAN_PROGRESS.md).
 Each item has equal weight; its percentage is implemented requirements
 divided by listed requirements. The overall percentage averages those
 fractions before rounding. Pending or failing requirements receive no
 credit. These figures measure checklist coverage, not remaining effort
 or production readiness.
 
-On Linux, `qz test` passes all 97 standard-library tests, including the
-TCP and UDP cases that need local sockets.
+On Linux, `qz test` passes all 100 standard-library tests, including the
+TCP and UDP cases that need local sockets. `scripts/check_tls.py` runs the
+TLS client against a local TLS server (trusted and untrusted certificates,
+wrong host name, truncation).
 
 ## Modules Overview
 
@@ -49,6 +51,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
+- `tls`: TLS client streams and HTTPS over the system TLS library (Linux).
 - `os`: Cross-platform host, memory, process, and environment information and changes.
 - `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
 - `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).

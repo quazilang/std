@@ -1,5 +1,5 @@
 // std.net — structured IPv4 TCP, UDP, and HTTP/1.1 client/server APIs.
-// HTTPS intentionally stays separate: transport security requires a TLS module.
+// HTTPS goes through std.tls, which adds TLS on top of these TCP streams.
 import std.core;
 import std.stream;
 import std.time.Duration;
@@ -78,7 +78,7 @@ impl NetError {
             NetError.LimitExceeded => "network response exceeded configured limit",
             NetError.AllocationFailed => "network buffer allocation failed",
             NetError.InvalidUtf8 => "network text was not valid UTF-8",
-            NetError.TlsUnavailable => "HTTPS requires a TLS transport",
+            NetError.TlsUnavailable => "HTTPS requires a TLS transport (std.tls)",
             NetError.Unsupported => "network operation is unsupported",
             NetError.InvalidTimeout => "a socket timeout must be longer than zero",
             NetError.Native(_) => "unclassified operating-system network error",
@@ -1145,8 +1145,8 @@ impl HttpMethod {
 pub struct Url { scheme: String, host: String, port: i32, path: String, }
 
 impl Url {
-    // Parses an `http://` or `https://` URL (`https` only parses: requests
-// are plain TCP without TLS).
+    // Parses an `http://` or `https://` URL (send `https` requests with
+    // `std.tls.send_url`).
     pub fn parse(text: str) Result[Url, NetError] {
         const separator: Option[usize] = text.find("://");
         if (separator.is_none()) { ret Err(NetError.InvalidUrl); }
@@ -1241,6 +1241,15 @@ impl HttpRequest {
     pub fn body(self: HttpRequest, body: str) HttpRequest { self.body = String.from(body); ret self; }
     // Limits the response size `send` accepts.
     pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest { self.response_limit = limit; ret self; }
+    // The largest response `send` reads, in bytes.
+    pub fn response_limit(self: &HttpRequest) usize { ret self.response_limit; }
+    // Sends to `host` with request target `target`, keeping the method,
+    // headers, body and response limit.
+    pub fn route(self: HttpRequest, target: str, host: str) HttpRequest {
+        self.target = String.from(target);
+        self.host = String.from(host);
+        ret self;
+    }
     // The method token.
     pub fn method(self: &HttpRequest) str { ret self.method.as_str(); }
     // The request target (path).
@@ -1282,6 +1291,7 @@ impl HttpRequest {
     }
     // Sends the request to `url`'s host and port.
     pub fn send_url(self: HttpRequest, url: Url) Result[HttpResponse, NetError] {
+        // HTTPS goes through `std.tls.send_url`; never downgrade to plain TCP.
         if (url.scheme() == "https") { ret Err(NetError.TlsUnavailable); }
         // `send_url` is the URL-targeted convenience operation. Preserve the
         // caller's method, body, headers, and response limit, but route and

@@ -19,17 +19,55 @@ transfer encoding. Compatibility `http_get`/`http_post` helpers remain.
 the chosen method, body, headers, and response limit. An explicitly supplied
 `Host` header remains a deliberate virtual-host override; otherwise encoding
 adds the URL authority, including a non-default HTTP port, as `Host`. `https`
-URLs return `TlsUnavailable` rather than downgrading the connection.
+URLs return `TlsUnavailable` rather than downgrading the connection; send them
+with `std.tls.send_url`.
 
 Safe operations return `Result[T, NetError]`, not platform integers. Portable
 variants include `ConnectionRefused`, `AddressInUse`, `TimedOut`,
 `ConnectionReset`, and reachability/permission failures. `message()` returns
 readable text. `Native(code)` preserves unexpected OS-specific failures.
 
-HTTPS returns `TlsUnavailable`; HTTP over TLS needs a dedicated TLS transport.
 Redirects, cookies, proxies, compression, and HTTP/2 are separate policy or
 protocol layers. Handles close at scope exit and may be closed early. The
 walkthrough is `examples/26-http-client-server` in the compiler repository.
+
+## TLS
+
+`std.tls` implements D-008 (В30А): the system TLS library and trust store.
+On Linux it binds OpenSSL 3, so a program that calls it links libc and the
+system libraries:
+
+```toml
+[target.x86_64-linux.link]
+libc = true
+libraries = ["ssl", "crypto"]
+```
+
+`TlsStream.connect(host, port)` verifies the certificate chain against the
+system store and the certificate against `host` (DNS name or IPv4 address;
+SNI is sent for names). `TlsStream.connect_with(host, port, &config)` takes a
+`TlsConfig`: `TlsConfig.system()` or `TlsConfig.with_ca_file(path)` for a
+private CA (that file replaces the system store). There is no way to turn
+verification off. TLS 1.2 is the minimum version; protocol and cipher updates
+come with the system library. `send`, `send_bytes`, `receive` and
+`receive_all` mirror `TcpStream`; `receive_all` succeeds only after the peer's
+close_notify, so a cut connection is a `ProtocolError` rather than a short
+response. Writes block SIGPIPE for the calling thread, so a closed peer is an
+error rather than a killed process; close_notify is skipped after a fatal
+error. Streams send close_notify and release the session at scope exit.
+
+`tls.send_url(request, url)` and `send_url_with(request, url, &config)` send
+an `HttpRequest` to an `https` URL like `HttpRequest.send_url`, adding the
+port to `Host` when it is not 443. Errors are `TlsError`: `Net(NetError)` for
+the TCP layer, `UntrustedCertificate(code)`, `HostnameMismatch`,
+`TrustStoreUnavailable`, `HandshakeFailed(code)`, `ProtocolError(code)` and
+the usual limit/UTF-8 cases.
+
+Windows (Schannel) and NetBSD are not implemented yet and return
+`TlsError.Unsupported`. `scripts/check_tls.py` builds a client and runs it
+against a local Python TLS server with a throwaway CA: trusted CA, untrusted
+system store, wrong host name, missing CA file, truncation, a peer that closes
+while the client writes, and a refused connection.
 
 ## Receiver migration checkpoint
 

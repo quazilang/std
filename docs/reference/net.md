@@ -1,7 +1,7 @@
 # `std.net`
 
 std.net — structured IPv4 TCP, UDP, and HTTP/1.1 client/server APIs.
-HTTPS intentionally stays separate: transport security requires a TLS module.
+HTTPS goes through std.tls, which adds TLS on top of these TCP streams.
 
 ## Contents
 
@@ -571,8 +571,8 @@ A parsed `http://host:port/path` (or `https`) URL.
 pub fn parse(text: str) Result[Url, NetError]
 ```
 
-Parses an `http://` or `https://` URL (`https` only parses: requests
-are plain TCP without TLS).
+Parses an `http://` or `https://` URL (send `https` requests with
+`std.tls.send_url`).
 
 ### `Url.scheme`
 
@@ -661,6 +661,23 @@ pub fn max_response_bytes(self: HttpRequest, limit: usize) HttpRequest
 ```
 
 Limits the response size `send` accepts.
+
+### `HttpRequest.response_limit`
+
+```quazi
+pub fn response_limit(self: &HttpRequest) usize
+```
+
+The largest response `send` reads, in bytes.
+
+### `HttpRequest.route`
+
+```quazi
+pub fn route(self: HttpRequest, target: str, host: str) HttpRequest
+```
+
+Sends to `host` with request target `target`, keeping the method,
+headers, body and response limit.
 
 ### `HttpRequest.method`
 

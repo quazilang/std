@@ -1,0 +1,557 @@
+// std.tls — TLS client streams over std.net TCP, backed by the system TLS
+// library (D-008).
+//
+// Linux uses the system OpenSSL 3 (`libssl`/`libcrypto`) and its trust store.
+// Programs that call into this module must link those libraries and libc:
+//
+//     [target.x86_64-linux.link]
+//     libc = true
+//     libraries = ["ssl", "crypto"]
+//
+// Certificate and host-name verification are always on; TLS 1.2 is the
+// minimum protocol version. Other targets return `TlsError.Unsupported`.
+import std.core;
+import std.ffi.{c_char, CString, CStringError, nullptr};
+import std.net.{NetError, TcpStream, HttpRequest, HttpResponse, Url};
+
+@cfg(target_os = "linux")
+@api("TLS_client_method")
+unsafe fn __tls_client_method() usize;
+@cfg(target_os = "linux")
+@api("SSL_CTX_new")
+unsafe fn __ssl_ctx_new(method: usize) usize;
+@cfg(target_os = "linux")
+@api("SSL_CTX_free")
+unsafe fn __ssl_ctx_free(context: usize) void;
+@cfg(target_os = "linux")
+@api("SSL_CTX_set_default_verify_paths")
+unsafe fn __ssl_ctx_set_default_verify_paths(context: usize) i32;
+@cfg(target_os = "linux")
+@api("SSL_CTX_load_verify_locations")
+unsafe fn __ssl_ctx_load_verify_locations(context: usize, file: *c_char, directory: *c_char) i32;
+@cfg(target_os = "linux")
+@api("SSL_CTX_set_verify")
+unsafe fn __ssl_ctx_set_verify(context: usize, mode: i32, callback: usize) void;
+@cfg(target_os = "linux")
+@api("SSL_CTX_ctrl")
+unsafe fn __ssl_ctx_ctrl(context: usize, command: i32, value: i64, argument: usize) i64;
+@cfg(target_os = "linux")
+@api("SSL_new")
+unsafe fn __ssl_new(context: usize) usize;
+@cfg(target_os = "linux")
+@api("SSL_free")
+unsafe fn __ssl_free(session: usize) void;
+@cfg(target_os = "linux")
+@api("SSL_set_fd")
+unsafe fn __ssl_set_fd(session: usize, descriptor: i32) i32;
+@cfg(target_os = "linux")
+@api("SSL_ctrl")
+unsafe fn __ssl_ctrl(session: usize, command: i32, value: i64, argument: *c_char) i64;
+@cfg(target_os = "linux")
+@api("SSL_set1_host")
+unsafe fn __ssl_set1_host(session: usize, host: *c_char) i32;
+@cfg(target_os = "linux")
+@api("SSL_connect")
+unsafe fn __ssl_connect(session: usize) i32;
+@cfg(target_os = "linux")
+@api("SSL_get_error")
+unsafe fn __ssl_get_error(session: usize, result: i32) i32;
+@cfg(target_os = "linux")
+@api("SSL_get_verify_result")
+unsafe fn __ssl_get_verify_result(session: usize) i64;
+@cfg(target_os = "linux")
+@api("SSL_read")
+unsafe fn __ssl_read(session: usize, data: *u8, length: i32) i32;
+@cfg(target_os = "linux")
+@api("SSL_write")
+unsafe fn __ssl_write(session: usize, data: *u8, length: i32) i32;
+@cfg(target_os = "linux")
+@api("SSL_shutdown")
+unsafe fn __ssl_shutdown(session: usize) i32;
+@cfg(target_os = "linux")
+@api("ERR_clear_error")
+unsafe fn __err_clear_error() void;
+
+// OpenSSL writes to the socket with write(2), which raises SIGPIPE on a
+// closed connection; writes block it for the calling thread instead.
+@cfg(target_os = "linux")
+@api("sigemptyset")
+unsafe fn __sigemptyset(set: *u8) i32;
+@cfg(target_os = "linux")
+@api("sigaddset")
+unsafe fn __sigaddset(set: *u8, signal: i32) i32;
+@cfg(target_os = "linux")
+@api("sigismember")
+unsafe fn __sigismember(set: *u8, signal: i32) i32;
+@cfg(target_os = "linux")
+@api("sigpending")
+unsafe fn __sigpending(set: *u8) i32;
+@cfg(target_os = "linux")
+@api("sigtimedwait")
+unsafe fn __sigtimedwait(set: *u8, info: *u8, timeout: *u8) i32;
+@cfg(target_os = "linux")
+@api("pthread_sigmask")
+unsafe fn __pthread_sigmask(how: i32, set: *u8, previous: *u8) i32;
+
+// OpenSSL constants (ssl.h, tls1.h, x509_vfy.h).
+const SSL_VERIFY_PEER: i32 = 1;
+const SSL_CTRL_SET_TLSEXT_HOSTNAME: i32 = 55;
+const TLSEXT_NAMETYPE_HOST_NAME: i64 = 0;
+const SSL_CTRL_SET_MIN_PROTO_VERSION: i32 = 123;
+const TLS1_2_VERSION: i64 = 771;
+const SSL_ERROR_SSL: i32 = 1;
+const SSL_ERROR_SYSCALL: i32 = 5;
+const SSL_ERROR_ZERO_RETURN: i32 = 6;
+const SIGPIPE: i32 = 13;
+const SIG_BLOCK: i32 = 0;
+const SIG_SETMASK: i32 = 2;
+// Signal-guard buffer: blocked set, previous mask and pending set (glibc
+// sigset_t is 128 bytes), a was-pending flag, a zero timespec and siginfo.
+const SIGNAL_SET_BYTES: usize = 128;
+const GUARD_FLAG: usize = 384;
+const GUARD_TIMEOUT: usize = 392;
+const GUARD_INFO: usize = 408;
+const GUARD_BYTES: usize = 536;
+const X509_V_OK: i64 = 0;
+const X509_V_ERR_HOSTNAME_MISMATCH: i64 = 62;
+const X509_V_ERR_IP_ADDRESS_MISMATCH: i64 = 64;
+// Largest single SSL_read/SSL_write length (their length is a C int).
+const MAX_RECORD_CALL: usize = 1073741824;
+
+// Why a TLS operation failed.
+pub enum TlsError {
+    // The underlying TCP connection failed.
+    Net(NetError),
+    // TLS is not implemented for this target.
+    Unsupported,
+    // The host name or CA path contains a NUL byte at this position.
+    InvalidName(usize),
+    AllocationFailed,
+    // The TLS library could not create its context or session.
+    LibraryFailure,
+    // The configured trust store could not be loaded.
+    TrustStoreUnavailable,
+    // The peer certificate chain is not trusted (verification code).
+    UntrustedCertificate(i64),
+    // The certificate does not name the requested host.
+    HostnameMismatch,
+    // The TLS handshake failed for another reason (SSL_get_error code).
+    HandshakeFailed(i32),
+    // A record could not be read or written (SSL_get_error code), including a
+    // connection closed without a TLS close_notify alert.
+    ProtocolError(i32),
+    // The stream was already closed.
+    Closed,
+    LimitExceeded,
+    InvalidUtf8,
+}
+
+impl TlsError {
+    // A short English description of the error, for display.
+    pub fn message(self: TlsError) str {
+        ret match self {
+            TlsError.Net(error) => error.message(),
+            TlsError.Unsupported => "TLS is not supported on this target",
+            TlsError.InvalidName(_) => "TLS host name or path contains NUL",
+            TlsError.AllocationFailed => "TLS buffer allocation failed",
+            TlsError.LibraryFailure => "the system TLS library could not create a session",
+            TlsError.TrustStoreUnavailable => "the TLS trust store could not be loaded",
+            TlsError.UntrustedCertificate(_) => "the server certificate is not trusted",
+            TlsError.HostnameMismatch => "the server certificate does not match the host name",
+            TlsError.HandshakeFailed(_) => "the TLS handshake failed",
+            TlsError.ProtocolError(_) => "TLS record error or truncated connection",
+            TlsError.Closed => "the TLS stream is closed",
+            TlsError.LimitExceeded => "TLS response exceeded configured limit",
+            TlsError.InvalidUtf8 => "TLS text was not valid UTF-8",
+        };
+    }
+}
+
+fn __name_error(error: CStringError) TlsError {
+    ret match error {
+        CStringError.InteriorNul(index) => TlsError.InvalidName(index),
+        CStringError.AllocationFailed => TlsError.AllocationFailed,
+    };
+}
+
+// Which certificates a client trusts.
+pub struct TlsConfig {
+    ca_file: String,
+}
+
+impl TlsConfig {
+    // Trust the operating system's certificate store.
+    pub fn system() TlsConfig { ret TlsConfig { ca_file: String.new() }; }
+
+    // Trust only the PEM certificates in `path` instead of the system store
+    // (for private certificate authorities).
+    pub fn with_ca_file(path: str) TlsConfig { ret TlsConfig { ca_file: String.from(path) }; }
+
+    // The CA file, or "" for the system store.
+    pub fn ca_file(self: &TlsConfig) str { ret self.ca_file.as_str(); }
+}
+
+// True when `host` is a DNS name: SNI (RFC 6066) is not sent for IPv4 or
+// IPv6 address literals.
+fn __sends_sni(host: str) bool {
+    ret !__is_ipv4_literal(host) && host.find(":").is_none();
+}
+
+// True for a dotted-decimal IPv4 literal.
+fn __is_ipv4_literal(host: str) bool {
+    const length: usize = host.bytes_len();
+    if (length == 0) { ret false; }
+    var data: *u8 = 0;
+    unsafe { data = core.str_as_ptr(host); }
+    var index: usize = 0;
+    for (index < length) {
+        var byte: u8 = 0;
+        unsafe { byte = *(data + index); }
+        if (byte != 46 && (byte < 48 || byte > 57)) { ret false; }
+        index = index + 1;
+    }
+    ret true;
+}
+
+// A verified TLS client connection. Closed (with a close_notify alert) at the
+// end of scope.
+pub struct TlsStream {
+    stream: TcpStream,
+    context: usize,
+    session: usize,
+    // A fatal TLS error forbids sending close_notify.
+    failed: bool,
+}
+
+impl TlsStream {
+    // Connects to `host:port` and verifies the server against the system
+    // trust store and `host`.
+    pub fn connect(host: str, port: i32) Result[TlsStream, TlsError] {
+        const config: TlsConfig = TlsConfig.system();
+        ret TlsStream.connect_with(host, port, &config);
+    }
+
+    // Connects to `host:port`, verifying the server with `config`.
+    pub fn connect_with(host: str, port: i32, config: &TlsConfig) Result[TlsStream, TlsError] {
+        @cfg(target_os = "linux") {
+            const encoded: Result[CString, CStringError] = CString.try_from_str(host);
+            if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
+            const name: CString = encoded.unwrap();
+            var ca: CString = CString.try_from_str("").unwrap();
+            if (!config.ca_file().is_empty()) {
+                const ca_encoded: Result[CString, CStringError] = CString.try_from_str(config.ca_file());
+                if (ca_encoded.is_err()) { ret Err(__name_error(ca_encoded.unwrap_err())); }
+                ca = ca_encoded.unwrap();
+            }
+            const connected: Result[TcpStream, NetError] = TcpStream.connect(host, port);
+            if (connected.is_err()) { ret Err(TlsError.Net(connected.unwrap_err())); }
+            var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false };
+            unsafe {
+                __err_clear_error();
+                tls.context = __ssl_ctx_new(__tls_client_method());
+                if (tls.context == 0) { ret Err(TlsError.LibraryFailure); }
+                __ssl_ctx_set_verify(tls.context, SSL_VERIFY_PEER, 0);
+                __ssl_ctx_ctrl(tls.context, SSL_CTRL_SET_MIN_PROTO_VERSION, TLS1_2_VERSION, 0);
+                var loaded: i32 = 0;
+                if (config.ca_file().is_empty()) {
+                    loaded = __ssl_ctx_set_default_verify_paths(tls.context);
+                } else {
+                    loaded = __ssl_ctx_load_verify_locations(tls.context, ca.as_ptr(), nullptr[c_char]());
+                }
+                if (loaded != 1) { ret Err(TlsError.TrustStoreUnavailable); }
+                tls.session = __ssl_new(tls.context);
+                if (tls.session == 0) { ret Err(TlsError.LibraryFailure); }
+                if (__ssl_set_fd(tls.session, tls.stream.handle() as i32) != 1) {
+                    ret Err(TlsError.LibraryFailure);
+                }
+                if (__sends_sni(host)) {
+                    __ssl_ctrl(tls.session, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_HOST_NAME, name.as_ptr());
+                }
+                if (__ssl_set1_host(tls.session, name.as_ptr()) != 1) {
+                    ret Err(TlsError.LibraryFailure);
+                }
+                __err_clear_error();
+                const result: i32 = __ssl_connect(tls.session);
+                if (result != 1) {
+                    const verify: i64 = __ssl_get_verify_result(tls.session);
+                    const code: i32 = __ssl_get_error(tls.session, result);
+                    // A failed handshake must not send close_notify.
+                    __ssl_free(tls.session);
+                    tls.session = 0;
+                    if (verify == X509_V_ERR_HOSTNAME_MISMATCH || verify == X509_V_ERR_IP_ADDRESS_MISMATCH) {
+                        ret Err(TlsError.HostnameMismatch);
+                    }
+                    if (verify != X509_V_OK) { ret Err(TlsError.UntrustedCertificate(verify)); }
+                    ret Err(TlsError.HandshakeFailed(code));
+                }
+            }
+            ret Ok(tls);
+        }
+        ret Err(TlsError.Unsupported);
+    }
+
+    // Sends `text`; returns the number of bytes sent.
+    pub fn send(self: &TlsStream!, text: str) Result[usize, TlsError] {
+        var result: Result[usize, TlsError] = Err(TlsError.Unsupported);
+        unsafe { result = self.__send_raw(core.str_as_ptr(text), text.bytes_len()); }
+        ret result;
+    }
+
+    // Sends `data`; returns the number of bytes sent.
+    pub fn send_bytes(self: &TlsStream!, data: bytes) Result[usize, TlsError] {
+        var result: Result[usize, TlsError] = Err(TlsError.Unsupported);
+        unsafe { result = self.__send_raw(data.as_ptr(), data.len()); }
+        ret result;
+    }
+
+    unsafe fn __send_raw(self: &TlsStream!, data: *u8, length: usize) Result[usize, TlsError] {
+        if (self.session == 0) { ret Err(TlsError.Closed); }
+        @cfg(target_os = "linux") {
+            const guard: *u8 = __block_sigpipe();
+            if (guard == 0) { ret Err(TlsError.AllocationFailed); }
+            var sent: usize = 0;
+            for (sent < length) {
+                var chunk: usize = length - sent;
+                if (chunk > MAX_RECORD_CALL) { chunk = MAX_RECORD_CALL; }
+                __err_clear_error();
+                const count: i32 = __ssl_write(self.session, data + sent, chunk as i32);
+                if (count <= 0) {
+                    const code: i32 = __ssl_get_error(self.session, count);
+                    __restore_sigpipe(guard);
+                    ret Err(self.__protocol_error(code));
+                }
+                sent = sent + count as usize;
+            }
+            __restore_sigpipe(guard);
+            ret Ok(sent);
+        }
+        ret Err(TlsError.Unsupported);
+    }
+
+    // Records a failed record operation; fatal errors forbid close_notify.
+    fn __protocol_error(self: &TlsStream!, code: i32) TlsError {
+        if (code == SSL_ERROR_SSL || code == SSL_ERROR_SYSCALL) { self.failed = true; }
+        ret TlsError.ProtocolError(code);
+    }
+
+    // Reads at most `length` bytes into `data`: the byte count, 0 after the
+    // peer's close_notify, or an error.
+    unsafe fn __read(self: &TlsStream!, data: *u8, length: usize) Result[usize, TlsError] {
+        if (self.session == 0) { ret Err(TlsError.Closed); }
+        @cfg(target_os = "linux") {
+            var chunk: usize = length;
+            if (chunk > MAX_RECORD_CALL) { chunk = MAX_RECORD_CALL; }
+            __err_clear_error();
+            const count: i32 = __ssl_read(self.session, data, chunk as i32);
+            if (count > 0) { ret Ok(count as usize); }
+            const code: i32 = __ssl_get_error(self.session, count);
+            if (code == SSL_ERROR_ZERO_RETURN) { ret Ok(0); }
+            ret Err(self.__protocol_error(code));
+        }
+        ret Err(TlsError.Unsupported);
+    }
+
+    // Receives what is available, at most `limit` bytes, as UTF-8 text.
+    // Returns "" after the peer closed the stream.
+    pub fn receive(self: &TlsStream!, limit: usize) Result[String, TlsError] {
+        if (limit == 0) { ret Ok(String.new()); }
+        var data: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); }
+        if (data == 0) { ret Err(TlsError.AllocationFailed); }
+        var first: Result[usize, TlsError] = Ok(0);
+        unsafe { first = self.__read(data, limit); }
+        if (first.is_err()) {
+            unsafe { core.free(data); }
+            ret Err(first.unwrap_err());
+        }
+        var length: usize = first.unwrap();
+        var missing: usize = 0;
+        unsafe { missing = core.utf8_incomplete_tail(data, length); }
+        for (missing > 0) {
+            if (missing > limit - length) {
+                unsafe { core.free(data); }
+                ret Err(TlsError.LimitExceeded);
+            }
+            var next: Result[usize, TlsError] = Ok(0);
+            unsafe { next = self.__read(data + length, missing); }
+            if (next.is_err()) {
+                unsafe { core.free(data); }
+                ret Err(next.unwrap_err());
+            }
+            const count: usize = next.unwrap();
+            if (count == 0) {
+                unsafe { core.free(data); }
+                ret Err(TlsError.InvalidUtf8);
+            }
+            length = length + count;
+            unsafe { missing = core.utf8_incomplete_tail(data, length); }
+        }
+        var text: Result[String, TlsError] = Err(TlsError.InvalidUtf8);
+        unsafe { text = __finish_text(data, length, limit); }
+        ret text;
+    }
+
+    // Receives until the peer closes the stream with close_notify, at most
+    // `limit` bytes. A connection cut without close_notify is an error, so a
+    // truncated response is never mistaken for a complete one.
+    pub fn receive_all(self: &TlsStream!, limit: usize) Result[String, TlsError] {
+        if (limit == 0) { ret Ok(String.new()); }
+        var data: *u8 = 0;
+        unsafe { data = core.malloc(limit + 1); }
+        if (data == 0) { ret Err(TlsError.AllocationFailed); }
+        var length: usize = 0;
+        for (length < limit) {
+            var read: Result[usize, TlsError] = Ok(0);
+            unsafe { read = self.__read(data + length, limit - length); }
+            if (read.is_err()) {
+                unsafe { core.free(data); }
+                ret Err(read.unwrap_err());
+            }
+            const count: usize = read.unwrap();
+            if (count == 0) { break; }
+            length = length + count;
+        }
+        if (length == limit) {
+            unsafe { core.free(data); }
+            ret Err(TlsError.LimitExceeded);
+        }
+        var text: Result[String, TlsError] = Err(TlsError.InvalidUtf8);
+        unsafe { text = __finish_text(data, length, limit); }
+        ret text;
+    }
+
+    // Sends close_notify and closes the connection now.
+    pub fn close(self: &TlsStream!) void {
+        @cfg(target_os = "linux") {
+            unsafe {
+                if (self.session != 0) {
+                    if (!self.failed) {
+                        const guard: *u8 = __block_sigpipe();
+                        if (guard != 0) {
+                            __err_clear_error();
+                            __ssl_shutdown(self.session);
+                            __restore_sigpipe(guard);
+                        }
+                    }
+                    __ssl_free(self.session);
+                }
+                if (self.context != 0) { __ssl_ctx_free(self.context); }
+            }
+        }
+        self.session = 0;
+        self.context = 0;
+        self.failed = false;
+        self.stream.close();
+    }
+
+    // Closes the stream; called automatically at the end of scope.
+    pub fn free(self: TlsStream) void { self.close(); }
+
+    // The native socket handle of the underlying TCP connection.
+    pub fn handle(self: &TlsStream) isize { ret self.stream.handle(); }
+}
+
+// Blocks SIGPIPE for the calling thread and returns the guard state for
+// `__restore_sigpipe`, or 0 when it cannot be allocated.
+@cfg(target_os = "linux")
+unsafe fn __block_sigpipe() *u8 {
+    const guard: *u8 = core.malloc(GUARD_BYTES);
+    if (guard == 0) { ret guard; }
+    core.memset(guard, 0, GUARD_BYTES);
+    __sigemptyset(guard);
+    __sigaddset(guard, SIGPIPE);
+    __sigpending(guard + 2 * SIGNAL_SET_BYTES);
+    if (__sigismember(guard + 2 * SIGNAL_SET_BYTES, SIGPIPE) == 1) { *(guard + GUARD_FLAG) = 1; }
+    __pthread_sigmask(SIG_BLOCK, guard, guard + SIGNAL_SET_BYTES);
+    ret guard;
+}
+
+// Consumes a SIGPIPE raised while the guard was active (one that was already
+// pending stays pending), restores the previous mask and frees the guard.
+@cfg(target_os = "linux")
+unsafe fn __restore_sigpipe(guard: *u8) void {
+    if (*(guard + GUARD_FLAG) == 0) {
+        __sigpending(guard + 2 * SIGNAL_SET_BYTES);
+        if (__sigismember(guard + 2 * SIGNAL_SET_BYTES, SIGPIPE) == 1) {
+            __sigtimedwait(guard, guard + GUARD_INFO, guard + GUARD_TIMEOUT);
+        }
+    }
+    __pthread_sigmask(SIG_SETMASK, guard + SIGNAL_SET_BYTES, nullptr[u8]());
+    core.free(guard);
+}
+
+// Validates `length` received bytes at `data` (capacity `limit + 1`) and
+// takes ownership of the buffer as a String.
+unsafe fn __finish_text(data: *u8, length: usize, limit: usize) Result[String, TlsError] {
+    if (!core.is_valid_utf8(data, length)) {
+        core.free(data);
+        ret Err(TlsError.InvalidUtf8);
+    }
+    *(data + length) = 0;
+    ret Ok(String.from_raw(data, length, limit + 1));
+}
+
+// Sends `request` to an `https` `url` and reads the response, verifying the
+// server with `config`. The request target and host come from `url`, as in
+// `HttpRequest.send_url`.
+pub fn send_url_with(request: HttpRequest, url: Url, config: &TlsConfig) Result[HttpResponse, TlsError] {
+    if (url.scheme() != "https") { ret Err(TlsError.Net(NetError.InvalidUrl)); }
+    var routed: HttpRequest = request.route(url.path(), url.host());
+    if (!routed.headers().contains("Host") && url.port() != 443) {
+        var authority: String = String.from(url.host());
+        authority.push_str(":");
+        authority.push_str(url.port().to_string().as_str());
+        routed = routed.header("Host", authority.as_str());
+    }
+    const limit: usize = routed.response_limit();
+    const connected: Result[TlsStream, TlsError] = TlsStream.connect_with(url.host(), url.port(), config);
+    if (connected.is_err()) { ret Err(connected.unwrap_err()); }
+    var stream: TlsStream = connected.unwrap();
+    const encoded: String = routed.encode();
+    const sent: Result[usize, TlsError] = stream.send(encoded.as_str());
+    if (sent.is_err()) { stream.close(); ret Err(sent.unwrap_err()); }
+    const received: Result[String, TlsError] = stream.receive_all(limit);
+    stream.close();
+    if (received.is_err()) { ret Err(received.unwrap_err()); }
+    const parsed: Result[HttpResponse, NetError] = HttpResponse.parse(received.unwrap());
+    if (parsed.is_err()) { ret Err(TlsError.Net(parsed.unwrap_err())); }
+    ret Ok(parsed.unwrap());
+}
+
+// Sends `request` to an `https` `url`, trusting the system certificate store.
+pub fn send_url(request: HttpRequest, url: Url) Result[HttpResponse, TlsError] {
+    const config: TlsConfig = TlsConfig.system();
+    ret send_url_with(request, url, &config);
+}
+
+@test
+fn system_config_has_no_ca_file() void {
+    const system: TlsConfig = TlsConfig.system();
+    if (!system.ca_file().is_empty()) { panic("system trust store names a CA file"); }
+    const private: TlsConfig = TlsConfig.with_ca_file("/etc/ca.pem");
+    if (private.ca_file() != "/etc/ca.pem") { panic("CA file was not kept"); }
+}
+
+@test
+fn only_dotted_decimal_hosts_skip_sni() void {
+    if (!__is_ipv4_literal("127.0.0.1")) { panic("IPv4 literal sent SNI"); }
+    if (__is_ipv4_literal("localhost") || __is_ipv4_literal("") || __is_ipv4_literal("1.example")) {
+        panic("host name treated as an address");
+    }
+    if (!__sends_sni("example.test") || __sends_sni("10.0.0.1") || __sends_sni("::1")) {
+        panic("SNI must name DNS hosts only");
+    }
+}
+
+@test
+fn errors_describe_verification_failures() void {
+    if (TlsError.HostnameMismatch.message() != "the server certificate does not match the host name") {
+        panic("host-name mismatch message");
+    }
+    if (TlsError.UntrustedCertificate(20).message() != "the server certificate is not trusted") {
+        panic("untrusted certificate message");
+    }
+    if (TlsError.Net(NetError.ConnectionRefused).message() != "connection refused") {
+        panic("network errors keep their message");
+    }
+}

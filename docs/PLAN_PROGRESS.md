@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 83.4%. Remaining: 16.6%.**
+**Complete: 85.8%. Remaining: 14.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -32,7 +32,7 @@ release-readiness probability. New requirements change the denominator.
 | Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 11/17 | 64.7% | 35.3% |
+| Networking / TLS | 15/17 | 88.2% | 11.8% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 6/10 | 60.0% | 40.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -128,7 +128,8 @@ Evidence: [src/process.qz](../src/process.qz).
 
 ### Networking / TLS
 
-Evidence: [src/net.qz](../src/net.qz).
+Evidence: [src/net.qz](../src/net.qz), [src/tls.qz](../src/tls.qz),
+[scripts/check_tls.py](../scripts/check_tls.py).
 
 - [x] IPv4 addresses and DNS resolution.
 - [x] TCP streams/listeners.
@@ -142,10 +143,15 @@ Evidence: [src/net.qz](../src/net.qz).
 - [x] Common streaming-I/O integration (`TcpStream` implements
   `stream.Reader`/`stream.Writer`, 2026-11-18; no loopback test yet because
   `TcpStream.connect` needs the system linker for `getaddrinfo`).
-- [ ] Maintained TLS transport backend.
-- [ ] Certificate-chain verification.
-- [ ] Hostname verification.
-- [ ] Trust-store/protocol/update policy.
+- [x] Maintained TLS transport backend (`std.tls` over the system OpenSSL 3
+  on Linux, 2026-11-19; Windows Schannel and NetBSD are not implemented and
+  return `TlsError.Unsupported`).
+- [x] Certificate-chain verification (always on; `check_tls.py` rejects a
+  private CA under the system store).
+- [x] Hostname verification (always on, `SSL_set1_host`; `check_tls.py`
+  rejects an address the certificate does not name).
+- [x] Trust-store/protocol/update policy (D-008/В30А: system trust store or an
+  explicit CA file, TLS 1.2 minimum, updates come with the system library).
 - [x] Ownership-safe fully compiling HTTP Headers/request/response path.
 - [ ] Defined concurrent socket-sharing policy.
 - [ ] Target-native TCP/UDP/HTTP/TLS integration matrix.

@@ -98,7 +98,16 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   request/response/header parsing, chunked responses, response limits, and
   local-server primitives. Socket I/O, accept, shutdown, and close use
   exclusive receivers; handle access is shared and `free(self)` is consuming.
-  HTTPS requires a separate TLS implementation.
+  HTTPS goes through `std.tls`; `HttpRequest.send_url` never downgrades it.
+- `std.tls` (D-008) binds the system OpenSSL 3 with `@api` on Linux; programs
+  that call it link `libc` and `ssl`/`crypto`. Certificate and host-name
+  verification are always on (no opt-out API), TLS 1.2 is the minimum, and
+  trust comes from the system store or an explicit CA file. `receive_all`
+  requires the peer's close_notify, so truncation is an error. Keep OpenSSL
+  calls out of code reachable without a connection: a `free` hook only runs
+  where reachable code can hold its type. Other targets return
+  `TlsError.Unsupported` until a system backend (Schannel) is implemented.
+  `python3 scripts/check_tls.py --qz <qz>` is the end-to-end check.
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.
