@@ -34,7 +34,8 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   `unsafe`; the declaration must match the module's documented syscall contract.
 - `std.io.read`, `readln`, and `readkey` return `Result[String, ReadError]`.
   They own and free temporary allocations on every error, validate UTF-8, and
-  return an owned `String`. EOF is represented by a successful empty string.
+  return an owned `String`. `read` and `readln` report end of input as
+  `Err(ReadError.EndOfInput)`; `readkey` returns an empty string.
 - `std.io.read(delimiter: str)` accepts a non-empty UTF-8 delimiter, uses
   immediate terminal mode for custom delimiters, and returns as soon as the
   delimiter is complete. `readkey`
@@ -123,10 +124,9 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   standard streams. A `Child` is consumed by `wait` or `close`; `try_wait`
   takes an exclusive receiver and clears an exited handle while keeping its
   local valid for harmless later no-op operations. Closing a live Linux child
-  kills and reaps it. The current runtime
-  implementation is Linux-only until the required Win32 UTF-16 command-line
-  and inherited-handle lowering is complete, so do not describe it as a
-  cross-platform facility yet.
+  kills and reaps it. Linux uses fork/execve; Windows uses `CreateProcessW`
+  with a UTF-16 command line quoted for `CommandLineToArgvW` (checked under
+  Wine by `scripts/check_windows_process.py`).
 - Safe `std.net` operations return `NetError`; safe fallible `std.fs` operations
   return `FsError`. Stable variants normalize Linux/Windows errors, `message()`
   provides display text, and `Native(code)` preserves unknown platform failures.

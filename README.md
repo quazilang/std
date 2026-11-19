@@ -42,7 +42,7 @@ description in the generated [API reference](docs/reference/README.md)
 (`qz doc -o docs/reference`; `scripts/check_reference.py` keeps it current).
 
 - `core`: Platform-neutral intrinsics (I/O, memory, process, and system information).
-- `collections`: Fallible, non-panicking `usize` map and set types.
+- `collections`: Fallible, non-panicking `usize` `Map`/`Set` and generic `HashMap`/`HashSet` (`K: Hash + Eq`).
 - `fs`: Cross-platform owned files, whole-file reads, directory listing (`read_dir` returns `Array[DirEntry]`), `Path` methods (`is_dir`, `read_dir`, ...), and metadata operations.
 - `io`: Standard input, output, and error streams handling.
 - `stream`: `Reader`/`Writer` byte streams with `IoError`, `copy`, and `BufReader`/`BufWriter` adapters.
@@ -153,7 +153,7 @@ owned string:
 import std.fs;
 import std.os;
 
-fn describe() Result[String, i32] {
+fn describe() Result[String, fs.FsError] {
     const hostname: String = os.hostname();
     const text: String = fs.read_to_string("system.txt")?;
     ret Ok(text);
@@ -189,8 +189,9 @@ fn example() Result[usize, MapError] {
 }
 ```
 
-The deliberately concrete element types avoid unsound generic raw storage until
-Quazi can express hash/equality bounds and drop-aware slots.
+`Map` and `Set` keep concrete `usize` elements; generic keys and values use
+`HashMap[K, V]` and `HashSet[K]`, which require `K: Hash + Eq` and own their
+entries in drop-aware storage.
 
 ## JSON
 
