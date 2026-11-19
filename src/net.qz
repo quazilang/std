@@ -4,7 +4,7 @@ import std.core;
 import std.stream;
 import std.time.Duration;
 import std.ffi.{c_char, CString, CStringError};
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 import std.win32_core;
@@ -152,7 +152,7 @@ fn __winsock_start() i32 {
 fn __socket(kind: i32, protocol: i32) Result[isize, NetError] {
     @cfg(target_os = "linux") {
         var socket: i32 = 0;
-        unsafe { socket = unix.socket(2, kind, protocol); }
+        unsafe { socket = linux.socket(2, kind, protocol); }
         if (socket < 0) { ret Err(__net_error(socket)); }
         ret Ok(socket as isize);
     }
@@ -182,7 +182,7 @@ fn __socket(kind: i32, protocol: i32) Result[isize, NetError] {
 
 fn __close(socket: isize) void {
     if (socket == -1) { ret; }
-    @cfg(target_os = "linux") { unsafe { unix.close(socket as i32); } }
+    @cfg(target_os = "linux") { unsafe { linux.close(socket as i32); } }
 @cfg(target_os = "netbsd") { unsafe { netbsd.close(socket as i32); } }
     @cfg(target_os = "windows") {
         unsafe {
@@ -204,7 +204,7 @@ fn __reuse_address(socket: isize) i32 {
     unsafe {
         core.memset(value, 0, 4);
         *value = 1;
-        @cfg(target_os = "linux") { result = unix.setsockopt(socket as i32, 1, 2, value, 4); }
+        @cfg(target_os = "linux") { result = linux.setsockopt(socket as i32, 1, 2, value, 4); }
         @cfg(target_os = "netbsd") { result = netbsd.setsockopt(socket as i32, 65535, 4, value, 4); }
         core.free(value);
     }
@@ -236,7 +236,7 @@ fn __set_timeout(socket: isize, receive: bool, timeout: Option[Duration]) Result
             *(value as *i64) = seconds as i64;
             *((value + 8) as *i64) = microseconds as i64;
             const name: i32 = if (receive) { 20 } else { 21 };
-            result = unix.setsockopt(socket as i32, 1, name, value, 16);
+            result = linux.setsockopt(socket as i32, 1, name, value, 16);
         }
         @cfg(target_os = "netbsd") {
             *(value as *i64) = seconds as i64;
@@ -259,7 +259,7 @@ fn __set_timeout(socket: isize, receive: bool, timeout: Option[Duration]) Result
 fn __listen(socket: isize, backlog: i32) i32 {
     @cfg(target_os = "linux") {
         var result: i32 = 0;
-        unsafe { result = unix.listen(socket as i32, backlog); }
+        unsafe { result = linux.listen(socket as i32, backlog); }
         ret result;
     }
 @cfg(target_os = "netbsd") {
@@ -278,7 +278,7 @@ fn __listen(socket: isize, backlog: i32) i32 {
 fn __accept(socket: isize) Result[isize, NetError] {
     @cfg(target_os = "linux") {
         var accepted: i32 = 0;
-        unsafe { accepted = unix.accept(socket as i32, 0, 0); }
+        unsafe { accepted = linux.accept(socket as i32, 0, 0); }
         if (accepted < 0) { ret Err(__net_error(accepted)); }
         ret Ok(accepted as isize);
     }
@@ -311,7 +311,7 @@ unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
     // process-terminating SIGPIPE. sendto with no destination is the Linux
     // connected-socket send operation and also works for connected UDP.
     @cfg(target_os = "linux") {
-        ret unix.sendto(socket as i32, data, length, 16384, 0, 0);
+        ret linux.sendto(socket as i32, data, length, 16384, 0, 0);
     }
 @cfg(target_os = "netbsd") {
         ret netbsd.sendto(socket as i32, data, length, 16384, 0, 0);
@@ -323,7 +323,7 @@ unsafe fn __send(socket: isize, data: *u8, length: usize) isize {
 }
 
 unsafe fn __recv(socket: isize, data: *u8, length: usize) isize {
-    @cfg(target_os = "linux") { ret unix.read(socket as i32, data, length); }
+    @cfg(target_os = "linux") { ret linux.read(socket as i32, data, length); }
 @cfg(target_os = "netbsd") { ret netbsd.read(socket as i32, data, length); }
     @cfg(target_os = "windows") {
         ret win32_core.receive_socket(socket as usize, data, length as i32, 0) as isize;
@@ -660,7 +660,7 @@ impl TcpStream {
             Shutdown.Both => 2,
         };
         var result: i32 = 0;
-        @cfg(target_os = "linux") { unsafe { result = unix.shutdown(self.socket as i32, mode); } }
+        @cfg(target_os = "linux") { unsafe { result = linux.shutdown(self.socket as i32, mode); } }
 @cfg(target_os = "netbsd") { unsafe { result = netbsd.shutdown(self.socket as i32, mode); } }
         @cfg(target_os = "windows") { unsafe { result = win32_core.shutdown_socket(self.socket as usize, mode); } }
         if (result < 0) { ret Err(__net_error(__error(result))); }
@@ -794,7 +794,7 @@ impl UdpSocket {
         var result: isize = 0;
         unsafe {
             @cfg(target_os = "linux") {
-                result = unix.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
+                result = linux.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
             }
 @cfg(target_os = "netbsd") {
                 result = netbsd.sendto(self.socket as i32, core.str_as_ptr(text), text.bytes_len(), 0, raw_address, 16);
@@ -857,7 +857,7 @@ impl UdpSocket {
         var count: isize = 0;
         unsafe {
             @cfg(target_os = "linux") {
-                count = unix.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
+                count = linux.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
             }
 @cfg(target_os = "netbsd") {
                 count = netbsd.recvfrom(self.socket as i32, data, limit, 0, raw_address, raw_length as *u32);
@@ -1559,7 +1559,7 @@ fn tcp_shutdown_read_keeps_the_sending_half_open() void {
     unsafe {
         const storage: *u8 = core.malloc(8);
         if (storage == 0) { panic("socketpair fixture allocation failed"); }
-        if (unix.socketpair(1, 1, 0, storage) != 0) { core.free(storage); panic("socketpair failed"); }
+        if (linux.socketpair(1, 1, 0, storage) != 0) { core.free(storage); panic("socketpair failed"); }
         first = *(storage as *i32);
         second = *((storage + 4) as *i32);
         core.free(storage);

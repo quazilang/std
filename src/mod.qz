@@ -5,7 +5,7 @@ pub import core;
 pub import io;
 pub import stream;
 pub import collections;
-pub import unix;
+pub import linux;
 @cfg(target_os="netbsd")
 pub import netbsd;
 @cfg(target_os="windows")

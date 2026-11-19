@@ -2,7 +2,7 @@
 
 std.os — operating system abstractions
 Cross-platform: uses core intrinsics (void.*) where possible,
-falls back to unix.* for Linux-specific calls.
+falls back to linux.* for Linux-specific calls.
 
 ## Contents
 

@@ -1,6 +1,6 @@
-# `std.unix`
+# `std.linux`
 
-std.unix — raw Linux x86-64 syscall bindings
+std.linux — raw Linux x86-64 syscall bindings (formerly std.unix)
 Every function maps 1:1 to a Linux syscall via @syscall.
 Not available on Windows (@syscall emits a no-op there).
 Calls with raw pointers or caller-controlled buffer lengths are explicitly

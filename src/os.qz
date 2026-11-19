@@ -1,8 +1,8 @@
 // std.os — operating system abstractions
 // Cross-platform: uses core intrinsics (void.*) where possible,
-// falls back to unix.* for Linux-specific calls.
+// falls back to linux.* for Linux-specific calls.
 import std.core;
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 import std.win32_core;
@@ -230,7 +230,7 @@ pub fn sleep(ms: u64) void {
 
 // Yield the CPU to other threads/processes.
 pub fn yield_cpu() void {
-    @cfg(target_os = "linux") { unsafe { unix.sched_yield(); } }
+    @cfg(target_os = "linux") { unsafe { linux.sched_yield(); } }
     @cfg(target_os = "netbsd") { unsafe { netbsd.sched_yield(); } }
     // Sleep(0) relinquishes the remainder of the current time slice to a
     // runnable peer without introducing a fixed-delay scheduling policy.
@@ -241,7 +241,7 @@ pub fn yield_cpu() void {
 pub fn getpid() i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
-        unsafe { r = unix.getpid(); }
+        unsafe { r = linux.getpid(); }
         ret r;
     }
         @cfg(target_os = "netbsd") {
@@ -261,7 +261,7 @@ pub fn getpid() i32 {
 pub fn getppid() i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
-        unsafe { r = unix.getppid(); }
+        unsafe { r = linux.getppid(); }
         ret r;
     }
         @cfg(target_os = "netbsd") {

@@ -9,7 +9,7 @@
 
 import std.core;
 @cfg(target_os="linux")
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 @cfg(target_os="windows")
@@ -137,7 +137,7 @@ impl Instant {
         unsafe { raw = core.malloc(16); }
         if raw == 0 { ret Err(TimeError.ClockUnavailable); }
         var status: i32 = 0;
-        unsafe { status = unix.clock_gettime(1, raw); }
+        unsafe { status = linux.clock_gettime(1, raw); }
         if status != 0 {
             unsafe { core.free(raw); }
             ret Err(TimeError.ClockUnavailable);
@@ -438,7 +438,7 @@ impl SystemTime {
         unsafe { raw = core.malloc(16); }
         if (raw == 0) { ret Err(TimeError.ClockUnavailable); }
         var status: i32 = 0;
-        unsafe { status = unix.clock_gettime(0, raw); }
+        unsafe { status = linux.clock_gettime(0, raw); }
         var seconds: i64 = 0;
         var nanoseconds: i64 = 0;
         unsafe {

@@ -5,7 +5,7 @@
 // Thread callbacks use the platform C ABI. They must be exported functions;
 // captured Quazi closures cannot cross this native boundary.
 import std.core;
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 
@@ -366,7 +366,7 @@ pub fn sleep(ms: u64) void {
 
 // Yield the processor to other threads.
 pub fn yield_now() void {
-    @cfg(target_os = "linux") { unsafe { unix.sched_yield(); } }
+    @cfg(target_os = "linux") { unsafe { linux.sched_yield(); } }
     @cfg(target_os = "netbsd") { unsafe { netbsd.sched_yield(); } }
     // Sleep(0) is the Win32 scheduler-yield operation. Keep this aligned with
     // std.os.yield_cpu rather than lowering a Linux syscall on Windows.
@@ -377,7 +377,7 @@ pub fn yield_now() void {
 pub fn current_tid() i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
-        unsafe { r = unix.gettid(); }
+        unsafe { r = linux.gettid(); }
         ret r;
     }
     // Windows has no Linux kernel thread ID. Keep the existing signature while

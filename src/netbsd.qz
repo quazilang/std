@@ -1,6 +1,6 @@
 // std.netbsd — NetBSD 11.0/amd64 libc adapters.
 //
-// Unlike std.unix, these are NOT Linux syscalls. NetBSD libc returns -1 and
+// Unlike std.linux, these are NOT Linux syscalls. NetBSD libc returns -1 and
 // stores errno in thread-local state. These wrappers expose negative errno to
 // Quazi APIs that historically expect the Linux syscall error convention.
 // Only imported when @cfg(target_os="netbsd") is active.

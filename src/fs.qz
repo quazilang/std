@@ -5,7 +5,7 @@
 // Application code normally never calls close/free explicitly.
 import std.core;
 import std.stream;
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 import std.win32_core;
@@ -87,7 +87,7 @@ pub fn current_dir() Result[String, FsError] {
         var retry: bool = false;
         @cfg(target_os = "linux") {
             var result: isize = 0;
-            unsafe { result = unix.getcwd(core.str_from_ptr(buffer), capacity); }
+            unsafe { result = linux.getcwd(core.str_from_ptr(buffer), capacity); }
             // ERANGE: the path is longer than the buffer.
             if (result == -34) { retry = true; } else if (result < 0) {
                 unsafe { core.free(buffer); }
@@ -128,7 +128,7 @@ pub fn current_dir() Result[String, FsError] {
 pub fn set_current_dir(path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = 0;
-        unsafe { result = unix.chdir(path); }
+        unsafe { result = linux.chdir(path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -185,7 +185,7 @@ struct DirectoryScan {
 impl DirectoryScan {
     fn free(self: DirectoryScan) void {
         @cfg(target_os = "linux") {
-            if (self.handle >= 0) { unsafe { unix.close(self.handle as i32); } }
+            if (self.handle >= 0) { unsafe { linux.close(self.handle as i32); } }
         }
         @cfg(target_os = "netbsd") {
             if (self.handle >= 0) { unsafe { netbsd.close(self.handle as i32); } }
@@ -218,7 +218,7 @@ impl File {
     pub fn open(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
-                const fd: i32 = unix.open(path, 0, 0);
+                const fd: i32 = linux.open(path, 0, 0);
                 if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
@@ -247,7 +247,7 @@ impl File {
     pub fn create(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
-                const fd: i32 = unix.open(path, 577, 420);
+                const fd: i32 = linux.open(path, 577, 420);
                 if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
@@ -276,7 +276,7 @@ impl File {
     pub fn open_rw(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
-                const fd: i32 = unix.open(path, 66, 420);
+                const fd: i32 = linux.open(path, 66, 420);
                 if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
@@ -305,7 +305,7 @@ impl File {
     pub fn open_append(path: str) Result[File, FsError] {
         @cfg(target_os = "linux") {
             unsafe {
-                const fd: i32 = unix.open(path, 1089, 420);
+                const fd: i32 = linux.open(path, 1089, 420);
                 if (fd < 0) { ret Err(fs_error(fd)); }
                 ret Ok(File { handle: fd as isize });
             }
@@ -396,7 +396,7 @@ impl File {
         if (self.handle == -1) { ret Ok(false); }
         var result: i32 = 0;
         @cfg(target_os = "linux") {
-            unsafe { result = unix.close(self.handle as i32); }
+            unsafe { result = linux.close(self.handle as i32); }
         }
         @cfg(target_os = "netbsd") {
             unsafe { result = netbsd.close(self.handle as i32); }
@@ -425,7 +425,7 @@ impl File {
     pub fn seek(self: &File!, offset: i64, whence: i32) Result[i64, FsError] {
         @cfg(target_os = "linux") {
             var position: i64 = -1;
-            unsafe { position = unix.lseek(self.handle as i32, offset, whence); }
+            unsafe { position = linux.lseek(self.handle as i32, offset, whence); }
             if (position < 0) { ret Err(fs_error(position as i32)); }
             ret Ok(position);
         }
@@ -459,7 +459,7 @@ impl File {
     pub fn sync(self: &File!) Result[bool, FsError] {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
-            unsafe { result = unix.fsync(self.handle as i32); }
+            unsafe { result = linux.fsync(self.handle as i32); }
             if (result < 0) { ret Err(fs_error(result)); }
             ret Ok(true);
         }
@@ -482,7 +482,7 @@ impl File {
     pub fn truncate(self: &File!, len: i64) Result[bool, FsError] {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
-            unsafe { result = unix.ftruncate(self.handle as i32, len); }
+            unsafe { result = linux.ftruncate(self.handle as i32, len); }
             if (result < 0) { ret Err(fs_error(result)); }
             ret Ok(true);
         }
@@ -585,7 +585,7 @@ pub fn read_bytes_with_limit(path: str, max_bytes: usize) Result[Array[u8], FsEr
 // Whether something (file, directory, link target) exists at `path`.
 pub fn exists(path: str) bool {
     @cfg(target_os = "linux") {
-        unsafe { ret unix.access(path, 0) == 0; }
+        unsafe { ret linux.access(path, 0) == 0; }
     }
         @cfg(target_os = "netbsd") {
         unsafe { ret netbsd.access(path, 0) == 0; }
@@ -657,8 +657,8 @@ fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
         // st_mtime seconds/nanoseconds at 88/96.
         var status: i32 = 0;
         unsafe {
-            if (follow) { status = unix.stat(path, buffer.data); }
-            else { status = unix.lstat(path, buffer.data); }
+            if (follow) { status = linux.stat(path, buffer.data); }
+            else { status = linux.lstat(path, buffer.data); }
         }
         if (status < 0) { ret Err(fs_error(status)); }
         var mode: u32 = 0;
@@ -1048,14 +1048,14 @@ pub fn read_dir(path: str) Result[Array[DirEntry], FsError] {
 
     @cfg(target_os = "linux") {
         var fd: i32 = -1;
-        unsafe { fd = unix.open(directory, 65536, 0); }
+        unsafe { fd = linux.open(directory, 65536, 0); }
         if (fd < 0) { ret Err(fs_error(fd)); }
         var scan_data: *u8 = 0;
         unsafe { scan_data = buffer.take(); }
         const scan: DirectoryScan = DirectoryScan { handle: fd as isize, data: scan_data };
         for (true) {
             var batch_size: isize = -1;
-            unsafe { batch_size = unix.getdents64(fd, scan.data, capacity); }
+            unsafe { batch_size = linux.getdents64(fd, scan.data, capacity); }
             if (batch_size < 0) { ret Err(fs_error(batch_size as i32)); }
             if (batch_size == 0) { break; }
             var offset: usize = 0;
@@ -1208,20 +1208,20 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
     @cfg(target_os = "linux") {
         // O_PATH | O_CLOEXEC opens without reading; /proc names the target.
         var fd: i32 = -1;
-        unsafe { fd = unix.open(path, 2621440, 0); }
+        unsafe { fd = linux.open(path, 2621440, 0); }
         if (fd < 0) { ret Err(fs_error(fd)); }
         const link: String = "/proc/self/fd/{fd}";
         var buffer: *u8 = 0;
         unsafe { buffer = core.malloc(4097); }
         if (buffer == 0) {
-            unsafe { unix.close(fd); }
+            unsafe { linux.close(fd); }
             ret Err(FsError.AllocationFailed);
         }
         var length: isize = 0;
         unsafe {
             core.memset(buffer, 0, 4097);
-            length = unix.readlink(link.as_str(), core.str_from_ptr(buffer), 4096);
-            unix.close(fd);
+            length = linux.readlink(link.as_str(), core.str_from_ptr(buffer), 4096);
+            linux.close(fd);
         }
         if (length <= 0) {
             unsafe { core.free(buffer); }
@@ -1270,7 +1270,7 @@ pub fn write(path: str, contents: str) Result[usize, FsError] {
 // directory).
 pub fn writable(path: str) bool {
     @cfg(target_os = "linux") {
-        unsafe { ret unix.access(path, 2) == 0; }
+        unsafe { ret linux.access(path, 2) == 0; }
     }
         @cfg(target_os = "netbsd") {
         unsafe { ret netbsd.access(path, 2) == 0; }
@@ -1283,7 +1283,7 @@ pub fn writable(path: str) bool {
 pub fn remove(path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.unlink(path); }
+        unsafe { result = linux.unlink(path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1313,7 +1313,7 @@ pub fn mkdir(path: str) Result[bool, FsError] {
 pub fn mkdir_mode(path: str, mode: u32) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.mkdir(path, mode); }
+        unsafe { result = linux.mkdir(path, mode); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1336,7 +1336,7 @@ pub fn mkdir_mode(path: str, mode: u32) Result[bool, FsError] {
 pub fn rmdir(path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.rmdir(path); }
+        unsafe { result = linux.rmdir(path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1360,7 +1360,7 @@ pub fn rmdir(path: str) Result[bool, FsError] {
 pub fn rename(from: str, to: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.rename(from, to); }
+        unsafe { result = linux.rename(from, to); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1384,7 +1384,7 @@ pub fn rename(from: str, to: str) Result[bool, FsError] {
 pub fn link(existing: str, new_path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.link(existing, new_path); }
+        unsafe { result = linux.link(existing, new_path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1402,7 +1402,7 @@ pub fn link(existing: str, new_path: str) Result[bool, FsError] {
 pub fn symlink(target: str, link_path: str) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.symlink(target, link_path); }
+        unsafe { result = linux.symlink(target, link_path); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }
@@ -1420,7 +1420,7 @@ pub fn symlink(target: str, link_path: str) Result[bool, FsError] {
 pub fn chmod(path: str, mode: u32) Result[bool, FsError] {
     @cfg(target_os = "linux") {
         var result: i32 = -1;
-        unsafe { result = unix.chmod(path, mode); }
+        unsafe { result = linux.chmod(path, mode); }
         if (result < 0) { ret Err(fs_error(result)); }
         ret Ok(true);
     }

@@ -3,7 +3,7 @@
 // portable surface. On other targets the signed-result functions return -1
 // and the unsigned ones return u32::MAX as an unsupported-target sentinel.
 import std.core;
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 
@@ -17,7 +17,7 @@ pub unsafe fn linux_environment() *u8 {
 // Returns number of bytes written (including null) or negative on error.
 // buf must be at least size bytes long.
 pub unsafe fn cwd(buf: str, size: usize) isize {
-    @cfg(target_os = "linux") { ret unix.getcwd(buf, size); }
+    @cfg(target_os = "linux") { ret linux.getcwd(buf, size); }
     @cfg(target_os = "netbsd") { ret netbsd.getcwd(buf, size); }
     ret -1;
 }
@@ -28,7 +28,7 @@ pub unsafe fn cwd(buf: str, size: usize) isize {
 pub fn getuid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
-        unsafe { r = unix.getuid(); }
+        unsafe { r = linux.getuid(); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -43,7 +43,7 @@ pub fn getuid() u32 {
 pub fn getgid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
-        unsafe { r = unix.getgid(); }
+        unsafe { r = linux.getgid(); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -58,7 +58,7 @@ pub fn getgid() u32 {
 pub fn geteuid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
-        unsafe { r = unix.geteuid(); }
+        unsafe { r = linux.geteuid(); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -73,7 +73,7 @@ pub fn geteuid() u32 {
 pub fn getegid() u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
-        unsafe { r = unix.getegid(); }
+        unsafe { r = linux.getegid(); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -90,7 +90,7 @@ pub fn getegid() u32 {
 pub fn kill(pid: i32, sig: i32) i32 {
     @cfg(target_os = "linux") {
         var r: i32 = 0;
-        unsafe { r = unix.kill(pid, sig); }
+        unsafe { r = linux.kill(pid, sig); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -107,7 +107,7 @@ pub fn kill(pid: i32, sig: i32) i32 {
 pub fn umask(mask: u32) u32 {
     @cfg(target_os = "linux") {
         var r: u32 = 0;
-        unsafe { r = unix.umask(mask); }
+        unsafe { r = linux.umask(mask); }
         ret r;
     }
     @cfg(target_os = "netbsd") {
@@ -126,7 +126,7 @@ fn identities_and_signals_answer_on_unix() void {
         if (getgid() == 4294967295 as u32 || getegid() == 4294967295 as u32) { panic("gid unavailable"); }
         // Signal 0 only checks that the process exists.
         var pid: i32 = 0;
-        unsafe { pid = unix.getpid(); }
+        unsafe { pid = linux.getpid(); }
         if (kill(pid, 0) != 0) { panic("kill(self, 0) failed"); }
         const previous: u32 = umask(18);
         if (umask(previous) != 18) { panic("umask did not round-trip"); }
@@ -144,28 +144,28 @@ fn identities_and_signals_answer_on_unix() void {
 
 // Duplicate the process: the child's pid, 0 in the child, or -errno.
 pub unsafe fn fork() i32 {
-    @cfg(target_os = "linux") { ret unix.fork(); }
+    @cfg(target_os = "linux") { ret linux.fork(); }
     @cfg(target_os = "netbsd") { ret netbsd.fork(); }
     -38
 }
 
 // Replace the process image; returns only on failure (-errno).
 pub unsafe fn execve(path: str, argv: *u8, envp: *u8) i32 {
-    @cfg(target_os = "linux") { ret unix.execve(path, argv, envp); }
+    @cfg(target_os = "linux") { ret linux.execve(path, argv, envp); }
     @cfg(target_os = "netbsd") { ret netbsd.execve(path, argv, envp); }
     -38
 }
 
 // Change the working directory (-errno on failure).
 pub unsafe fn chdir(path: str) i32 {
-    @cfg(target_os = "linux") { ret unix.chdir(path); }
+    @cfg(target_os = "linux") { ret linux.chdir(path); }
     @cfg(target_os = "netbsd") { ret netbsd.chdir(path); }
     -38
 }
 
 // Make `new_fd` a copy of `old` (-errno on failure).
 pub unsafe fn dup2(old: i32, new_fd: i32) i32 {
-    @cfg(target_os = "linux") { ret unix.dup2(old, new_fd); }
+    @cfg(target_os = "linux") { ret linux.dup2(old, new_fd); }
     @cfg(target_os = "netbsd") { ret netbsd.dup2(old, new_fd); }
     -38
 }
@@ -173,56 +173,56 @@ pub unsafe fn dup2(old: i32, new_fd: i32) i32 {
 // A pipe into `fds` (two i32); `cloexec` sets close-on-exec on both ends.
 pub unsafe fn pipe(fds: *u8, cloexec: bool) i32 {
     const flags: i32 = if cloexec { 524288 } else { 0 };
-    @cfg(target_os = "linux") { ret unix.pipe2(fds, flags); }
+    @cfg(target_os = "linux") { ret linux.pipe2(fds, flags); }
     @cfg(target_os = "netbsd") { ret netbsd.pipe2(fds, flags); }
     -38
 }
 
 // Wait for readiness of `count` `struct pollfd` entries.
 pub unsafe fn poll(fds: *u8, count: usize, timeout: i32) i32 {
-    @cfg(target_os = "linux") { ret unix.poll(fds, count, timeout); }
+    @cfg(target_os = "linux") { ret linux.poll(fds, count, timeout); }
     @cfg(target_os = "netbsd") { ret netbsd.poll(fds, count, timeout); }
     -38
 }
 
 // Read from a descriptor (-errno on failure).
 pub unsafe fn read(fd: i32, data: *u8, count: usize) isize {
-    @cfg(target_os = "linux") { ret unix.read(fd, data, count); }
+    @cfg(target_os = "linux") { ret linux.read(fd, data, count); }
     @cfg(target_os = "netbsd") { ret netbsd.read(fd, data, count); }
     -38
 }
 
 // Write to a descriptor (-errno on failure).
 pub unsafe fn write(fd: i32, data: *u8, count: usize) isize {
-    @cfg(target_os = "linux") { ret unix.write(fd, data, count); }
+    @cfg(target_os = "linux") { ret linux.write(fd, data, count); }
     @cfg(target_os = "netbsd") { ret netbsd.write(fd, data, count); }
     -38
 }
 
 // Close a descriptor (-errno on failure).
 pub unsafe fn close(fd: i32) i32 {
-    @cfg(target_os = "linux") { ret unix.close(fd); }
+    @cfg(target_os = "linux") { ret linux.close(fd); }
     @cfg(target_os = "netbsd") { ret netbsd.close(fd); }
     -38
 }
 
 // `access(path, mode)` (-errno when not accessible).
 pub unsafe fn access(path: str, mode: i32) i32 {
-    @cfg(target_os = "linux") { ret unix.access(path, mode); }
+    @cfg(target_os = "linux") { ret linux.access(path, mode); }
     @cfg(target_os = "netbsd") { ret netbsd.access(path, mode); }
     -38
 }
 
 // `open` with Linux flag values (NetBSD translates them); -errno on failure.
 pub unsafe fn open(path: str, flags: i32, mode: u32) i32 {
-    @cfg(target_os = "linux") { ret unix.open(path, flags, mode); }
+    @cfg(target_os = "linux") { ret linux.open(path, flags, mode); }
     @cfg(target_os = "netbsd") { ret netbsd.open(path, flags, mode); }
     -38
 }
 
 // End a forked child at once (no atexit handlers, no stdio flush).
 pub unsafe fn exit_child(status: i32) void {
-    @cfg(target_os = "linux") { unix.exit(status); }
+    @cfg(target_os = "linux") { linux.exit(status); }
     @cfg(target_os = "netbsd") { netbsd.exit_now(status); }
 }
 
@@ -230,7 +230,7 @@ pub unsafe fn exit_child(status: i32) void {
 // when `no_hang` and it still runs, or -errno.
 pub unsafe fn waitpid(pid: i32, status: *i32, no_hang: bool) i32 {
     const options: i32 = if no_hang { 1 } else { 0 };
-    @cfg(target_os = "linux") { ret unix.wait4(pid, status as *u32, options, 0); }
+    @cfg(target_os = "linux") { ret linux.wait4(pid, status as *u32, options, 0); }
     @cfg(target_os = "netbsd") { ret netbsd.waitpid(pid, status, options); }
     -38
 }

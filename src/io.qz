@@ -11,7 +11,7 @@ import std.core.realloc;
 import std.core.str_as_ptr;
 import std.win32_core;
 import std.stream;
-import std.unix;
+import std.linux;
 @cfg(target_os = "netbsd")
 import std.netbsd;
 
@@ -236,7 +236,7 @@ unsafe fn __io_begin_immediate_input() *u8 {
     // original plus a mutable copy so restoration is exact.
     var state: *u8 = malloc(128);
     if (state == 0) { ret 0; }
-    if (unix.ioctl_ptr(0, 21505, state) != 0) { // TCGETS
+    if (linux.ioctl_ptr(0, 21505, state) != 0) { // TCGETS
         free(state);
         ret 0;
     }
@@ -251,7 +251,7 @@ unsafe fn __io_begin_immediate_input() *u8 {
     // c_cc[VTIME] = 0, c_cc[VMIN] = 1.
     *(current + 22) = 0;
     *(current + 23) = 1;
-    if (unix.ioctl_ptr(0, 21506, current) != 0) { // TCSETS
+    if (linux.ioctl_ptr(0, 21506, current) != 0) { // TCSETS
         free(state);
         ret 0;
     }
@@ -261,7 +261,7 @@ unsafe fn __io_begin_immediate_input() *u8 {
 @cfg(target_os = "linux")
 unsafe fn __io_end_immediate_input(state: *u8) void {
     if (state == 0) { ret; }
-    unix.ioctl_ptr(0, 21506, state); // TCSETS
+    linux.ioctl_ptr(0, 21506, state); // TCSETS
     free(state);
 }
 

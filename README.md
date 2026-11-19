@@ -57,7 +57,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).
 - `thread`: Threading and concurrency primitives.
 - `time` / `timezone`: Durations, clocks, civil time, RFC 3339, and named IANA time zones (TZif, POSIX TZ rules).
-- `unix` / `windows`: OS-specific platform bindings.
+- `linux` / `netbsd` / `windows`: OS-specific platform bindings (`posix` is the shared Unix layer).
 
 Application code should normally use `std.fs` and `std.os`. Their Linux paths
 use direct syscalls and their Windows paths use Win32 handles/APIs, without
