@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 87.8%. Remaining: 12.2%.**
+**Complete: 88.4%. Remaining: 11.6%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -32,7 +32,7 @@ release-readiness probability. New requirements change the denominator.
 | Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 15/17 | 88.2% | 11.8% |
+| Networking / TLS | 16/17 | 94.1% | 5.9% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 8/10 | 80.0% | 20.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -153,7 +153,9 @@ Evidence: [src/net.qz](../src/net.qz), [src/tls.qz](../src/tls.qz),
 - [x] Trust-store/protocol/update policy (D-008/В30А: system trust store or an
   explicit CA file, TLS 1.2 minimum, updates come with the system library).
 - [x] Ownership-safe fully compiling HTTP Headers/request/response path.
-- [ ] Defined concurrent socket-sharing policy.
+- [x] Defined concurrent socket-sharing policy (single owner, exclusive I/O,
+  move into the qoroutine that uses it; `docs/NETWORK.md`, regression in
+  `tests/net_receivers.qz`, 2026-11-19; split halves asked in В31).
 - [ ] Target-native TCP/UDP/HTTP/TLS integration matrix.
 
 ### Mathematics

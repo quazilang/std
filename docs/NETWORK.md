@@ -31,6 +31,23 @@ Redirects, cookies, proxies, compression, and HTTP/2 are separate policy or
 protocol layers. Handles close at scope exit and may be closed early. The
 walkthrough is `examples/26-http-client-server` in the compiler repository.
 
+## Sharing sockets between qoroutines and threads
+
+Sockets follow D-014 (companion compiler
+`docs/decisions/whole-program-ownership.md`)
+ownership: every `TcpStream`, `TcpListener`, `UdpSocket` and `TlsStream` has
+one owner, and every I/O operation takes an exclusive receiver, so two pieces
+of code never use one socket at the same time. To use a socket concurrently,
+move its owner into the qoroutine that does the I/O (`qo serve(stream)`) and
+exchange data with other qoroutines through `Channel[T]`; the qoroutine closes
+the socket when it ends. A socket borrowed into `qo` (`qo f(&stream!)`) stays
+borrowed for the rest of the spawning scope: the spawner can no longer use or
+close it. OS threads receive only raw `ThreadCallback` arguments, so a socket
+handed to one goes through `handle()` in unsafe code and the caller keeps the
+whole lifetime contract. There are no cloned handles or split read/write
+halves; full-duplex use from two qoroutines needs a single owner that
+multiplexes. `tests/net_receivers.qz` checks the move-into-qoroutine case.
+
 ## TLS
 
 `std.tls` implements D-008 (В30А): the system TLS library and trust store.

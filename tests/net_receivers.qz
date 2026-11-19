@@ -108,3 +108,41 @@ fn linux_connection_reads_then_closes_at_scope_exit() void {
     const eof = peer.receive(32).unwrap();
     if (!eof.is_empty()) { panic("connection destruction did not produce EOF"); }
 }
+
+// Socket sharing policy: one owner at a time. A qoroutine that needs a
+// socket receives the owner by move and closes it when it ends.
+fn __echo_once(stream: TcpStream) usize {
+    var owned: TcpStream = stream;
+    const text = owned.receive(32).unwrap();
+    owned.send(text.as_str()).unwrap();
+    ret text.bytes_len();
+}
+
+@cfg(target_os = "linux")
+@test
+fn a_socket_moved_into_a_qoroutine_is_owned_and_closed_there() void {
+    var first: i32 = -1;
+    var second: i32 = -1;
+    unsafe {
+        const storage: *u8 = core.malloc(8);
+        if (storage == 0) { panic("socketpair fixture allocation failed"); }
+        const result = __receiver_socketpair(1, 1, 0, storage as *i32);
+        if (result != 0) { core.free(storage); panic("socketpair failed"); }
+        first = *(storage as *i32);
+        second = *((storage + 4) as *i32);
+        core.free(storage);
+    }
+    var peer = TcpStream { socket: first as isize };
+    const task = qo __echo_once(TcpStream { socket: second as isize });
+    peer.send("ping").unwrap();
+    const reply = peer.receive(32).unwrap();
+    if (reply.as_str() != "ping") { panic("the qoroutine did not own the socket's I/O"); }
+    if (task.join().unwrap() != 4) { panic("the qoroutine result was lost"); }
+    // The qoroutine destroyed its owner when it ended; nonblocking keeps a
+    // missing close from hanging this regression.
+    unsafe {
+        if (__receiver_fcntl(peer.handle(), 4, 2048) < 0) { panic("nonblocking fixture setup failed"); }
+    }
+    const eof = peer.receive(32).unwrap();
+    if (!eof.is_empty()) { panic("the qoroutine did not close the socket it owned"); }
+}

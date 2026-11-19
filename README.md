@@ -4,9 +4,9 @@ Welcome to the standard library for the **Quazi** programming language!
 
 This repository contains the core modules, abstractions, and platform-specific bindings that provide essential functionality for Quazi programs.
 
-**Plan completion: 87.8%.**
+**Plan completion: 88.4%.**
 
-**Remaining work: 12.2%.**
+**Remaining work: 11.6%.**
 
 Completion of unfinished plan items:
 
@@ -15,7 +15,7 @@ Completion of unfinished plan items:
 | Filesystem / I/O | 15/16 | 93.8% | 6.2% |
 | Operating-system APIs | 9/10 | 90.0% | 10.0% |
 | Processes | 15/16 | 93.8% | 6.2% |
-| Networking / TLS | 15/17 | 88.2% | 11.8% |
+| Networking / TLS | 16/17 | 94.1% | 5.9% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 8/10 | 80.0% | 20.0% |
 | Concurrency | 6/12 | 50.0% | 50.0% |
@@ -30,7 +30,7 @@ fractions before rounding. Pending or failing requirements receive no
 credit. These figures measure checklist coverage, not remaining effort
 or production readiness.
 
-On Linux, `qz test` passes all 100 standard-library tests, including the
+On Linux, `qz test` passes all 101 standard-library tests, including the
 TCP and UDP cases that need local sockets. `scripts/check_tls.py` runs the
 TLS client against a local TLS server (trusted and untrusted certificates,
 wrong host name, truncation).
