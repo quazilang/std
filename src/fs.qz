@@ -684,6 +684,38 @@ fn fs_metadata(path: str, follow: bool) Result[Metadata, FsError] {
         });
     }
 
+    @cfg(target_os = "netbsd") {
+        // NetBSD `struct stat` (amd64, __stat50): st_mode u32 at 8,
+        // st_mtimespec seconds/nanoseconds at 64/72, st_size i64 at 112.
+        var status: i32 = 0;
+        unsafe {
+            if (follow) { status = netbsd.stat(path, buffer.data); }
+            else { status = netbsd.lstat(path, buffer.data); }
+        }
+        if (status < 0) { ret Err(fs_error(status)); }
+        var mode: u32 = 0;
+        var size: i64 = 0;
+        var seconds: i64 = 0;
+        var nanos: i64 = 0;
+        unsafe {
+            mode = *((buffer.data + 8) as *u32);
+            size = *((buffer.data + 112) as *i64);
+            seconds = *((buffer.data + 64) as *i64);
+            nanos = *((buffer.data + 72) as *i64);
+        }
+        const format: u32 = mode & 61440;
+        var kind: u8 = 3;
+        if (format == 32768) { kind = 0; }
+        else if (format == 16384) { kind = 1; }
+        else if (format == 40960) { kind = 2; }
+        ret Ok(Metadata {
+            size: size as u64,
+            kind_code: kind,
+            readonly: (mode & 146) == 0,
+            modified_nanos: seconds * 1000000000 + nanos,
+        });
+    }
+
     @cfg(target_os = "windows") {
         // Windows reports links as reparse points on the link itself only;
         // following them needs a handle, so both forms read the entry.
@@ -1231,6 +1263,26 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
         unsafe {
             *(buffer + (length as usize)) = 0;
             text = String.from_raw(buffer, length as usize, 4097);
+        }
+        ret Ok(Path.new(text.as_str()));
+    }
+    @cfg(target_os = "netbsd") {
+        var buffer: *u8 = 0;
+        unsafe { buffer = core.malloc(1025); }
+        if (buffer == 0) { ret Err(FsError.AllocationFailed); }
+        var status: i32 = 0;
+        unsafe {
+            core.memset(buffer, 0, 1025);
+            status = netbsd.realpath(path, buffer);
+        }
+        if (status < 0) {
+            unsafe { core.free(buffer); }
+            ret Err(fs_error(status));
+        }
+        var text: String = String.new();
+        unsafe {
+            const length: usize = core.str_from_ptr(buffer).bytes_len();
+            text = String.from_raw(buffer, length, 1025);
         }
         ret Ok(Path.new(text.as_str()));
     }

@@ -138,8 +138,8 @@ fn process_role(role: i32) String {
 
 // Terminate the process with the given exit code. Never returns.
 // The process arguments, the program name first, as owned UTF-8 strings.
-// Linux reads /proc/self/cmdline; Windows splits GetCommandLineW like the C
-// runtime. An argument that is not valid UTF-8 reports InvalidData.
+// Linux reads /proc/self/cmdline, NetBSD the startup's ps_strings; Windows
+// splits GetCommandLineW like the C runtime. An argument that is not valid UTF-8 reports InvalidData.
 pub fn args() Result[Array[String], fs.FsError] {
     var values: Array[String] = Array.new();
     @cfg(target_os = "linux") {
@@ -191,6 +191,23 @@ pub fn args() Result[Array[String], fs.FsError] {
             start = end + 1;
         }
         unsafe { core.free(buffer); }
+        ret Ok(values);
+    }
+    @cfg(target_os = "netbsd") {
+        // The startup keeps `ps_strings` at runtime state +96: argv at +0,
+        // argc at +8 (docs/internals/runtime-state.md).
+        unsafe {
+            const strings: *u8 = *((core.runtime_state() + 96) as **u8);
+            if (strings == 0) { ret Ok(values); }
+            const argv: *u8 = *(strings as **u8);
+            const argc: i32 = *((strings + 8) as *i32);
+            for index : 0..(argc as usize) {
+                const text: *u8 = *((argv + index * 8) as **u8);
+                const size: usize = core.str_from_ptr(text).bytes_len();
+                if (!core.is_valid_utf8(text, size)) { ret Err(FsError.InvalidData); }
+                values.push(String.from(core.str_from_ptr(text)));
+            }
+        }
         ret Ok(values);
     }
     @cfg(target_os = "windows") {

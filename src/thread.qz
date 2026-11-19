@@ -380,6 +380,11 @@ pub fn current_tid() i32 {
         unsafe { r = linux.gettid(); }
         ret r;
     }
+    @cfg(target_os = "netbsd") {
+        var lwp: i32 = 0;
+        unsafe { lwp = netbsd.lwp_self(); }
+        ret lwp;
+    }
     // Windows has no Linux kernel thread ID. Keep the existing signature while
     // making unsupported-target behavior explicit instead of issuing gettid.
     ret -1;

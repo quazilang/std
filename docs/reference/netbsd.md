@@ -429,3 +429,37 @@ pub fn exit_now(status: i32) void
 
 NetBSD libc `_exit`: ends the process without running atexit handlers or
 flushing stdio (safe in a forked child).
+
+### `stat`
+
+```quazi
+pub fn stat(path: str, buffer: *u8) i32
+```
+
+NetBSD libc `stat` (`__stat50`, the 64-bit time_t `struct stat`:
+st_mode u32 at 8, st_mtimespec at 64, st_size at 112); -errno on failure.
+
+### `lstat`
+
+```quazi
+pub fn lstat(path: str, buffer: *u8) i32
+```
+
+NetBSD libc `lstat` (`__lstat50`); -errno on failure.
+
+### `realpath`
+
+```quazi
+pub fn realpath(path: str, resolved: *u8) i32
+```
+
+NetBSD libc `realpath` into `resolved` (PATH_MAX = 1024 bytes); -errno on
+failure.
+
+### `lwp_self`
+
+```quazi
+pub fn lwp_self() i32
+```
+
+The calling thread's LWP id.

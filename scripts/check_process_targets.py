@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Check std.process on every POSIX target from one host.
+"""Check std.process (and the fs/os/thread NetBSD paths) on every POSIX
+target from one host.
 
 Linux runs a `Command` program (PATH lookup, working directory, environment,
 captured output, exit status, Child try_wait/terminate/wait). NetBSD links
@@ -16,8 +17,14 @@ PROGRAM = r"""import std.io;
 import std.os;
 import std.process;
 import std.process.ExitStatus;
+import std.fs;
+import std.thread;
 
 fn main() i32 {
+    const arguments = os.args().unwrap();
+    const info = fs.metadata("/").unwrap();
+    const root = fs.canonicalize("/").unwrap();
+    io.println("{} {} {} {}", arguments.len(), info.is_dir(), root.as_str(), thread.current_tid() > 0);
     os.set_env("QUAZI_PROCESS_TARGETS", "inherited").unwrap();
     const out = process.Command.new("sh").arg("-c").arg("printf '%s %s ' \"$QUAZI_PROCESS_TARGETS\" \"$EXTRA\"; pwd; exit 3")
         .current_dir("/").env("EXTRA", "set").output().unwrap();
@@ -49,7 +56,7 @@ def main():
         assert build.returncode == 0, build.stdout + build.stderr
         result = subprocess.run([str(root / "linux")], cwd=root, text=True, capture_output=True,
                                 timeout=60)
-        assert result.returncode == 0 and result.stdout == "16\n3 true true\n", (
+        assert result.returncode == 0 and result.stdout == "1 true / true\n16\n3 true true\n", (
             result.returncode, result.stdout, result.stderr)
         build = subprocess.run([qz, "build", *common, "--target", "x86_64-netbsd", "-o",
                                 str(root / "netbsd")], cwd=root, text=True, capture_output=True,
@@ -57,9 +64,10 @@ def main():
         assert build.returncode == 0, build.stdout + build.stderr
         image = (root / "netbsd").read_bytes()
         assert image[:4] == b"\x7fELF" and b"/usr/libexec/ld.elf_so" in image
-        for symbol in (b"fork", b"execve", b"waitpid", b"kill", b"pipe2", b"poll", b"_exit"):
+        for symbol in (b"fork", b"execve", b"waitpid", b"kill", b"pipe2", b"poll", b"_exit",
+                       b"__stat50", b"realpath", b"_lwp_self"):
             assert symbol + b"\0" in image, symbol
-    print("PASS process targets: Linux Command/Child run; NetBSD executable links libc process calls")
+    print("PASS process targets: Linux Command/Child/args/metadata run; NetBSD executable links its libc calls")
 
 
 if __name__ == "__main__":
