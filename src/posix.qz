@@ -136,3 +136,101 @@ fn identities_and_signals_answer_on_unix() void {
         if (written <= 0) { panic("cwd failed"); }
     }
 }
+
+// ── Processes (Linux system calls, NetBSD libc) ──────────────────────────────
+//
+// Shared by std.process for `Command`: each call returns a negative errno on
+// failure, like the Linux system call. Windows has no implementation (-38).
+
+// Duplicate the process: the child's pid, 0 in the child, or -errno.
+pub unsafe fn fork() i32 {
+    @cfg(target_os = "linux") { ret unix.fork(); }
+    @cfg(target_os = "netbsd") { ret netbsd.fork(); }
+    -38
+}
+
+// Replace the process image; returns only on failure (-errno).
+pub unsafe fn execve(path: str, argv: *u8, envp: *u8) i32 {
+    @cfg(target_os = "linux") { ret unix.execve(path, argv, envp); }
+    @cfg(target_os = "netbsd") { ret netbsd.execve(path, argv, envp); }
+    -38
+}
+
+// Change the working directory (-errno on failure).
+pub unsafe fn chdir(path: str) i32 {
+    @cfg(target_os = "linux") { ret unix.chdir(path); }
+    @cfg(target_os = "netbsd") { ret netbsd.chdir(path); }
+    -38
+}
+
+// Make `new_fd` a copy of `old` (-errno on failure).
+pub unsafe fn dup2(old: i32, new_fd: i32) i32 {
+    @cfg(target_os = "linux") { ret unix.dup2(old, new_fd); }
+    @cfg(target_os = "netbsd") { ret netbsd.dup2(old, new_fd); }
+    -38
+}
+
+// A pipe into `fds` (two i32); `cloexec` sets close-on-exec on both ends.
+pub unsafe fn pipe(fds: *u8, cloexec: bool) i32 {
+    const flags: i32 = if cloexec { 524288 } else { 0 };
+    @cfg(target_os = "linux") { ret unix.pipe2(fds, flags); }
+    @cfg(target_os = "netbsd") { ret netbsd.pipe2(fds, flags); }
+    -38
+}
+
+// Wait for readiness of `count` `struct pollfd` entries.
+pub unsafe fn poll(fds: *u8, count: usize, timeout: i32) i32 {
+    @cfg(target_os = "linux") { ret unix.poll(fds, count, timeout); }
+    @cfg(target_os = "netbsd") { ret netbsd.poll(fds, count, timeout); }
+    -38
+}
+
+// Read from a descriptor (-errno on failure).
+pub unsafe fn read(fd: i32, data: *u8, count: usize) isize {
+    @cfg(target_os = "linux") { ret unix.read(fd, data, count); }
+    @cfg(target_os = "netbsd") { ret netbsd.read(fd, data, count); }
+    -38
+}
+
+// Write to a descriptor (-errno on failure).
+pub unsafe fn write(fd: i32, data: *u8, count: usize) isize {
+    @cfg(target_os = "linux") { ret unix.write(fd, data, count); }
+    @cfg(target_os = "netbsd") { ret netbsd.write(fd, data, count); }
+    -38
+}
+
+// Close a descriptor (-errno on failure).
+pub unsafe fn close(fd: i32) i32 {
+    @cfg(target_os = "linux") { ret unix.close(fd); }
+    @cfg(target_os = "netbsd") { ret netbsd.close(fd); }
+    -38
+}
+
+// `access(path, mode)` (-errno when not accessible).
+pub unsafe fn access(path: str, mode: i32) i32 {
+    @cfg(target_os = "linux") { ret unix.access(path, mode); }
+    @cfg(target_os = "netbsd") { ret netbsd.access(path, mode); }
+    -38
+}
+
+// `open` with Linux flag values (NetBSD translates them); -errno on failure.
+pub unsafe fn open(path: str, flags: i32, mode: u32) i32 {
+    @cfg(target_os = "linux") { ret unix.open(path, flags, mode); }
+    @cfg(target_os = "netbsd") { ret netbsd.open(path, flags, mode); }
+    -38
+}
+
+// End a forked child at once (no atexit handlers, no stdio flush).
+pub unsafe fn exit_child(status: i32) void {
+    @cfg(target_os = "linux") { unix.exit(status); }
+    @cfg(target_os = "netbsd") { netbsd.exit_now(status); }
+}
+
+// Reap or poll child `pid`: its pid when it exited (with `status` set), 0
+// when `no_hang` and it still runs, or -errno.
+pub unsafe fn waitpid(pid: i32, status: *i32, no_hang: bool) i32 {
+    const options: i32 = if no_hang { 1 } else { 0 };
+    @cfg(target_os = "linux") { ret unix.wait4(pid, status as *u32, options, 0); }
+    @cfg(target_os = "netbsd") { ret netbsd.waitpid(pid, status, options); }
+    -38
+}

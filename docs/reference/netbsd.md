@@ -370,3 +370,62 @@ pub fn unsetenv(name: *u8) i32
 ```
 
 Remove an environment variable; 0 or negative errno.
+
+### `fork`
+
+```quazi
+pub fn fork() i32
+```
+
+NetBSD libc `fork`: the child's pid in the parent, 0 in the child, or a
+negative errno.
+
+### `execve`
+
+```quazi
+pub fn execve(path: str, argv: *u8, envp: *u8) i32
+```
+
+NetBSD libc `execve`; returns only on failure, with a negative errno.
+
+### `dup2`
+
+```quazi
+pub fn dup2(old: i32, new_fd: i32) i32
+```
+
+NetBSD libc `dup2`, returning a negative errno on failure.
+
+### `pipe2`
+
+```quazi
+pub fn pipe2(fds: *u8, flags: i32) i32
+```
+
+NetBSD libc `pipe2`. `flags` uses the Linux O_CLOEXEC value (0x80000),
+translated to NetBSD's (0x400000).
+
+### `poll`
+
+```quazi
+pub fn poll(fds: *u8, count: usize, timeout: i32) i32
+```
+
+NetBSD libc `poll` (same `struct pollfd` layout and POLLIN as Linux).
+
+### `waitpid`
+
+```quazi
+pub fn waitpid(pid: i32, status: *i32, options: i32) i32
+```
+
+NetBSD libc `waitpid` (WNOHANG = 1; status encoded like Linux).
+
+### `exit_now`
+
+```quazi
+pub fn exit_now(status: i32) void
+```
+
+NetBSD libc `_exit`: ends the process without running atexit handlers or
+flushing stdio (safe in a forked child).

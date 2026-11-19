@@ -2,12 +2,12 @@
 //
 // The compiler runtime owns platform creation, command-line marshalling,
 // waiting, and native handles. This module keeps the public lifetime contract
-// independent of those platform details. Linux uses the runtime; Windows uses
-// CreateProcessW with a UTF-16 command line quoted for CommandLineToArgvW.
+// independent of those platform details. Linux uses the runtime, NetBSD
+// libc (fork/execve/waitpid through std.posix); Windows uses CreateProcessW
+// with a UTF-16 command line quoted for CommandLineToArgvW.
 import std.core;
 import std.posix;
-@cfg(target_os = "linux")
-import std.unix;
+
 @cfg(target_os = "windows")
 import std.win32_core;
 import std.time;
@@ -71,6 +71,15 @@ impl Child {
         @cfg(target_os = "windows") {
             unsafe { ret windows_spawn(program, true, &args, "", 0, 0); }
         }
+        @cfg(target_os = "netbsd") {
+            // An exact path: no PATH lookup, inherited environment.
+            var command = Command.new(program);
+            for index : 0..args.len() {
+                const value: str = args[index];
+                command = command.arg(value);
+            }
+            unsafe { ret command_spawn_posix_with(&command, false, 0); }
+        }
         var handle: usize = 0;
         var error: i32 = 0;
         var result: i32 = -1;
@@ -92,6 +101,9 @@ impl Child {
             unsafe { win32_core.close_handle(handle); }
             ret Ok(code);
         }
+        @cfg(target_os = "netbsd") {
+            ret posix_wait(handle, false);
+        }
         var kind: i32 = 0;
         var value: i32 = 0;
         var error: i32 = 0;
@@ -111,6 +123,11 @@ impl Child {
             if (polled.is_none()) { ret Ok(None); }
             unsafe { win32_core.close_handle(handle); }
             self.handle = 0;
+            ret Ok(polled);
+        }
+        @cfg(target_os = "netbsd") {
+            const polled = posix_wait(handle, true)?;
+            if (polled.is_some()) { self.handle = 0; }
             ret Ok(polled);
         }
         var exited: i32 = 0;
@@ -135,6 +152,12 @@ impl Child {
             if (terminated == 0) { ret Err(ProcessError.TerminateFailed(windows_error())); }
             ret Ok(true);
         }
+        @cfg(target_os = "netbsd") {
+            // SIGKILL, like the Linux runtime.
+            const killed: i32 = posix.kill(self.handle as i32, 9);
+            if (killed < 0) { ret Err(ProcessError.TerminateFailed(-killed)); }
+            ret Ok(true);
+        }
         var error: i32 = 0;
         var result: i32 = -1;
         unsafe { result = core.process_terminate(self.handle, &error); }
@@ -156,6 +179,19 @@ impl Child {
                     win32_core.wait_for_single_object(handle, 4294967295);
                 }
                 if (win32_core.close_handle(handle) == 0) { ret Err(ProcessError.CloseFailed(windows_error())); }
+            }
+            ret Ok(true);
+        }
+        @cfg(target_os = "netbsd") {
+            // Terminate a live child, then reap it so no zombie remains.
+            unsafe {
+                const status: *u8 = core.malloc(8);
+                if (status == 0) { ret Err(ProcessError.CloseFailed(12)); }
+                if (posix.waitpid(handle as i32, status as *i32, true) == 0) {
+                    posix.kill(handle as i32, 9);
+                    posix.waitpid(handle as i32, status as *i32, false);
+                }
+                core.free(status);
             }
             ret Ok(true);
         }
@@ -339,8 +375,8 @@ unsafe fn c_copy(text: str) *u8 {
 // A process builder for scripting (D-021):
 //   process.Command.new("git").arg("push").current_dir(path).status()?
 // A program name without `/` is looked up in the PATH the child will see.
-// Arguments are passed as given, without a shell. Linux only for now; other
-// targets report SpawnFailed(38) (ENOSYS).
+// Arguments are passed as given, without a shell. Linux and NetBSD share the
+// fork/execve implementation (std.posix); Windows uses CreateProcessW.
 
 // A program to run, built step by step like a shell command line but without
 // a shell: `process.Command.new("git").arg("status").current_dir(dir).status()`.
@@ -427,7 +463,10 @@ impl Command {
     // Starts the program and returns its Child.
     pub fn spawn(self: &Command) Result[Child, ProcessError] {
         @cfg(target_os = "linux") {
-            ret command_spawn_linux(self);
+            unsafe { ret command_spawn_posix_with(self, true, 0); }
+        }
+        @cfg(target_os = "netbsd") {
+            unsafe { ret command_spawn_posix_with(self, true, 0); }
         }
         @cfg(target_os = "windows") {
             var block = windows_environment_block(self);
@@ -447,7 +486,10 @@ impl Command {
     // standard error (read concurrently, so a large output cannot block it).
     pub fn output(self: &Command) Result[Output, ProcessError] {
         @cfg(target_os = "linux") {
-            ret command_output_linux(self);
+            ret command_output_posix(self);
+        }
+        @cfg(target_os = "netbsd") {
+            ret command_output_posix(self);
         }
         @cfg(target_os = "windows") {
             ret command_output_windows(self);
@@ -477,7 +519,6 @@ fn child_path(command: &Command) String {
     unsafe { ret String.from(core.str_from_ptr(value)); }
 }
 
-@cfg(target_os = "linux")
 fn resolve_program(command: &Command) Option[String] {
     const program = command.program.as_str();
     if (program.contains("/")) { ret Some(String.from(program)); }
@@ -493,31 +534,29 @@ fn resolve_program(command: &Command) Option[String] {
         const candidate: String = "{directory.as_str()}/{program}";
         // X_OK, and a directory is not a program.
         var accessible: bool = false;
-        unsafe { accessible = unix.access(candidate.as_str(), 1) == 0; }
+        unsafe { accessible = posix.access(candidate.as_str(), 1) == 0; }
         if (accessible) {
             var fd: i32 = -1;
-            unsafe { fd = unix.open(candidate.as_str(), 65536, 0); }
+            unsafe { fd = posix.open(candidate.as_str(), 65536, 0); }
             if (fd < 0) { ret Some(candidate); }
-            unsafe { unix.close(fd); }
+            unsafe { posix.close(fd); }
         }
         start = end + 1;
     }
     None
 }
 
-@cfg(target_os = "linux")
-fn command_spawn_linux(command: &Command) Result[Child, ProcessError] {
-    unsafe { ret command_spawn_linux_with(command, 0); }
-}
-
-// Starts the command; with `streams` (four i32: stdout read/write, stderr
+// Starts the command (Linux and NetBSD); `lookup` searches PATH for a name
+// without `/`. With `streams` (four i32: stdout read/write, stderr
 // read/write pipe ends) the child's standard output and error go to the
 // write ends, which the parent then closes.
-@cfg(target_os = "linux")
-unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child, ProcessError] {
-    const resolved = resolve_program(command);
-    if (resolved.is_none()) { ret Err(ProcessError.SpawnFailed(2)); }
-    const path: String = resolved.unwrap();
+unsafe fn command_spawn_posix_with(command: &Command, lookup: bool, streams: *u8) Result[Child, ProcessError] {
+    var path: String = String.from(command.program.as_str());
+    if (lookup) {
+        const resolved = resolve_program(command);
+        if (resolved.is_none()) { ret Err(ProcessError.SpawnFailed(2)); }
+        path = resolved.unwrap();
+    }
 
     // Environment: inherited entries (from /proc/self/environ) minus removed
     // and overridden names, then the overrides. Everything the child touches
@@ -547,7 +586,7 @@ unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child
     unsafe { pipe = core.malloc(8); }
     if (pipe == 0) { ret Err(ProcessError.SpawnFailed(12)); }
     var status: i32 = 0;
-    unsafe { status = unix.pipe2(pipe, 524288); }
+    unsafe { status = posix.pipe(pipe, true); }
     if (status < 0) {
         unsafe { core.free(pipe); }
         ret Err(ProcessError.SpawnFailed(-status));
@@ -562,49 +601,66 @@ unsafe fn command_spawn_linux_with(command: &Command, streams: *u8) Result[Child
     const argv: *u8 = command.arguments.items;
     const envp: *u8 = environment.items;
     var pid: i32 = 0;
-    unsafe { pid = unix.fork(); }
+    unsafe { pid = posix.fork(); }
     if (pid == 0) {
         var failure: i32 = 0;
         unsafe {
-            unix.close(read_end);
+            posix.close(read_end);
             if (!directory.is_empty()) {
-                const changed: i32 = unix.chdir(directory);
+                const changed: i32 = posix.chdir(directory);
                 if (changed < 0) { failure = -changed; }
             }
             if (failure == 0 && streams != 0) {
-                if (unix.dup2(*((streams + 4) as *i32), 1) < 0 || unix.dup2(*((streams + 12) as *i32), 2) < 0) {
+                if (posix.dup2(*((streams + 4) as *i32), 1) < 0 || posix.dup2(*((streams + 12) as *i32), 2) < 0) {
                     failure = 9;
                 }
             }
-            if (failure == 0) { failure = -unix.execve(path.as_str(), argv, envp); }
+            if (failure == 0) { failure = -posix.execve(path.as_str(), argv, envp); }
             *(pipe as *i32) = failure;
-            unix.write(write_end, pipe, 4);
-            unix.exit(127);
+            posix.write(write_end, pipe, 4);
+            posix.exit_child(127);
         }
     }
     var reported: isize = 0;
     var child_error: i32 = 0;
     unsafe {
-        unix.close(write_end);
+        posix.close(write_end);
         if (streams != 0) {
-            unix.close(*((streams + 4) as *i32));
-            unix.close(*((streams + 12) as *i32));
+            posix.close(*((streams + 4) as *i32));
+            posix.close(*((streams + 12) as *i32));
         }
-        reported = unix.read(read_end, pipe, 4);
-        unix.close(read_end);
+        reported = posix.read(read_end, pipe, 4);
+        posix.close(read_end);
         child_error = *(pipe as *i32);
         core.free(pipe);
     }
     if (pid < 0) { ret Err(ProcessError.SpawnFailed(-pid)); }
     if (reported == 4) {
         // Reap the failed child before reporting.
-        var kind: i32 = 0;
-        var value: i32 = 0;
-        var error: i32 = 0;
-        unsafe { core.process_wait(pid as usize, &kind, &value, &error); }
+        const ignored = posix_wait(pid as usize, false);
         ret Err(ProcessError.SpawnFailed(child_error));
     }
     Ok(Child { handle: pid as usize })
+}
+
+// waitpid(2) a child (NetBSD, and the reap after a failed exec): its status,
+// or None when `no_hang` and it is still running.
+fn posix_wait(handle: usize, no_hang: bool) Result[Option[ExitStatus], ProcessError] {
+    var reaped: i32 = 0;
+    var raw: i32 = 0;
+    unsafe {
+        const status: *u8 = core.malloc(8);
+        if (status == 0) { ret Err(ProcessError.WaitFailed(12)); }
+        *(status as *i32) = 0;
+        reaped = posix.waitpid(handle as i32, status as *i32, no_hang);
+        raw = *(status as *i32);
+        core.free(status);
+    }
+    if (reaped < 0) { ret Err(ProcessError.WaitFailed(-reaped)); }
+    if (reaped == 0) { ret Ok(None); }
+    // WIFEXITED: low seven bits zero; the code is the next byte.
+    if ((raw & 127) == 0) { ret Ok(Some(ExitStatus.Code((raw >> 8) & 255))); }
+    Ok(Some(ExitStatus.Signal(raw & 127)))
 }
 
 // The exit status and the bytes a child wrote to its standard output and
@@ -615,17 +671,16 @@ pub struct Output {
     stderr: Array[u8],
 }
 
-@cfg(target_os = "linux")
-fn command_output_linux(command: &Command) Result[Output, ProcessError] {
+fn command_output_posix(command: &Command) Result[Output, ProcessError] {
     var streams: *u8 = 0;
     unsafe { streams = core.malloc(16); }
     if (streams == 0) { ret Err(ProcessError.SpawnFailed(12)); }
     var made: i32 = 0;
     unsafe {
-        made = unix.pipe2(streams, 524288);
+        made = posix.pipe(streams, true);
         if (made >= 0) {
-            made = unix.pipe2(streams + 8, 524288);
-            if (made < 0) { unix.close(*(streams as *i32)); unix.close(*((streams + 4) as *i32)); }
+            made = posix.pipe(streams + 8, true);
+            if (made < 0) { posix.close(*(streams as *i32)); posix.close(*((streams + 4) as *i32)); }
         }
     }
     if (made < 0) {
@@ -639,11 +694,11 @@ fn command_output_linux(command: &Command) Result[Output, ProcessError] {
         err_fd = *((streams + 8) as *i32);
     }
     var spawned: Result[Child, ProcessError] = Err(ProcessError.SpawnFailed(12));
-    unsafe { spawned = command_spawn_linux_with(command, streams); }
+    unsafe { spawned = command_spawn_posix_with(command, true, streams); }
     unsafe { core.free(streams); }
     if (spawned.is_err()) {
-        unsafe { unix.close(out_fd); }
-        unsafe { unix.close(err_fd); }
+        unsafe { posix.close(out_fd); }
+        unsafe { posix.close(err_fd); }
         ret Err(spawned.unwrap_err());
     }
     const child: Child = spawned.unwrap();
@@ -666,14 +721,14 @@ fn command_output_linux(command: &Command) Result[Output, ProcessError] {
             *((fds + 4) as *i16) = 1;
             *((fds + 8) as *i32) = if err_open { err_fd } else { -1 };
             *((fds + 12) as *i16) = 1;
-            unix.poll(fds, 2, -1);
+            posix.poll(fds, 2, -1);
         }
         var revents: i16 = 0;
         unsafe { revents = *((fds + 6) as *i16); }
         if (out_open && revents != 0) {
             var count: isize = 0;
-            unsafe { count = unix.read(out_fd, buffer, 65536); }
-            if (count <= 0) { unsafe { unix.close(out_fd); } out_open = false; }
+            unsafe { count = posix.read(out_fd, buffer, 65536); }
+            if (count <= 0) { unsafe { posix.close(out_fd); } out_open = false; }
             for index : 0..(if count > 0 { count as usize } else { 0 }) {
                 unsafe { stdout.push(*(buffer + index)); }
             }
@@ -681,8 +736,8 @@ fn command_output_linux(command: &Command) Result[Output, ProcessError] {
         unsafe { revents = *((fds + 14) as *i16); }
         if (err_open && revents != 0) {
             var count: isize = 0;
-            unsafe { count = unix.read(err_fd, buffer, 65536); }
-            if (count <= 0) { unsafe { unix.close(err_fd); } err_open = false; }
+            unsafe { count = posix.read(err_fd, buffer, 65536); }
+            if (count <= 0) { unsafe { posix.close(err_fd); } err_open = false; }
             for index : 0..(if count > 0 { count as usize } else { 0 }) {
                 unsafe { stderr.push(*(buffer + index)); }
             }
@@ -692,8 +747,8 @@ fn command_output_linux(command: &Command) Result[Output, ProcessError] {
         if (buffer != 0) { core.free(buffer); }
         if (fds != 0) { core.free(fds); }
     }
-    if (out_open) { unsafe { unix.close(out_fd); } }
-    if (err_open) { unsafe { unix.close(err_fd); } }
+    if (out_open) { unsafe { posix.close(out_fd); } }
+    if (err_open) { unsafe { posix.close(err_fd); } }
     const waited = child.wait()?;
     if (waited.is_none()) { ret Err(ProcessError.WaitFailed(-1)); }
     Ok(Output { status: waited.unwrap(), stdout: stdout, stderr: stderr })

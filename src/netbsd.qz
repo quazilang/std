@@ -351,3 +351,68 @@ pub unsafe fn unsetenv(name: *u8) i32 {
     if (__unsetenv(name) == 0) { ret 0; }
     ret -(*__errno_location());
 }
+
+// ── Processes (std.posix / std.process) ─────────────────────────────────────
+
+@api("fork")
+unsafe fn __fork() i32;
+@api("execve")
+unsafe fn __execve(path: *u8, argv: *u8, envp: *u8) i32;
+@api("dup2")
+unsafe fn __dup2(old: i32, new_fd: i32) i32;
+@api("pipe2")
+unsafe fn __pipe2(fds: *u8, flags: i32) i32;
+@api("poll")
+unsafe fn __poll(fds: *u8, count: usize, timeout: i32) i32;
+@api("waitpid")
+unsafe fn __waitpid(pid: i32, status: *i32, options: i32) i32;
+@api("_exit")
+unsafe fn __exit_now(status: i32) void;
+
+// NetBSD libc `fork`: the child's pid in the parent, 0 in the child, or a
+// negative errno.
+pub unsafe fn fork() i32 {
+    const pid: i32 = __fork();
+    if (pid < 0) { ret __err(); }
+    ret pid;
+}
+
+// NetBSD libc `execve`; returns only on failure, with a negative errno.
+pub unsafe fn execve(path: str, argv: *u8, envp: *u8) i32 {
+    __execve(core.str_as_ptr(path), argv, envp);
+    ret __err();
+}
+
+// NetBSD libc `dup2`, returning a negative errno on failure.
+pub unsafe fn dup2(old: i32, new_fd: i32) i32 {
+    const fd: i32 = __dup2(old, new_fd);
+    if (fd < 0) { ret __err(); }
+    ret fd;
+}
+
+// NetBSD libc `pipe2`. `flags` uses the Linux O_CLOEXEC value (0x80000),
+// translated to NetBSD's (0x400000).
+pub unsafe fn pipe2(fds: *u8, flags: i32) i32 {
+    var native: i32 = 0;
+    if ((flags & 524288) != 0) { native = 4194304; }
+    if (__pipe2(fds, native) < 0) { ret __err(); }
+    ret 0;
+}
+
+// NetBSD libc `poll` (same `struct pollfd` layout and POLLIN as Linux).
+pub unsafe fn poll(fds: *u8, count: usize, timeout: i32) i32 {
+    const ready: i32 = __poll(fds, count, timeout);
+    if (ready < 0) { ret __err(); }
+    ret ready;
+}
+
+// NetBSD libc `waitpid` (WNOHANG = 1; status encoded like Linux).
+pub unsafe fn waitpid(pid: i32, status: *i32, options: i32) i32 {
+    const reaped: i32 = __waitpid(pid, status, options);
+    if (reaped < 0) { ret __err(); }
+    ret reaped;
+}
+
+// NetBSD libc `_exit`: ends the process without running atexit handlers or
+// flushing stdio (safe in a forked child).
+pub unsafe fn exit_now(status: i32) void { __exit_now(status); }
