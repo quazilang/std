@@ -221,7 +221,8 @@ Evidence: [src/thread.qz](../src/thread.qz),
 - [x] Typed thread result propagation (`spawn` -> `JoinHandle[T]`, `join` -> `Result[T, ThreadError]`, 2026-11-09).
 - [x] Panic propagation (isolated thread panics join as
   `Err(ThreadError.Panicked)` after the block, closure and stack are
-  released, 2026-11-19).
+  released, 2026-11-19; Linux and Windows under Wine,
+  `scripts/check_thread_isolation.py --wine`).
 - [x] Structured automatic joining/cleanup (a dropped `JoinHandle` joins its
   thread and drops a finished result, 2026-11-19).
 - [ ] Target-native lifetime/failure/synchronization matrix.
