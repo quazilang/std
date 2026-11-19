@@ -8,6 +8,8 @@ is cooperative and seen through `thread.cancel_requested()`. A panic on the
 main thread stays fatal (status 101), a custom `@panic_handler` runs only for
 fatal panics, and a panic inside a thread's panic report aborts.
 
+`Channel[T]` carries owned values between threads.
+
 Runs with the libc-free clone runtime, with pthreads (`libc = true`) and
 under `qz run --jit`; concurrent panics must neither deadlock nor leak.
 Windows and NetBSD objects must build (no runtime here).
@@ -141,6 +143,54 @@ fn main() i32 {
 """
 
 
+# Channel[T] is the communication surface between threads: two producer
+# threads and a consumer thread exchange owned Strings; the sum of their
+# lengths is exact and memory stays flat over 50 rounds.
+CHANNELS = r"""import std.io;
+import std.thread;
+
+fn produce(out: &Channel[String], id: i64, n: i64) i64 {
+    var i: i64 = 0;
+    for (i < n) {
+        const text: String = "w{id}-{i}";
+        out.send(text);
+        i = i + 1;
+    }
+    n
+}
+
+fn consume(input: &Channel[String]) i64 {
+    var total: i64 = 0;
+    for (true) {
+        const next = input.receive();
+        if (next.is_none()) { break; }
+        const text: String = next.unwrap();
+        total = total + text.len() as i64;
+    }
+    total
+}
+
+fn main() i32 {
+    var round: i32 = 0;
+    for (round < 50) {
+        const ch: Channel[String] = Channel.new(8);
+        const a = ch.clone();
+        const b = ch.clone();
+        const c = ch.clone();
+        const reader = thread.spawn(|| consume(&c)).unwrap();
+        const first = thread.spawn(|| produce(&a, 1, 2000)).unwrap();
+        const second = thread.spawn(|| produce(&b, 2, 2000)).unwrap();
+        const sent = first.join().unwrap() + second.join().unwrap();
+        ch.close();
+        const total = reader.join().unwrap();
+        if (round == 0) { io.println("sent {} total {}", sent, total); }
+        round = round + 1;
+    }
+    0
+}
+"""
+
+
 def run(command, cwd, timeout=300):
     return subprocess.run(command, cwd=cwd, text=True, capture_output=True, timeout=timeout)
 
@@ -218,6 +268,14 @@ def check(qz, root):
     # runs measured equal.
     assert peaks["captures"] - peaks["plain"] < 512, peaks
     print(f"PASS panicking threads release their closures (peak {peaks['captures']} vs {peaks['plain']} KiB)")
+
+    for libc in (False, True):
+        case, binary = build(qz, root, f"channels_{'libc' if libc else 'clone'}", CHANNELS, libc)
+        result, peak = peak_kib(binary, case)
+        assert result.returncode == 0, (libc, result.returncode, result.stderr[-1000:])
+        assert result.stdout == "sent 4000 total 25780\n", (libc, result.stdout)
+        assert peak < 16 * 1024, (libc, peak)
+    print("PASS Channel[T] between OS threads: 2 producers, 1 consumer, owned Strings, flat memory")
 
     for target, magic in (("x86_64-windows", b"\x64\x86"), ("x86_64-netbsd", b"\x7fELF")):
         case = root / "lifecycle_clone"

@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 91.9%. Remaining: 8.1%.**
+**Complete: 92.7%. Remaining: 7.3%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -35,7 +35,7 @@ release-readiness probability. New requirements change the denominator.
 | Networking / TLS | 16/17 | 94.1% | 5.9% |
 | Mathematics | 11/11 | 100.0% | 0.0% |
 | Panic handling | 9/10 | 90.0% | 10.0% |
-| Concurrency | 9/12 | 75.0% | 25.0% |
+| Concurrency | 10/12 | 83.3% | 16.7% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 14/15 | 93.3% | 6.7% |
 | Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
@@ -214,7 +214,10 @@ Evidence: [src/thread.qz](../src/thread.qz),
 - [x] Cancellation policy/API (cooperative: `JoinHandle.cancel` and
   `thread.cancel_requested()`, В29А, 2026-11-19).
 - [x] Synchronization primitives.
-- [ ] Defined communication surface.
+- [x] Defined communication surface (the prelude `Channel[T]` between OS
+  threads as between qoroutines: clones moved into thread closures, owned
+  values, close/None; channel case in `scripts/check_thread_isolation.py`,
+  2026-11-19).
 - [x] Typed thread result propagation (`spawn` -> `JoinHandle[T]`, `join` -> `Result[T, ThreadError]`, 2026-11-09).
 - [x] Panic propagation (isolated thread panics join as
   `Err(ThreadError.Panicked)` after the block, closure and stack are
