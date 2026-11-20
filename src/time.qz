@@ -651,7 +651,7 @@ fn __parse_local_date_time(text: str) Option[__ParsedLocal] {
 fn __fraction_end(text: str, start: usize) usize {
     if (!__byte_is(text, start, 46)) { ret start; }
     var end: usize = start + 1;
-    for (end < text.bytes_len() && __is_digit(core.str_byte_at(text, end))) { end = end + 1; }
+    for (end < text.bytes_len() && __is_digit(__unchecked_byte(text, end))) { end = end + 1; }
     const digits: usize = end - start - 1;
     if (digits == 0 || digits > 9) { ret 0; }
     end
@@ -662,7 +662,7 @@ fn __fraction_nanoseconds(text: str, start: usize, end: usize) u32 {
     var scale: u32 = 100000000;
     var index: usize = start + 1;
     for (index < end) {
-        nanoseconds = nanoseconds + ((core.str_byte_at(text, index) - 48) as u32) * scale;
+        nanoseconds = nanoseconds + ((__unchecked_byte(text, index) - 48) as u32) * scale;
         scale = scale / 10;
         index = index + 1;
     }
@@ -695,7 +695,7 @@ fn __system_time_from_clock(status: i32, seconds: i64, nanoseconds: i64) Result[
 fn __is_digit(byte: u8) bool { byte >= 48 && byte <= 57 }
 
 fn __byte_is(text: str, index: usize, expected: u8) bool {
-    index < text.bytes_len() && core.str_byte_at(text, index) == expected
+    index < text.bytes_len() && __unchecked_byte(text, index) == expected
 }
 
 // Value of `count` ASCII digits at `start`, or -1 if any is not a digit.
@@ -703,7 +703,7 @@ fn __digits(text: str, start: usize, count: usize) i64 {
     if (start + count > text.bytes_len()) { ret -1; }
     var value: i64 = 0;
     for i : start..(start + count) {
-        const byte: u8 = core.str_byte_at(text, i);
+        const byte: u8 = __unchecked_byte(text, i);
         if (!__is_digit(byte)) { ret -1; }
         value = value * 10 + ((byte - 48) as i64);
     }
@@ -1099,4 +1099,11 @@ fn rfc3339_text_names_the_instant_for_second_offsets() void {
     if (text.as_str() != "2000-02-29T14:35:56+02:01") { panic("offset seconds leaked into the wall time"); }
     const back = SystemTime.parse_rfc3339(text.as_str()).unwrap();
     if (back.format_rfc3339().as_str() != "2000-02-29T12:34:56Z") { panic("round trip changed the instant"); }
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

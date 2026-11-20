@@ -50,14 +50,16 @@ fn validate(content: str) Result[bool, IniError] {
             const line = content[start as isize:index as isize];
             const text = line.as_str().trim();
             if !ignored(text.as_str()) {
-                const opens_section = text.starts_with("[");
-                const closes_section = text.ends_with("]");
-                if opens_section || closes_section {
-                    if !opens_section || !closes_section { ret Err(IniError.InvalidSection(line_number)); }
+                // Only a line starting with `[` is a section header; a pair
+                // value may end with `]` (`list = [1, 2]`).
+                if text.starts_with("[") {
+                    if !text.ends_with("]") || text.len() < 2 { ret Err(IniError.InvalidSection(line_number)); }
                     const name = text.as_str()[1:-1].trim();
                     if name.is_empty() { ret Err(IniError.EmptySection(line_number)); }
                 } else {
                     const equal = text.as_str().find("=");
+                    // `value]` without `=` is a malformed section header.
+                    if equal.is_none() && text.ends_with("]") { ret Err(IniError.InvalidSection(line_number)); }
                     if equal.is_none() { ret Err(IniError.MissingSeparator(line_number)); }
                     const key = text.as_str()[0:equal.unwrap() as isize].trim();
                     if key.is_empty() { ret Err(IniError.EmptyKey(line_number)); }
@@ -300,6 +302,14 @@ fn reports_each_invalid_form_with_its_line() void {
     const empty_key_line = match empty_key.unwrap_err() { IniError.EmptyKey(line) => line, _ => 0, };
     const stray_bracket_line = match stray_bracket.unwrap_err() { IniError.InvalidSection(line) => line, _ => 0, };
     if empty_section_line != 2 || missing_separator_line != 2 || empty_key_line != 2 || stray_bracket_line != 2 { panic("invalid INI line was wrong"); }
+    config.free();
+}
+
+@test
+fn values_may_end_with_a_bracket() void {
+    var config = IniDocument.parse("list = [1,2]\n[app]\nports = [80]\n").unwrap();
+    if config.get("", "list").unwrap().as_str() != "[1,2]" { panic("bracketed value lost"); }
+    if config.get("app", "ports").unwrap().as_str() != "[80]" { panic("bracketed section value lost"); }
     config.free();
 }
 

@@ -139,7 +139,7 @@ impl CString {
     pub fn try_from_str(value: str) Result[CString, CStringError] {
         const length: usize = value.bytes_len();
         for i : 0..length {
-            if (core.str_byte_at(value, i) == 0) {
+            if (__unchecked_byte(value, i) == 0) {
                 ret Err(CStringError.InteriorNul(i));
             }
         }
@@ -151,7 +151,7 @@ impl CString {
                 ret Err(CStringError.AllocationFailed);
             }
             for i : 0..length {
-                *(raw + i) = core.str_byte_at(value, i);
+                *(raw + i) = __unchecked_byte(value, i);
             }
             *(raw + length) = 0;
         }
@@ -164,8 +164,9 @@ impl CString {
         var length: usize = core.strlen(text);
         var raw: *u8 = 0;
         raw = core.malloc(length + 1);
+        if (raw == 0) { panic("CString.from_unchecked: out of memory"); }
         for i : 0..length {
-            *(raw + i) = core.str_byte_at(text, i);
+            *(raw + i) = __unchecked_byte(text, i);
         }
         *(raw + length) = 0;
         ret CString { ptr: raw, len: length };
@@ -210,4 +211,11 @@ fn cstring_clear_invalidates_and_is_repeat_safe() void {
     }
     if (value.len() != 0) { panic("CString.clear did not clear the byte length"); }
     value.clear();
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

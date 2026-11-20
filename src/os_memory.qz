@@ -13,23 +13,23 @@ fn field_bytes(text: str, key: str) Option[u64] {
     var result: u64 = 0;
     for (offset < length) {
         const start: usize = offset;
-        for (offset < length && core.str_byte_at(text, offset) != 10) { offset++; }
+        for (offset < length && __unchecked_byte(text, offset) != 10) { offset++; }
         const end: usize = offset;
         if (offset < length) { offset++; }
         if (end - start <= key_length) { continue; }
         var index: usize = 0;
-        for (index < key_length && core.str_byte_at(text, start + index) == core.str_byte_at(key, index)) {
+        for (index < key_length && __unchecked_byte(text, start + index) == __unchecked_byte(key, index)) {
             index++;
         }
-        if (index != key_length || core.str_byte_at(text, start + index) != 58) { continue; }
+        if (index != key_length || __unchecked_byte(text, start + index) != 58) { continue; }
         if (found) { ret Option.None; }
         found = true;
         index = start + key_length + 1;
-        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        for (index < end && whitespace(__unchecked_byte(text, index))) { index++; }
         const digits: usize = index;
         var kib: u64 = 0;
         for (index < end) {
-            const byte: u8 = core.str_byte_at(text, index);
+            const byte: u8 = __unchecked_byte(text, index);
             if (byte < 48 || byte > 57) { break; }
             const digit: u64 = (byte - 48) as u64;
             if (kib > 1844674407370955161 || (kib == 1844674407370955161 && digit > 5)) {
@@ -38,16 +38,16 @@ fn field_bytes(text: str, key: str) Option[u64] {
             kib = kib * 10 + digit;
             index++;
         }
-        if (index == digits || index == end || !whitespace(core.str_byte_at(text, index))) {
+        if (index == digits || index == end || !whitespace(__unchecked_byte(text, index))) {
             ret Option.None;
         }
-        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        for (index < end && whitespace(__unchecked_byte(text, index))) { index++; }
         if (end - index < 2) { ret Option.None; }
-        if (core.str_byte_at(text, index) != 107 || core.str_byte_at(text, index + 1) != 66) {
+        if (__unchecked_byte(text, index) != 107 || __unchecked_byte(text, index + 1) != 66) {
             ret Option.None;
         }
         index = index + 2;
-        for (index < end && whitespace(core.str_byte_at(text, index))) { index++; }
+        for (index < end && whitespace(__unchecked_byte(text, index))) { index++; }
         if (index != end || kib > 18014398509481983) { ret Option.None; }
         result = kib * 1024;
     }
@@ -113,4 +113,11 @@ fn memory_available_checks_decimal_and_byte_overflow() void {
     if (available_bytes("MemTotal: 18014398509481984 kB\nMemAvailable: 1 kB").is_some()) { panic("byte conversion overflow accepted"); }
     const limit = available_bytes("MemTotal: 18014398509481983 kB\nMemAvailable: 18014398509481983 kB");
     if (limit.is_none() || limit.unwrap() != 18446744073709550592) { panic("largest representable KiB counter was rejected"); }
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

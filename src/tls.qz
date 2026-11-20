@@ -400,9 +400,11 @@ impl TlsStream {
         unsafe { data = core.malloc(limit + 1); }
         if (data == 0) { ret Err(TlsError.AllocationFailed); }
         var length: usize = 0;
-        for (length < limit) {
+        // Read one byte past the limit: exactly `limit` bytes then
+        // close_notify is accepted, any further byte is LimitExceeded.
+        for (length <= limit) {
             var read: Result[usize, TlsError] = Ok(0);
-            unsafe { read = self.__read(data + length, limit - length); }
+            unsafe { read = self.__read(data + length, limit + 1 - length); }
             if (read.is_err()) {
                 unsafe { core.free(data); }
                 ret Err(read.unwrap_err());
@@ -411,7 +413,7 @@ impl TlsStream {
             if (count == 0) { break; }
             length = length + count;
         }
-        if (length == limit) {
+        if (length > limit) {
             unsafe { core.free(data); }
             ret Err(TlsError.LimitExceeded);
         }

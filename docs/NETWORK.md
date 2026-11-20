@@ -1,7 +1,8 @@
 # Networking
 
 `std.net` is Quazi's cross-platform IPv4 TCP, UDP, and HTTP/1.1 module. Linux
-uses socket syscalls; Windows uses Winsock. `SocketAddress` resolves DNS names;
+and NetBSD use sockets (Linux name resolution goes through libc: set
+`[target.x86_64-linux.link] libc = true`); Windows uses Winsock. `SocketAddress` resolves DNS names;
 `TcpStream`/`TcpListener` cover streams and servers; `UdpSocket` supports
 connected datagrams plus `send_to`/`receive_from`.
 

@@ -76,7 +76,8 @@ pub fn float() Result[f64, RandomError] {
 // `true` with the given probability (0.0..=1.0); `InvalidProbability`
 // otherwise.
 pub fn chance(probability: f64) Result[bool, RandomError] {
-    if (probability < 0.0 || probability > 1.0) {
+    // Written so that NaN, which fails every comparison, is rejected too.
+    if (!(probability >= 0.0 && probability <= 1.0)) {
         ret Err(RandomError.InvalidProbability);
     }
     if (probability == 0.0) { ret Ok(false); }
@@ -148,4 +149,14 @@ pub fn random_bytes(count: usize) Result[Array[u8], RandomError] {
         index = index + 1;
     }
     ret Ok(output);
+}
+
+@test
+fn chance_rejects_probabilities_outside_the_unit_interval() void {
+    var zero: f64 = 0.0;
+    const nan: f64 = zero / zero;
+    const rejected: bool = match chance(nan) { Err(RandomError.InvalidProbability) => true, _ => false };
+    if (!rejected) { panic("NaN probability must be rejected"); }
+    if (chance(1.5).is_ok() || chance(-0.5).is_ok()) { panic("out-of-range probability accepted"); }
+    if (!chance(1.0).unwrap()) { panic("probability 1 is always true"); }
 }

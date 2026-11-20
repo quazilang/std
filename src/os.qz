@@ -48,8 +48,8 @@ fn ascii_equal(left: str, right: str) bool {
     if (left_len != core.strlen(right)) { ret false; }
     var index: usize = 0;
     for (index < left_len) {
-        var a: u8 = core.str_byte_at(left, index);
-        var b: u8 = core.str_byte_at(right, index);
+        var a: u8 = __unchecked_byte(left, index);
+        var b: u8 = __unchecked_byte(right, index);
         if (a >= 65 && a <= 90) { a = a + 32; }
         if (b >= 65 && b <= 90) { b = b + 32; }
         if (a != b) { ret false; }
@@ -322,7 +322,7 @@ impl EnvError {
 fn env_text_has_nul(text: str) bool {
     var index: usize = 0;
     for (index < text.bytes_len()) {
-        if (core.str_byte_at(text, index) == 0) { ret true; }
+        if (__unchecked_byte(text, index) == 0) { ret true; }
         index = index + 1;
     }
     ret false;
@@ -332,7 +332,7 @@ fn env_name_valid(name: str) bool {
     if (name.bytes_len() == 0 || env_text_has_nul(name)) { ret false; }
     var index: usize = 0;
     for (index < name.bytes_len()) {
-        if (core.str_byte_at(name, index) == 61) { ret false; }
+        if (__unchecked_byte(name, index) == 61) { ret false; }
         index = index + 1;
     }
     ret true;
@@ -358,7 +358,7 @@ unsafe fn env_c_text(prefix: str, separator: bool, suffix: str) *u8 {
 unsafe fn env_entry_named(entry: *u8, name: str) bool {
     var index: usize = 0;
     for (index < name.bytes_len()) {
-        if (*(entry + index) != core.str_byte_at(name, index)) { ret false; }
+        if (*(entry + index) != __unchecked_byte(name, index)) { ret false; }
         index = index + 1;
     }
     ret *(entry + index) == 61;
@@ -686,4 +686,11 @@ fn args_start_with_the_program() {
     if (values.len() == 0) { panic("no program name"); }
     const first: String = values.remove(0);
     if (first.is_empty()) { panic("empty program name"); }
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

@@ -92,7 +92,8 @@ Yield the processor to other threads.
 pub fn current_tid() i32
 ```
 
-Returns the kernel thread ID of the calling thread (Linux only).
+Returns the kernel thread ID of the calling thread (Linux `gettid`, NetBSD
+`_lwp_self`; Windows returns -1).
 
 ## `ThreadCallback`
 

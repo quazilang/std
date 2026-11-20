@@ -283,7 +283,8 @@ AGENTS notes for the context layout. Misuse corrupts the stack.
 pub fn str_byte_at(s: str, i: usize) u8
 ```
 
-Return the byte at index i in s (no bounds check — caller ensures i < strlen(s)).
+Return the byte at index i in s. Unsafe: there is no bounds check, and an
+index at or past `s.bytes_len()` reads outside the string.
 
 ### `str_from_byte`
 

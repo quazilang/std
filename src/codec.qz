@@ -354,7 +354,7 @@ fn digit(byte: u8) bool { ret byte >= 48 && byte <= 57; }
 fn literal_at(source: str, start: usize, end: usize, value: str) bool {
     if (end - start != value.bytes_len()) { ret false; }
     for i : 0..value.bytes_len() {
-        if (core.str_byte_at(source, start + i) != core.str_byte_at(value, i)) { ret false; }
+        if (__unchecked_byte(source, start + i) != __unchecked_byte(value, i)) { ret false; }
     }
     ret true;
 }
@@ -373,8 +373,8 @@ pub fn decode_bool_with_limits(source: str, max_input: usize, max_depth: usize) 
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0;
     var end: usize = source.bytes_len();
-    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
+    for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    for (start < end && whitespace(__unchecked_byte(source, end - 1))) { end = end - 1; }
     if (literal_at(source, start, end, "true")) { ret Ok(true); }
     if (literal_at(source, start, end, "false")) { ret Ok(false); }
     ret Err(DecodeError.TypeMismatch);
@@ -391,8 +391,8 @@ pub fn decode_string_with_limits(source: str, max_input: usize, max_depth: usize
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0;
-    for (start < source.bytes_len() && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    if (start == source.bytes_len() || core.str_byte_at(source, start) != 34) { ret Err(DecodeError.TypeMismatch); }
+    for (start < source.bytes_len() && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    if (start == source.bytes_len() || __unchecked_byte(source, start) != 34) { ret Err(DecodeError.TypeMismatch); }
     const decoded: Result[String, JsonError] = json.decode_string_with_limits(source, max_input, max_depth);
     if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
     // The copy gives callers a String with no provenance in `source`.
@@ -410,9 +410,9 @@ pub fn decode_i64_with_limits(source: str, max_input: usize, max_depth: usize) R
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0; var end: usize = source.bytes_len();
-    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
-    if (start == end || (core.str_byte_at(source, start) != 45 && !digit(core.str_byte_at(source, start)))) { ret Err(DecodeError.TypeMismatch); }
+    for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    for (start < end && whitespace(__unchecked_byte(source, end - 1))) { end = end - 1; }
+    if (start == end || (__unchecked_byte(source, start) != 45 && !digit(__unchecked_byte(source, start)))) { ret Err(DecodeError.TypeMismatch); }
     const raw: String = source[start as isize:end as isize];
     const parsed: Result[i64, ParseError] = raw.parse_i64();
     if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
@@ -563,10 +563,10 @@ pub fn decode_u64(source: str) Result[u64, DecodeError] {
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0; var end: usize = source.bytes_len();
-    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
-    if (start == end || !digit(core.str_byte_at(source, start))) {
-        if (start < end && core.str_byte_at(source, start) == 45) { ret Err(DecodeError.InvalidValue); }
+    for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    for (start < end && whitespace(__unchecked_byte(source, end - 1))) { end = end - 1; }
+    if (start == end || !digit(__unchecked_byte(source, start))) {
+        if (start < end && __unchecked_byte(source, start) == 45) { ret Err(DecodeError.InvalidValue); }
         ret Err(DecodeError.TypeMismatch);
     }
     const raw: String = source[start as isize:end as isize];
@@ -580,9 +580,9 @@ pub fn decode_f64(source: str) Result[f64, DecodeError] {
     const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0; var end: usize = source.bytes_len();
-    for (start < end && whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    for (start < end && whitespace(core.str_byte_at(source, end - 1))) { end = end - 1; }
-    if (start == end || (core.str_byte_at(source, start) != 45 && !digit(core.str_byte_at(source, start)))) { ret Err(DecodeError.TypeMismatch); }
+    for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    for (start < end && whitespace(__unchecked_byte(source, end - 1))) { end = end - 1; }
+    if (start == end || (__unchecked_byte(source, start) != 45 && !digit(__unchecked_byte(source, start)))) { ret Err(DecodeError.TypeMismatch); }
     const raw: String = source[start as isize:end as isize];
     const parsed: Result[f64, ParseError] = raw.parse_f64();
     if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
@@ -658,11 +658,14 @@ pub fn optional_raw(source: str, spans: &Array[usize], index: usize) Result[Opti
 pub fn array_items(source: str) Result[Array[String], DecodeError] {
     const spans = json.array_items(source);
     if (spans.is_err()) {
+        // Malformed JSON is InvalidJson; only a valid non-array value is a
+        // type mismatch.
+        const validation: Result[bool, JsonError] = json.validate(source);
+        if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
         ret Err(match spans.unwrap_err() {
             InputLimit => DecodeError.InputLimit,
             DepthLimit => DecodeError.DepthLimit,
-            InvalidToken => DecodeError.TypeMismatch,
-            _ => DecodeError.InvalidJson,
+            _ => DecodeError.TypeMismatch,
         });
     }
     const bounds: Array[usize] = spans.unwrap();
@@ -725,8 +728,8 @@ pub fn enum_input(source: str, tags: &Array[str], tag_has_payload: &Array[bool])
     const validation = json.validate(source);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0;
-    for (whitespace(core.str_byte_at(source, start))) { start = start + 1; }
-    const first = core.str_byte_at(source, start);
+    for (whitespace(__unchecked_byte(source, start))) { start = start + 1; }
+    const first = __unchecked_byte(source, start);
     if (first == 34) {
         const decoded = json.decode_string(source);
         if (decoded.is_err()) { ret Err(decode_validation_error(decoded.unwrap_err())); }
@@ -766,6 +769,16 @@ pub fn enum_input(source: str, tags: &Array[str], tag_has_payload: &Array[bool])
     const case_index = selected.unwrap();
     const payload = field_raw(source, &spans, case_index)?;
     ret Ok(EnumInput { index: case_index, payload: payload });
+}
+
+@test
+fn array_items_separate_malformed_json_from_type_mismatch() void {
+    const trailing: bool = match array_items("[1,]") { Err(DecodeError.InvalidJson) => true, _ => false };
+    if (!trailing) { panic("[1,] must be InvalidJson"); }
+    const garbage: bool = match array_items("@") { Err(DecodeError.InvalidJson) => true, _ => false };
+    if (!garbage) { panic("@ must be InvalidJson"); }
+    const scalar: bool = match array_items("5") { Err(DecodeError.TypeMismatch) => true, _ => false };
+    if (!scalar) { panic("a number is a TypeMismatch for an array"); }
 }
 
 @test
@@ -899,4 +912,11 @@ impl Document {
         if (written.is_err()) { ret Err(DocumentError.Io(String.from(written.unwrap_err().message()))); }
         ret Ok(true);
     }
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

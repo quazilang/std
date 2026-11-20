@@ -1,8 +1,8 @@
 # `std.collections.map`
 
 std.collections.map — open-addressing hash map (linear probing, tombstone delete)
-Keys and values are usize. Generic owned storage requires trait bounds and
-drop-aware slots, which the language does not expose yet.
+Keys and values are usize; use HashMap[K, V] for generic owned keys and
+values.
 Resize at 75% load; initial capacity 16.
 
 ## Contents

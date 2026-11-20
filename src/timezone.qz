@@ -244,7 +244,7 @@ impl TimeZone {
         if (configured.bytes_len() > 0) {
             const text: str = configured.as_str();
             var name: String = String.from(text);
-            if (core.str_byte_at(text, 0) == 58) { name = text[1:text.bytes_len() as isize]; }
+            if (__unchecked_byte(text, 0) == 58) { name = text[1:text.bytes_len() as isize]; }
             const loaded = TimeZone.load(name.as_str());
             if (loaded.is_ok()) { ret loaded; }
             ret TimeZone.from_posix(name.as_str());
@@ -317,7 +317,7 @@ impl TimeZone {
         const names: str = self.designations.as_str();
         const start: usize = self.type_names[index];
         var end: usize = start;
-        for (end < names.bytes_len() && core.str_byte_at(names, end) != 124) { end = end + 1; }
+        for (end < names.bytes_len() && __unchecked_byte(names, end) != 124) { end = end + 1; }
         ZoneType {
             offset: self.type_offsets[index],
             dst: self.type_dst[index],
@@ -364,10 +364,10 @@ fn load_from(root: str, name: str) Option[Result[TimeZone, TimeError]] {
 }
 
 fn zone_name_valid(name: str) bool {
-    if (name.bytes_len() == 0 || core.str_byte_at(name, 0) == 47) { ret false; }
+    if (name.bytes_len() == 0 || __unchecked_byte(name, 0) == 47) { ret false; }
     var index: usize = 0;
     for (index + 1 < name.bytes_len()) {
-        if (core.str_byte_at(name, index) == 46 && core.str_byte_at(name, index + 1) == 46) { ret false; }
+        if (__unchecked_byte(name, index) == 46 && __unchecked_byte(name, index + 1) == 46) { ret false; }
         index = index + 1;
     }
     ret true;
@@ -381,7 +381,7 @@ impl RuleCursor {
     fn done(self: &RuleCursor) bool { self.at >= self.text.bytes_len() }
     fn peek(self: &RuleCursor) u8 {
         if (self.done()) { ret 0; }
-        core.str_byte_at(self.text, self.at)
+        __unchecked_byte(self.text, self.at)
     }
     fn number(self: &RuleCursor!) Option[i32] {
         const start: usize = self.at;
@@ -575,4 +575,11 @@ fn year_of_days(days: i64) i64 {
     const day_of_year: i64 = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
     const month_index: i64 = (5 * day_of_year + 2) / 153;
     year_of_era + era * 400 + if (month_index >= 10) { 1 } else { 0 }
+}
+
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
 }

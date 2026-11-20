@@ -9,7 +9,9 @@ fn bytes_of(text: str) Array[u8] {
     var data: Array[u8] = Array.new();
     var index: usize = 0;
     for (index < text.bytes_len()) {
-        data.push(core.str_byte_at(text, index));
+        var byte: u8 = 0;
+        unsafe { byte = core.str_byte_at(text, index); }
+        data.push(byte);
         index = index + 1;
     }
     ret data;

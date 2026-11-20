@@ -157,9 +157,10 @@ pub unsafe fn atomic_cas(target: *i64, expected: i64, desired: i64) i64;
 @intrinsic("quazi.context.switch")
 pub unsafe fn context_switch(save: *u8, restore: *u8) void;
 
-// Return the byte at index i in s (no bounds check — caller ensures i < strlen(s)).
+// Return the byte at index i in s. Unsafe: there is no bounds check, and an
+// index at or past `s.bytes_len()` reads outside the string.
 @intrinsic("quazi.str.byte_at")
-pub fn str_byte_at(s: str, i: usize) u8;
+pub unsafe fn str_byte_at(s: str, i: usize) u8;
 
 @intrinsic("quazi.str.from_byte")
 unsafe fn __raw_ascii_byte(b: u8) *u8;

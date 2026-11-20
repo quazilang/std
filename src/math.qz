@@ -66,9 +66,10 @@ pub fn gcd(a: i64, b: i64) i64 {
 // Integer results that do not fit their type panic, like integer `**`
 // (D-016), instead of wrapping silently.
 fn __checked_mul_u64(a: u64, b: u64, operation: str) u64 {
-    const product: u64 = a * b;
-    if (a != 0 && product / a != b) { panic("{} overflows u64", operation); }
-    product
+    // Checked before multiplying: the multiplication itself traps on
+    // overflow with a less specific message.
+    if (b != 0 && a > 18446744073709551615 / b) { panic("{} overflows u64", operation); }
+    a * b
 }
 
 // The least common multiple; 0 when either operand is 0; panics on overflow.

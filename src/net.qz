@@ -9,6 +9,13 @@ import std.linux;
 import std.netbsd;
 import std.win32_core;
 
+// The byte at `index` of `text` without a bounds check. Private on purpose:
+// every caller in this module indexes below `text.bytes_len()` (core's
+// `str_byte_at` is unsafe because a wrong index reads outside the string).
+fn __unchecked_byte(text: str, index: usize) u8 {
+    unsafe { ret core.str_byte_at(text, index); }
+}
+
 @cfg(target_os = "linux")
 @api("getaddrinfo")
 unsafe fn __linux_getaddrinfo(node: *c_char, service: *c_char, hints: *u8, result: **u8) i32;
@@ -436,7 +443,7 @@ fn __parse_ipv4_literal(host: str) Option[u32] {
     var value: u32 = 0;
     var raw: u32 = 0;
     for i : 0..host.bytes_len() {
-        const byte: u8 = core.str_byte_at(host, i);
+        const byte: u8 = __unchecked_byte(host, i);
         if (byte == 46) {
             if (octet >= 3 || digits == 0 || value > 255) { ret None; }
             raw = raw | (value << (octet * 8));
@@ -615,9 +622,11 @@ impl TcpStream {
         unsafe { data = core.malloc(limit + 1); }
         if (data == 0) { ret Err(NetError.AllocationFailed); }
         var length: usize = 0;
-        for (length < limit) {
+        // Read one byte past the limit: exactly `limit` bytes then EOF is
+        // accepted, any further byte is LimitExceeded.
+        for (length <= limit) {
             var count: isize = 0;
-            unsafe { count = __recv(self.socket, data + length, limit - length); }
+            unsafe { count = __recv(self.socket, data + length, limit + 1 - length); }
             if (count < 0) {
                 unsafe { core.free(data); }
                 ret Err(__net_error(__error(count as i32)));
@@ -625,7 +634,7 @@ impl TcpStream {
             if (count == 0) { break; }
             length = length + count as usize;
         }
-        if (length == limit) {
+        if (length > limit) {
             unsafe { core.free(data); }
             ret Err(NetError.LimitExceeded);
         }
@@ -1085,7 +1094,7 @@ fn __hex_size(text: str) Result[usize, NetError] {
     var value: usize = 0;
     var digits: usize = 0;
     for i : 0..text.bytes_len() {
-        const byte: u8 = core.str_byte_at(text, i);
+        const byte: u8 = __unchecked_byte(text, i);
         if (byte == 59) { break; }
         var digit: usize = 16;
         if (byte >= 48 && byte <= 57) { digit = (byte - 48) as usize; }
@@ -1117,7 +1126,7 @@ fn __decode_chunked(body: str, limit: usize) Result[String, NetError] {
         if (size > limit || output.bytes_len() > limit - size) { ret Err(NetError.LimitExceeded); }
         const data_end: usize = data_start + size;
         if (data_end + 2 > body.bytes_len()) { ret Err(NetError.InvalidHttp); }
-        if (core.str_byte_at(body, data_end) != 13 || core.str_byte_at(body, data_end + 1) != 10) {
+        if (__unchecked_byte(body, data_end) != 13 || __unchecked_byte(body, data_end + 1) != 10) {
             ret Err(NetError.InvalidHttp);
         }
         const chunk: String = body[data_start as isize:data_end as isize];
@@ -1645,3 +1654,4 @@ impl stream.Writer for TcpStream {
     // TCP has no user-space buffer here.
     fn flush(self: &TcpStream!) Result[bool, stream.IoError] { ret Ok(true); }
 }
+
