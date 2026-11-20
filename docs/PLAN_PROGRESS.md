@@ -300,7 +300,10 @@ Evidence: [AGENTS.md](../AGENTS.md).
   [Regression tests](../tests/hash_collections.qz) cover owned keys and values,
   replacement, capacity growth, collisions, removal, and reuse.
 - [x] Passing full standard-library suite including HTTP/JSON.
-- [ ] Final public API/documentation/target consistency audit.
+- [ ] Final public API/documentation/target consistency audit. The audit ran
+  on 2026-11-20 (b2cc3e9, 77806eb: code and documentation contradictions
+  fixed); it closes once the API-design inconsistencies in asks В35 are
+  decided.
 
 ## Verification boundary
 
