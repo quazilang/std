@@ -596,7 +596,19 @@ impl SystemTime {
     // leap seconds are not representable. The offset is applied to give UTC.
     pub fn parse_rfc3339(text: str) Result[SystemTime, TimeError] {
         const local: Option[__ParsedLocal] = __parse_local_date_time(text);
-        if (local.is_none()) { ret Err(TimeError.InvalidFormat); }
+        if (local.is_none()) {
+            // Year 0000 is valid RFC 3339 but before the supported range.
+            if (text.bytes_len() >= 20 && __digits(text, 0, 4) == 0) {
+                var shifted: String = String.from("0004"); // a leap year, like year 0
+                const rest: String = text[4:text.bytes_len()];
+                shifted.push_str(rest.as_str());
+                const probe: Option[__ParsedLocal] = __parse_local_date_time(shifted.as_str());
+                if (probe.is_some() && __parse_utc_offset(shifted.as_str(), probe.unwrap().end).is_some()) {
+                    ret Err(TimeError.OutOfRange);
+                }
+            }
+            ret Err(TimeError.InvalidFormat);
+        }
         const parsed: __ParsedLocal = local.unwrap();
         const offset: Option[i64] = __parse_utc_offset(text, parsed.end);
         if (offset.is_none()) { ret Err(TimeError.InvalidFormat); }
@@ -947,6 +959,22 @@ fn date_time_validates_fields_and_round_trips() void {
 
 @test
 fn rfc3339_formats_and_parses_utc_and_offsets() void {
+    // Year 0000 is valid RFC 3339 text outside the supported range.
+    const year_zero: bool = match SystemTime.parse_rfc3339("0000-06-01T00:00:00Z") {
+        Err(TimeError.OutOfRange) => true,
+        _ => false,
+    };
+    if (!year_zero) { panic("year 0000 must be OutOfRange"); }
+    const leap_zero: bool = match SystemTime.parse_rfc3339("0000-02-29T00:00:00Z") {
+        Err(TimeError.OutOfRange) => true,
+        _ => false,
+    };
+    if (!leap_zero) { panic("0000-02-29 must be OutOfRange"); }
+    const malformed: bool = match SystemTime.parse_rfc3339("0000-13-01T00:00:00Z") {
+        Err(TimeError.InvalidFormat) => true,
+        _ => false,
+    };
+    if (!malformed) { panic("month 13 stays InvalidFormat"); }
     const text: String = SystemTime.from_unix(951827696, 5).unwrap().format_rfc3339();
     if (text.as_str() != "2000-02-29T12:34:56.000000005Z") { panic("fractional RFC 3339 formatting is wrong"); }
     const whole: String = SystemTime.from_unix(-62135596800, 0).unwrap().format_rfc3339();

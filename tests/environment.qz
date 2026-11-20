@@ -17,6 +17,8 @@ fn set_and_remove_env_change_reads_and_children() void {
     if (again.as_str() != "second") { panic("env did not read the overwritten value"); }
     if (!os.set_env("QUAZI_ENV_TEST_EMPTY", "").unwrap()) { panic("empty value"); }
     if (!os.env_present("QUAZI_ENV_TEST_EMPTY")) { panic("an empty value is still present"); }
+    const empty: String = os.env("QUAZI_ENV_TEST_EMPTY", "fallback");
+    if (empty.as_str() != "") { panic("an empty value read as the fallback"); }
 
     // A child started afterwards inherits the change.
     const output = process.Command.new("sh").arg("-c").arg("printf %s \"$QUAZI_ENV_TEST_VALUE\"").output().unwrap();

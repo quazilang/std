@@ -1,4 +1,4 @@
-// std.fs — cross-platform file-system operations for Linux and Windows.
+// std.fs — cross-platform file-system operations for Linux, Windows and NetBSD.
 //
 // File owns its operating-system handle. Whole-program destruction analysis
 // finds File.free and inserts it on every lexical exit, including early return.
@@ -63,6 +63,10 @@ fn fs_error(code: i32) FsError {
     if (code == -21) { ret FsError.IsDirectory; }
     if (code == -20 || code == 267) { ret FsError.NotDirectory; }
     if (code == -39 || code == 145) { ret FsError.DirectoryNotEmpty; }
+    // NetBSD numbers ENOTEMPTY 66; its other file errnos match Linux.
+    @cfg(target_os = "netbsd") {
+        if (code == -66) { ret FsError.DirectoryNotEmpty; }
+    }
     if (code == -30 || code == 19) { ret FsError.ReadOnly; }
     if (code == -28 || code == 112) { ret FsError.NoSpace; }
     if (code == -24 || code == 4) { ret FsError.TooManyOpenFiles; }
@@ -378,8 +382,8 @@ impl File {
         ret -1;
     }
 
-    // Writes all of `text`, repeating partial writes, and returns its length in
-    // bytes.
+    // Writes `text` with one native write and returns the bytes written,
+    // which can be fewer than its length (no retry; see `fs.write`).
     pub fn write_str(self: &File!, text: str) Result[usize, FsError] {
         var result: isize = -1;
         unsafe { result = self.write_raw(core.str_as_ptr(text), core.strlen(text)); }
@@ -478,7 +482,7 @@ impl File {
         ret Err(FsError.Unsupported);
     }
 
-    // File truncation is currently implemented by the Linux backend.
+    // Changes the file length (Linux and NetBSD; Windows returns Unsupported).
     pub fn truncate(self: &File!, len: i64) Result[bool, FsError] {
         @cfg(target_os = "linux") {
             var result: i32 = -1;
@@ -565,8 +569,11 @@ pub fn read_bytes_with_limit(path: str, max_bytes: usize) Result[Array[u8], FsEr
     unsafe { buffer.data = core.malloc(chunk); }
     if (buffer.data == 0) { ret Err(FsError.AllocationFailed); }
     for (true) {
+        // Never request past the first byte beyond the limit.
+        var request: usize = max_bytes - content.len() + 1;
+        if (request > chunk) { request = chunk; }
         var count: isize = -1;
-        unsafe { count = file.read(buffer.data, chunk); }
+        unsafe { count = file.read(buffer.data, request); }
         if (count < 0) {
             @cfg(target_os = "windows") { ret Err(last_fs_error()); }
             ret Err(fs_error(count as i32));
@@ -1313,10 +1320,25 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
     Err(FsError.Unsupported)
 }
 
-// Creates or truncates `path` and writes `contents`.
+// Creates or truncates `path` and writes all of `contents`, repeating
+// partial writes; returns the length of `contents` in bytes.
 pub fn write(path: str, contents: str) Result[usize, FsError] {
     var file = File.create(path)?;
-    const written: usize = file.write_str(contents)?;
+    const total: usize = core.strlen(contents);
+    var written: usize = 0;
+    for (written < total) {
+        // One native write is capped (Linux near 2 GiB, Windows by u32).
+        var chunk: usize = total - written;
+        if (chunk > 1073741824) { chunk = 1073741824; }
+        var result: isize = -1;
+        unsafe { result = file.write_raw(core.str_as_ptr(contents) + written, chunk); }
+        if (result <= 0) {
+            @cfg(target_os = "windows") { ret Err(last_fs_error()); }
+            if (result == 0) { ret Err(FsError.NoSpace); }
+            ret Err(fs_error(result as i32));
+        }
+        written = written + (result as usize);
+    }
     file.close()?;
     Ok(written)
 }
@@ -1499,6 +1521,21 @@ fn read_to_string_with_limit_rejects_larger_files() void {
     const too_large: bool = match limited { Err(FsError.TooLarge) => true, _ => false };
     if (!too_large) { panic("oversized file was not rejected with TooLarge"); }
     if (read_to_string(path).unwrap().as_str() != "hello world") { panic("unbounded read changed"); }
+    remove(path).unwrap();
+}
+
+@test
+fn write_writes_everything_and_byte_limits_hold() void {
+    const path = "/tmp/quazi_fs_write_all_test.txt";
+    var text: String = String.new();
+    var index: usize = 0;
+    for (index < 20000) { text.push_str("0123456789"); index = index + 1; }
+    if (write(path, text.as_str()).unwrap() != 200000) { panic("write reported a partial length"); }
+    if (read_to_string(path).unwrap().len() != 200000) { panic("write did not write everything"); }
+    if (read_bytes_with_limit(path, 200000).unwrap().len() != 200000) { panic("exact-size byte read rejected"); }
+    const limited = read_bytes_with_limit(path, 10);
+    const too_large: bool = match limited { Err(FsError.TooLarge) => true, _ => false };
+    if (!too_large) { panic("oversized byte read was not rejected"); }
     remove(path).unwrap();
 }
 
@@ -1702,6 +1739,16 @@ fn path_methods_open_write_and_remove_files() void {
     rmdir("/tmp/quazi_path_methods_test").unwrap();
 }
 
+// The native error of a failed File read or write: the negated errno on
+// Linux and NetBSD, the thread's last error on Windows (where the raw call
+// only returns -1).
+fn stream_error_code(count: isize) i32 {
+    @cfg(target_os = "windows") {
+        unsafe { ret win32_core.last_error() as i32; }
+    }
+    ret (-count) as i32;
+}
+
 // File as a byte stream (D-025, В26А).
 impl stream.Reader for File {
     // Up to `max` bytes; empty at end of file.
@@ -1713,7 +1760,7 @@ impl stream.Reader for File {
         if (buffer.data == 0) { ret Err(stream.other_error("out of memory")); }
         var count: isize = -1;
         unsafe { count = self.read(buffer.data, max); }
-        if (count < 0) { ret Err(stream.native_error((-count) as i32)); }
+        if (count < 0) { ret Err(stream.native_error(stream_error_code(count))); }
         var index: usize = 0;
         for (index < count as usize) {
             unsafe { chunk.push(*(buffer.data + index)); }
@@ -1737,7 +1784,7 @@ impl stream.Writer for File {
             if (count <= 0) {
                 unsafe { core.free(buffer); }
                 if (count == 0) { ret Err(stream.closed_error()); }
-                ret Err(stream.native_error((-count) as i32));
+                ret Err(stream.native_error(stream_error_code(count)));
             }
             offset = offset + count as usize;
         }

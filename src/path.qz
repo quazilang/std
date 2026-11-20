@@ -108,6 +108,9 @@ impl Path {
         const other = Path.new(base).normalize();
         const text = mine.as_str();
         const prefix = other.as_str();
+        // `.` (also `""` and `./`) has no components: every relative path
+        // begins with it.
+        if (prefix == ".") { ret !mine.is_absolute(); }
         if (!text.starts_with(prefix)) { ret false; }
         text.len() == prefix.len() || prefix.ends_with("/") || prefix.ends_with("\\")
             || path.is_separator(text, prefix.len())
@@ -265,6 +268,16 @@ fn check_name(value: Option[String], expected: str, what: str) {
     }
     const text: String = value.unwrap();
     if (text.as_str() != expected) { panic("{what}: expected {expected}, got {text}"); }
+}
+
+@test
+fn relative_paths_start_with_the_current_directory() {
+    if (!Path.new("./a").starts_with("./")) { panic("./a starts with ./"); }
+    if (!Path.new("a/b").starts_with(".")) { panic("a/b starts with ."); }
+    if (!Path.new("a/b").starts_with("")) { panic("a/b starts with the empty path"); }
+    if (Path.new("/a").starts_with(".")) { panic("an absolute path is not under ."); }
+    if (!Path.new("a/b").starts_with("a")) { panic("a/b starts with a"); }
+    if (Path.new("ab").starts_with("a")) { panic("ab does not start with component a"); }
 }
 
 @test

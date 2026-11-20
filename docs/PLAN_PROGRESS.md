@@ -64,8 +64,8 @@ Evidence: [src/fs.qz](../src/fs.qz).
   extension, is_absolute, components, lexical normalize; Windows separators and
   drive roots; 2026-11-10).
 - [x] Structured metadata API (`metadata`/`symlink_metadata` -> `Metadata`: length,
-  `FileKind`, read-only, modification time; Linux stat/lstat, Windows
-  GetFileAttributesExA; NetBSD reports Unsupported; 2026-11-10).
+  `FileType`, read-only, modification time; Linux stat/lstat, Windows
+  GetFileAttributesExA; NetBSD libc stat/lstat; 2026-11-10).
 - [x] Directory iterator/traversal API (`read_dir` lists a directory, `walk`
   traverses depth first without following links; 2026-11-10).
 - [x] Bounded large-file reads.

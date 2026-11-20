@@ -1,6 +1,6 @@
 # `std.fs`
 
-std.fs — cross-platform file-system operations for Linux and Windows.
+std.fs — cross-platform file-system operations for Linux, Windows and NetBSD.
 
 File owns its operating-system handle. Whole-program destruction analysis
 finds File.free and inserts it on every lexical exit, including early return.
@@ -197,7 +197,8 @@ must exist.
 pub fn write(path: str, contents: str) Result[usize, FsError]
 ```
 
-Creates or truncates `path` and writes `contents`.
+Creates or truncates `path` and writes all of `contents`, repeating
+partial writes; returns the length of `contents` in bytes.
 
 ### `writable`
 
@@ -383,8 +384,8 @@ Raw buffer write. The caller guarantees `buf` is readable for `n` bytes.
 pub fn write_str(self: &File!, text: str) Result[usize, FsError]
 ```
 
-Writes all of `text`, repeating partial writes, and returns its length in
-bytes.
+Writes `text` with one native write and returns the bytes written,
+which can be fewer than its length (no retry; see `fs.write`).
 
 ### `File.close`
 
@@ -444,7 +445,7 @@ Flushes the file's data and metadata to the storage device (`fsync`,
 pub fn truncate(self: &File!, len: i64) Result[bool, FsError]
 ```
 
-File truncation is currently implemented by the Linux backend.
+Changes the file length (Linux and NetBSD; Windows returns Unsupported).
 
 ## `FileType`
 

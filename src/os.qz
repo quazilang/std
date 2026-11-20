@@ -136,7 +136,6 @@ fn process_role(role: i32) String {
 
 // ── Process ──────────────────────────────────────────────────────────────────
 
-// Terminate the process with the given exit code. Never returns.
 // The process arguments, the program name first, as owned UTF-8 strings.
 // Linux reads /proc/self/cmdline, NetBSD the startup's ps_strings; Windows
 // splits GetCommandLineW like the C runtime. An argument that is not valid UTF-8 reports InvalidData.
@@ -502,9 +501,15 @@ pub fn env(name: str, fallback: str) String {
         unsafe {
             buffer.data = core.malloc(capacity);
             if (buffer.data == 0) { ret String.from(fallback); }
+            win32_core.set_last_error(0);
             const len: u32 = win32_core.environment(
                 core.str_as_ptr(name), buffer.data, capacity as u32
             );
+            // An empty value also returns 0; only ERROR_ENVVAR_NOT_FOUND (203)
+            // means the variable is absent.
+            if (len == 0 && win32_core.last_error() != 203) {
+                ret String.new();
+            }
             if (len == 0 || len as usize >= capacity) {
                 ret String.from(fallback);
             }
