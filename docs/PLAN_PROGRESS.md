@@ -91,7 +91,9 @@ Evidence: [src/os.qz](../src/os.qz).
   /proc/self/cmdline, Windows GetCommandLineW/CommandLineToArgvW; 2026-11-10).
 - [x] Move Unix-specific responsibilities out of portable os surface (`std.posix`:
   uid/gid, kill, umask, raw cwd, Linux envp; 2026-11-17).
-- [ ] Complete target-native OS query/error matrix.
+- [ ] Complete target-native OS query/error matrix. NetBSD 11.1 runs the whole
+  std suite natively (105/105 `qz test --target x86_64-netbsd --no-run`
+  runners, 2026-11-25); native Windows pending (asks В13).
 
 ### Processes
 
@@ -124,7 +126,9 @@ Evidence: [src/process.qz](../src/process.qz).
 - [x] Automatic Child scope cleanup (`Child.free` closes an abandoned child:
   terminate and reap; `abandoned_child_is_terminated_and_reaped_at_scope_exit`,
   2026-11-17).
-- [ ] Complete target-native argv/status/termination/cleanup matrix.
+- [ ] Complete target-native argv/status/termination/cleanup matrix. NetBSD 11.1 runs (2026-11-25, QEMU VM, `--netbsd-run`):
+  `scripts/check_process_targets.py --netbsd-run` (Command, Child
+  try_wait/terminate/wait, args, metadata); native Windows pending.
 
 ### Networking / TLS
 
@@ -156,7 +160,9 @@ Evidence: [src/net.qz](../src/net.qz), [src/tls.qz](../src/tls.qz),
 - [x] Defined concurrent socket-sharing policy (single owner, exclusive I/O,
   move into the qoroutine that uses it; `docs/NETWORK.md`, regression in
   `tests/net_receivers.qz`, 2026-11-19; split halves asked in В31).
-- [ ] Target-native TCP/UDP/HTTP/TLS integration matrix.
+- [ ] Target-native TCP/UDP/HTTP/TLS integration matrix. NetBSD 11.1 runs (2026-11-25, QEMU VM, `--netbsd-run`):
+  `scripts/check_net_receivers.py --netbsd-run` and the net tests of the std
+  suite; TLS on NetBSD and native Windows pending.
 
 ### Mathematics
 
@@ -225,7 +231,9 @@ Evidence: [src/thread.qz](../src/thread.qz),
   `scripts/check_thread_isolation.py --wine`).
 - [x] Structured automatic joining/cleanup (a dropped `JoinHandle` joins its
   thread and drops a finished result, 2026-11-19).
-- [ ] Target-native lifetime/failure/synchronization matrix.
+- [ ] Target-native lifetime/failure/synchronization matrix. NetBSD 11.1 runs (2026-11-25, QEMU VM, `--netbsd-run`):
+  `scripts/check_thread_isolation.py --netbsd-run` (lifecycle, handler, 1200
+  concurrent panics, channels); native Windows pending.
 - [ ] Finalize D-007 model and terminology.
 
 ### Time
@@ -284,7 +292,8 @@ Evidence: [src/codec.qz](../src/codec.qz).
   fields default to `None`; `object_fields_reject_unknown_and_duplicate_keys`).
 - [ ] Complete source/QZI/target-native codec regression matrix (source, QZI
   without sources, COFF and Windows under Wine pass in quazistrap
-  `scripts/check_deserialize.py --wine`; real Windows and NetBSD runs pending).
+  `scripts/check_deserialize.py --wine`; NetBSD 11.1 runs with `--netbsd-run`
+  (2026-11-25, after a codegen use-after-free fix); real Windows pending).
 
 ### Library-wide safety / other modules
 

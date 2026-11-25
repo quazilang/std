@@ -5,10 +5,12 @@ target from one host.
 Linux runs a `Command` program (PATH lookup, working directory, environment,
 captured output, exit status, Child try_wait/terminate/wait). NetBSD links
 the same program into an executable with the built-in NetBSD linker; its
-fork/execve/waitpid/kill/pipe2/poll calls must be libc imports. NetBSD cannot
-run here, so only the link is checked."""
+fork/execve/waitpid/kill/pipe2/poll calls must be libc imports, and with
+--netbsd-run CMD (a command prefix that runs a NetBSD executable, for example
+on a NetBSD machine over ssh) it runs and must print what Linux prints."""
 
 import argparse
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -44,7 +46,9 @@ fn main() i32 {
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qz", type=Path, required=True, help="matching compiler executable")
-    qz = str(parser.parse_args().qz.resolve())
+    parser.add_argument("--netbsd-run", help="command prefix that runs a NetBSD executable")
+    args = parser.parse_args()
+    qz = str(args.qz.resolve())
     with tempfile.TemporaryDirectory(prefix="quazi-process-targets-") as directory:
         root = Path(directory)
         (root / "src").mkdir()
@@ -56,7 +60,8 @@ def main():
         assert build.returncode == 0, build.stdout + build.stderr
         result = subprocess.run([str(root / "linux")], cwd=root, text=True, capture_output=True,
                                 timeout=60)
-        assert result.returncode == 0 and result.stdout == "1 true / true\n16\n3 true true\n", (
+        expected = "1 true / true\n16\n3 true true\n"
+        assert result.returncode == 0 and result.stdout == expected, (
             result.returncode, result.stdout, result.stderr)
         build = subprocess.run([qz, "build", *common, "--target", "x86_64-netbsd", "-o",
                                 str(root / "netbsd")], cwd=root, text=True, capture_output=True,
@@ -67,7 +72,13 @@ def main():
         for symbol in (b"fork", b"execve", b"waitpid", b"kill", b"pipe2", b"poll", b"_exit",
                        b"__stat50", b"realpath", b"_lwp_self"):
             assert symbol + b"\0" in image, symbol
-    print("PASS process targets: Linux Command/Child/args/metadata run; NetBSD executable links its libc calls")
+        if args.netbsd_run:
+            result = subprocess.run([*shlex.split(args.netbsd_run), str(root / "netbsd")],
+                                    text=True, capture_output=True, timeout=120)
+            assert result.returncode == 0 and result.stdout == expected, (
+                result.returncode, result.stdout, result.stderr)
+    netbsd = "runs on NetBSD" if args.netbsd_run else "links its libc calls"
+    print(f"PASS process targets: Linux Command/Child/args/metadata run; NetBSD executable {netbsd}")
 
 
 if __name__ == "__main__":

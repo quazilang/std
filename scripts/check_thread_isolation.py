@@ -13,11 +13,14 @@ fatal panics, and a panic inside a thread's panic report aborts.
 Runs with the libc-free clone runtime, with pthreads (`libc = true`) and
 under `qz run --jit`; concurrent panics must neither deadlock nor leak.
 With `--wine`, the programs also run as Windows executables under Wine;
-NetBSD objects must build (no runtime here).
+with `--netbsd-run CMD` (a command prefix that runs a NetBSD executable,
+for example on a NetBSD machine over ssh) they run on NetBSD (pthreads).
+Without it NetBSD objects must still build.
 """
 
 import argparse
 import os
+import shlex
 import subprocess
 import tempfile
 from pathlib import Path
@@ -226,7 +229,7 @@ def peak_kib(binary, cwd):
     return result, int(result.stderr.strip().splitlines()[-1])
 
 
-def check(qz, root, wine=None):
+def check(qz, root, wine=None, netbsd_run=None):
     for libc in (False, True):
         case, binary = build(qz, root, f"lifecycle_{'libc' if libc else 'clone'}", LIFECYCLE, libc)
         if libc:
@@ -281,6 +284,8 @@ def check(qz, root, wine=None):
 
     if wine:
         check_windows(qz, root, wine)
+    if netbsd_run:
+        check_netbsd(qz, root, netbsd_run)
 
     for target, magic in (("x86_64-windows", b"\x64\x86"), ("x86_64-netbsd", b"\x7fELF")):
         case = root / "lifecycle_clone"
@@ -317,13 +322,36 @@ def check_windows(qz, root, wine):
     print("PASS Windows under Wine: lifecycle, handler, 1200 concurrent panics, channels")
 
 
+def check_netbsd(qz, root, netbsd_run):
+    """The same programs as NetBSD executables (pthreads from libpthread)."""
+
+    def netbsd(name, source):
+        case, binary = build(qz, root, f"netbsd_{name}", source, extra=("--target", "x86_64-netbsd"))
+        return subprocess.run([*netbsd_run, str(binary)], cwd=case, text=True,
+                              capture_output=True, timeout=600)
+
+    check_lifecycle(netbsd("lifecycle", LIFECYCLE), "netbsd")
+    result = netbsd("handler", HANDLER)
+    assert result.returncode == 42 and result.stdout == "worker error true\n", (result.returncode, result.stdout)
+    assert "handled: worker failure" not in result.stderr and "handled: main failure" in result.stderr
+    result = netbsd("concurrent", CONCURRENT)
+    assert result.returncode == 0 and result.stdout == "failures 0\n", (result.returncode, result.stdout,
+                                                                        result.stderr[-1500:])
+    assert result.stderr.count("thread panicked at '") == 1200
+    result = netbsd("channels", CHANNELS)
+    assert result.returncode == 0 and result.stdout == "sent 4000 total 25780\n", (result.returncode, result.stdout)
+    print("PASS NetBSD: lifecycle, handler, 1200 concurrent panics, channels")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--qz", type=Path, required=True, help="matching compiler executable")
     parser.add_argument("--wine", type=Path, help="Wine executable for the Windows column")
+    parser.add_argument("--netbsd-run", help="command prefix that runs a NetBSD executable")
     args = parser.parse_args()
+    netbsd_run = shlex.split(args.netbsd_run) if args.netbsd_run else None
     with tempfile.TemporaryDirectory() as directory:
-        check(args.qz.resolve(), Path(directory), args.wine)
+        check(args.qz.resolve(), Path(directory), args.wine, netbsd_run)
 
 
 if __name__ == "__main__":

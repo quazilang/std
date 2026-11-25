@@ -8,6 +8,7 @@ establish that the full std.net module builds.
 import argparse
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import tempfile
 
@@ -54,6 +55,10 @@ def main():
     parser.add_argument(
         "--source", type=Path,
         help="alternate net.qz for before/after regression checks",
+    )
+    parser.add_argument(
+        "--netbsd-run",
+        help="command prefix that runs a NetBSD executable; the QZI's NetBSD native runs there",
     )
     args = parser.parse_args()
     qz = args.qz.resolve()
@@ -163,6 +168,16 @@ def main():
         for command in commands:
             require_success(qz, work, command)
         print("QZI native round trip and Windows COFF emission: passed", flush=True)
+        if args.netbsd_run:
+            netbsd = work / "receivers-netbsd"
+            require_success(qz, work, ["build", str(artifact), "--target", "x86_64-netbsd",
+                                       "-o", str(netbsd)])
+            result = subprocess.run([*shlex.split(args.netbsd_run), str(netbsd)], text=True,
+                                    capture_output=True, timeout=600)
+            if result.returncode != 0:
+                raise AssertionError(f"NetBSD run failed ({result.returncode}):\n"
+                                     f"{result.stdout[-1500:]}{result.stderr[-1500:]}")
+            print("QZI NetBSD native run: passed", flush=True)
 
 
 if __name__ == "__main__":
