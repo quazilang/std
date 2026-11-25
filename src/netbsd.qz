@@ -10,7 +10,9 @@ import std.core;
 unsafe fn __errno_location() *i32;
 @api("setenv")
 unsafe fn __setenv(name: *u8, value: *u8, overwrite: i32) i32;
-@api("unsetenv")
+// libc renames: <stdlib.h> `unsetenv` is `__unsetenv13` (the old symbol
+// returns void).
+@api("__unsetenv13")
 unsafe fn __unsetenv(name: *u8) i32;
 @api("open")
 unsafe fn __open(path: *u8, flags: i32, mode: u32) i32;
@@ -54,11 +56,14 @@ unsafe fn __getegid() u32;
 unsafe fn __kill(pid: i32, signal: i32) i32;
 @api("umask")
 unsafe fn __umask(mask: u32) u32;
-@api("clock_gettime")
+// <time.h> `clock_gettime` is `__clock_gettime50` (64-bit time_t).
+@api("__clock_gettime50")
 unsafe fn __clock_gettime(clock_id: i32, time_out: *u8) i32;
-@api("opendir")
+// <dirent.h> `opendir`/`readdir` are `__opendir30`/`__readdir30`; the
+// plain symbols return the pre-3.0 dirent layout.
+@api("__opendir30")
 unsafe fn __opendir(path: *u8) *u8;
-@api("readdir")
+@api("__readdir30")
 unsafe fn __readdir(dir: *u8) *u8;
 @api("closedir")
 unsafe fn __closedir(dir: *u8) i32;
@@ -272,7 +277,8 @@ pub unsafe fn getpid() i32 { ret __getpid(); }
 pub unsafe fn getppid() i32 { ret __getppid(); }
 
 // Socket APIs: wrap libc errno in the existing negative-error convention.
-@api("socket")
+// <sys/socket.h> `socket` is `__socket30`.
+@api("__socket30")
 unsafe fn __socket(domain: i32, kind: i32, protocol: i32) i32;
 @api("listen")
 unsafe fn __listen(socket: i32, backlog: i32) i32;
