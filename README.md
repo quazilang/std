@@ -59,7 +59,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
-- `tls`: TLS client streams and HTTPS over the system TLS library (OpenSSL on Linux, Schannel on Windows).
+- `tls`: TLS client streams and HTTPS over the system TLS library (OpenSSL on Linux and NetBSD, Schannel on Windows).
 - `os`: Cross-platform host, memory, process, and environment information and changes.
 - `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
 - `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).

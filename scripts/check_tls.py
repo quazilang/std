@@ -23,6 +23,7 @@ The Linux client links the system `libssl`/`libcrypto`.
 
 import argparse
 import os
+import shlex
 import shutil
 import socket
 import ssl
@@ -41,8 +42,8 @@ import std.tls;
 import std.tls.{TlsConfig, TlsError, TlsStream};
 
 // Writes until the peer's reset fails a write (SIGPIPE must not kill us).
-fn flood(port: i32, config: &TlsConfig) i32 {
-    const connected = TlsStream.connect_with("localhost", port, config);
+fn flood(host: str, port: i32, config: &TlsConfig) i32 {
+    const connected = TlsStream.connect_with(host, port, config);
     if (connected.is_err()) {
         const error: TlsError = connected.unwrap_err();
         io.println("connect error: {}", error.message());
@@ -74,7 +75,10 @@ fn main(args: Array[str]) i32 {
     }
     if (args.len() > 3) {
         const port_text: str = args[3];
-        ret flood(port_text.parse_i32().unwrap(), &config);
+        const parsed = Url.parse(target);
+        if (parsed.is_err()) { ret 2; }
+        const location = parsed.unwrap();
+        ret flood(location.host(), port_text.parse_i32().unwrap(), &config);
     }
     const url = Url.parse(target);
     if (url.is_err()) { ret 2; }
@@ -123,7 +127,7 @@ def find_ssl_lib(explicit):
     sys.exit("FAIL tls: no x86-64 libssl.so (pass --ssl-lib)")
 
 
-def make_certificates(openssl, directory):
+def make_certificates(openssl, directory, extra_names=()):
     def run(*args):
         subprocess.run([openssl, *args], cwd=directory, check=True, capture_output=True)
 
@@ -131,7 +135,8 @@ def make_certificates(openssl, directory):
         "-subj", "/CN=Quazi Test CA", "-keyout", "ca.key", "-out", "ca.pem")
     run("req", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost",
         "-keyout", "server.key", "-out", "server.csr")
-    Path(directory, "san.ext").write_text("subjectAltName=DNS:localhost\n")
+    names = ",".join(f"DNS:{name}" for name in ("localhost", *extra_names))
+    Path(directory, "san.ext").write_text(f"subjectAltName={names}\n")
     run("x509", "-req", "-in", "server.csr", "-CA", "ca.pem", "-CAkey", "ca.key",
         "-CAcreateserial", "-days", "2", "-extfile", "san.ext", "-out", "server.pem")
 
@@ -200,6 +205,14 @@ def main():
     parser.add_argument("--openssl")
     parser.add_argument("--ssl-lib")
     parser.add_argument("--wine", help="also run the Windows (Schannel) client under this Wine")
+    parser.add_argument("--netbsd-run", help="command prefix that runs a NetBSD executable "
+                        "with arguments (e.g. on a NetBSD machine over ssh)")
+    parser.add_argument("--netbsd-put", help="command prefix that copies a local file to a "
+                        "path on the NetBSD machine (SRC DEST)")
+    parser.add_argument("--netbsd-host", default="quazi-tls-host",
+                        help="name of this host as the NetBSD machine resolves it")
+    parser.add_argument("--netbsd-address", default="10.0.2.2",
+                        help="address of this host as the NetBSD machine reaches it")
     args = parser.parse_args()
     qz = args.qz.resolve()
     openssl = find_openssl(args.openssl)
@@ -207,7 +220,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="quazi-tls-") as temp:
         root = Path(temp)
-        make_certificates(openssl, root)
+        make_certificates(openssl, root, (args.netbsd_host,) if args.netbsd_run else ())
         project = root / "client"
         (project / "src").mkdir(parents=True)
         (project / "src" / "main.qz").write_text(CLIENT)
@@ -234,7 +247,7 @@ def main():
                                     capture_output=True, text=True, timeout=30)
             return result.returncode, result.stdout.strip()
 
-        runners = [("linux", linux_run, ca, str(root / "absent.pem"))]
+        runners = [("linux", linux_run, ca, str(root / "absent.pem"), "localhost", "127.0.0.1")]
         if args.wine:
             windows_client = project / "build" / "tls-client.exe"
             built = subprocess.run([qz, "build", "--target", "x86_64-windows", "-o", windows_client],
@@ -252,20 +265,39 @@ def main():
                 return "Z:" + str(path).replace("/", "\\")
 
             runners.append(("windows", wine_run, windows_path(root / "ca.pem"),
-                            windows_path(root / "absent.pem")))
+                            windows_path(root / "absent.pem"), "localhost", "127.0.0.1"))
+        if args.netbsd_run:
+            if not args.netbsd_put:
+                sys.exit("FAIL tls: --netbsd-run needs --netbsd-put for the CA file")
+            netbsd_client = project / "build" / "tls-client-netbsd"
+            built = subprocess.run([qz, "build", "--target", "x86_64-netbsd", "-o", netbsd_client],
+                                   cwd=project, env=environment, capture_output=True, text=True)
+            if built.returncode != 0:
+                sys.exit(f"FAIL tls: NetBSD client build failed\n{built.stdout}\n{built.stderr}")
+            remote_ca = "/tmp/quazi-tls-ca.pem"
+            subprocess.run([*shlex.split(args.netbsd_put), str(root / "ca.pem"), remote_ca],
+                           check=True, capture_output=True)
+
+            def netbsd_run(url, *extra):
+                result = subprocess.run([*shlex.split(args.netbsd_run), str(netbsd_client), url, *extra],
+                                        capture_output=True, text=True, timeout=120)
+                return result.returncode, result.stdout.strip()
+
+            runners.append(("netbsd", netbsd_run, remote_ca, "/tmp/quazi-tls-absent.pem",
+                            args.netbsd_host, args.netbsd_address))
 
         failures = []
-        for platform, run, ca, absent in runners:
-            matrix(platform, run, ca, absent, root, failures)
+        for platform, run, ca, absent, host, address in runners:
+            matrix(platform, run, ca, absent, host, address, root, failures)
 
         if failures:
             sys.exit("FAIL tls:\n  " + "\n  ".join(failures))
     print("PASS tls: trusted CA, untrusted system store, host-name mismatch, "
           "missing trust store, truncation, peer closed while writing and refused connection"
-          + (" (Linux and Windows under Wine)" if args.wine else ""))
+          + "".join(f" [{platform}]" for platform, *_ in runners))
 
 
-def matrix(platform, run, ca, absent, root, failures):
+def matrix(platform, run, ca, absent, host, address, root, failures):
     """The D-008 cases for one client."""
 
     def expect(name, outcome, code, text):
@@ -274,33 +306,33 @@ def matrix(platform, run, ca, absent, root, failures):
 
     port, stop = serve(root, close_notify=True)
     try:
-        expect("trusted CA", run(f"https://localhost:{port}/", ca),
+        expect("trusted CA", run(f"https://{host}:{port}/", ca),
                0, f"status 200 body {BODY}")
-        expect("system store", run(f"https://localhost:{port}/"),
+        expect("system store", run(f"https://{host}:{port}/"),
                1, "error: the server certificate is not trusted")
-        expect("wrong host", run(f"https://127.0.0.1:{port}/", ca),
+        expect("wrong host", run(f"https://{address}:{port}/", ca),
                1, "error: the server certificate does not match the host name")
-        expect("missing CA file", run(f"https://localhost:{port}/", absent),
+        expect("missing CA file", run(f"https://{host}:{port}/", absent),
                1, "error: the TLS trust store could not be loaded")
     finally:
         stop()
     port, stop = serve(root, close_notify=False)
     try:
-        expect("truncated", run(f"https://localhost:{port}/", ca),
+        expect("truncated", run(f"https://{host}:{port}/", ca),
                1, "error: TLS record error or truncated connection")
     finally:
         stop()
     port, stop = serve(root, close_notify=True, reset=True)
     try:
         # Exit status -13 would mean SIGPIPE killed the client.
-        expect("peer closed while writing", run(f"https://localhost:{port}/", ca, str(port)),
+        expect("peer closed while writing", run(f"https://{host}:{port}/", ca, str(port)),
                1, "error: TLS record error or truncated connection")
     finally:
         stop()
     closed = socket.create_server(("127.0.0.1", 0))
     refused_port = closed.getsockname()[1]
     closed.close()
-    expect("refused", run(f"https://localhost:{refused_port}/", ca),
+    expect("refused", run(f"https://{host}:{refused_port}/", ca),
            1, "error: connection refused")
 
 

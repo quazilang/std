@@ -1,7 +1,8 @@
 // std.tls — TLS client streams over std.net TCP, backed by the system TLS
 // library (D-008).
 //
-// Linux uses the system OpenSSL 3 (`libssl`/`libcrypto`) and its trust store.
+// Linux and NetBSD use the system OpenSSL 3 (`libssl`/`libcrypto`) and its
+// trust store (NetBSD 11: OpenSSL 3.5 in the base system).
 // Programs that call into this module must link those libraries and libc:
 //
 //     [target.x86_64-linux.link]
@@ -14,68 +15,70 @@
 // В32А).
 //
 // Certificate and host-name verification are always on; TLS 1.2 is the
-// minimum protocol version. Other targets return `TlsError.Unsupported`.
+// minimum protocol version.
 import std.core;
 import std.fs;
 import std.ffi.{c_char, CString, CStringError, nullptr};
 import std.net.{NetError, TcpStream, HttpRequest, HttpResponse, Url};
 import std.win32_core;
+@cfg(target_os = "netbsd")
+import std.netbsd;
 
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("TLS_client_method")
 unsafe fn __tls_client_method() usize;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_new")
 unsafe fn __ssl_ctx_new(method: usize) usize;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_free")
 unsafe fn __ssl_ctx_free(context: usize) void;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_set_default_verify_paths")
 unsafe fn __ssl_ctx_set_default_verify_paths(context: usize) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_load_verify_locations")
 unsafe fn __ssl_ctx_load_verify_locations(context: usize, file: *c_char, directory: *c_char) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_set_verify")
 unsafe fn __ssl_ctx_set_verify(context: usize, mode: i32, callback: usize) void;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_CTX_ctrl")
 unsafe fn __ssl_ctx_ctrl(context: usize, command: i32, value: i64, argument: usize) i64;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_new")
 unsafe fn __ssl_new(context: usize) usize;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_free")
 unsafe fn __ssl_free(session: usize) void;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_set_fd")
 unsafe fn __ssl_set_fd(session: usize, descriptor: i32) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_ctrl")
 unsafe fn __ssl_ctrl(session: usize, command: i32, value: i64, argument: *c_char) i64;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_set1_host")
 unsafe fn __ssl_set1_host(session: usize, host: *c_char) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_connect")
 unsafe fn __ssl_connect(session: usize) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_get_error")
 unsafe fn __ssl_get_error(session: usize, result: i32) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_get_verify_result")
 unsafe fn __ssl_get_verify_result(session: usize) i64;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_read")
 unsafe fn __ssl_read(session: usize, data: *u8, length: i32) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_write")
 unsafe fn __ssl_write(session: usize, data: *u8, length: i32) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("SSL_shutdown")
 unsafe fn __ssl_shutdown(session: usize) i32;
-@cfg(target_os = "linux")
+@cfg(target_family = "unix")
 @api("ERR_clear_error")
 unsafe fn __err_clear_error() void;
 
@@ -369,7 +372,7 @@ impl TlsStream {
 
     // Connects to `host:port`, verifying the server with `config`.
     pub fn connect_with(host: str, port: i32, config: &TlsConfig) Result[TlsStream, TlsError] {
-        @cfg(target_os = "linux") {
+        @cfg(target_family = "unix") {
             const encoded: Result[CString, CStringError] = CString.try_from_str(host);
             if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
             const name: CString = encoded.unwrap();
@@ -383,6 +386,9 @@ impl TlsStream {
             if (connected.is_err()) { ret Err(TlsError.Net(connected.unwrap_err())); }
             var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false, native: 0 };
             unsafe {
+                // OpenSSL writes with write(2): a closed peer must give EPIPE,
+                // not SIGPIPE (Linux blocks the signal around each write).
+                @cfg(target_os = "netbsd") { __no_sigpipe(tls.stream.handle() as i32); }
                 __err_clear_error();
                 tls.context = __ssl_ctx_new(__tls_client_method());
                 if (tls.context == 0) { ret Err(TlsError.LibraryFailure); }
@@ -475,7 +481,7 @@ impl TlsStream {
 
     unsafe fn __send_raw(self: &TlsStream!, data: *u8, length: usize) Result[usize, TlsError] {
         if (self.session == 0) { ret Err(TlsError.Closed); }
-        @cfg(target_os = "linux") {
+        @cfg(target_family = "unix") {
             const guard: *u8 = __block_sigpipe();
             if (guard == 0) { ret Err(TlsError.AllocationFailed); }
             var sent: usize = 0;
@@ -519,7 +525,7 @@ impl TlsStream {
     // peer's close_notify, or an error.
     unsafe fn __read(self: &TlsStream!, data: *u8!, length: usize) Result[usize, TlsError] {
         if (self.session == 0) { ret Err(TlsError.Closed); }
-        @cfg(target_os = "linux") {
+        @cfg(target_family = "unix") {
             var chunk: usize = length;
             if (chunk > MAX_RECORD_CALL) { chunk = MAX_RECORD_CALL; }
             __err_clear_error();
@@ -627,7 +633,7 @@ impl TlsStream {
 
     // Sends close_notify and closes the connection now.
     pub fn close(self: &TlsStream!) void {
-        @cfg(target_os = "linux") {
+        @cfg(target_family = "unix") {
             unsafe {
                 if (self.session != 0) {
                     if (!self.failed) {
@@ -1169,6 +1175,23 @@ unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, Tl
     core.free(wide as *u8);
     ret result;
 }
+
+// NetBSD sockets report EPIPE instead of raising SIGPIPE (SO_NOSIGPIPE), so
+// the per-write guard has nothing to do there.
+@cfg(target_os = "netbsd")
+unsafe fn __no_sigpipe(socket: i32) void {
+    const value: *i32! = core.malloc(4) as *i32!;
+    if (value == 0) { ret; }
+    *value = 1;
+    netbsd.setsockopt(socket, 65535, 2048, value as *u8, 4);
+    core.free(value as *u8);
+}
+
+@cfg(target_os = "netbsd")
+unsafe fn __block_sigpipe() *u8 { ret core.malloc(1); }
+
+@cfg(target_os = "netbsd")
+unsafe fn __restore_sigpipe(guard: *u8) void { core.free(guard); }
 
 // Validates `length` received bytes at `data` (capacity `limit + 1`) and
 // takes ownership of the buffer as a String.

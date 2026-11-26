@@ -84,12 +84,14 @@ the usual limit/UTF-8 cases.
 Windows uses Schannel (TLS 1.2) and verifies the server itself with the
 certificate chain API: the chain must end at a root of the system store or,
 with a CA file, at one of that file's PEM certificates, and the SSL policy
-checks the host name (В32А, 2026-11-26; checked under Wine 11). NetBSD is not
-implemented yet and returns `TlsError.Unsupported`. `scripts/check_tls.py` builds a client and runs it
+checks the host name (В32А, 2026-11-26; checked under Wine 11). NetBSD 11
+uses its base-system OpenSSL like Linux (2026-11-26, checked in a VM). `scripts/check_tls.py` builds a client and runs it
 against a local Python TLS server with a throwaway CA: trusted CA, untrusted
 system store, wrong host name, missing CA file, truncation, a peer that closes
 while the client writes, and a refused connection; `--wine WINE` runs the
-same matrix with the Windows client under Wine.
+same matrix with the Windows client under Wine, and `--netbsd-run CMD
+--netbsd-put CMD` on a NetBSD machine (which reaches this host as
+`--netbsd-host`/`--netbsd-address`, default `quazi-tls-host`/10.0.2.2).
 
 ## Receiver migration checkpoint
 

@@ -109,8 +109,10 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   where reachable code can hold its type. Windows uses Schannel (secur32)
   with manual verification through crypt32 (Wine's Schannel does not verify;
   it also decrypts close_notify to an empty alert record, which counts as the
-  peer closing). NetBSD returns `TlsError.Unsupported`.
-  `python3 scripts/check_tls.py --qz <qz> [--wine <wine>]` is the end-to-end check.
+  peer closing). NetBSD shares the OpenSSL code (`@cfg(target_family =
+  "unix")`) and sets SO_NOSIGPIPE instead of the Linux signal guard.
+  `python3 scripts/check_tls.py --qz <qz> [--wine <wine>] [--netbsd-run CMD
+  --netbsd-put CMD]` is the end-to-end check.
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.

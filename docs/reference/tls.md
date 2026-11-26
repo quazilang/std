@@ -3,7 +3,8 @@
 std.tls — TLS client streams over std.net TCP, backed by the system TLS
 library (D-008).
 
-Linux uses the system OpenSSL 3 (`libssl`/`libcrypto`) and its trust store.
+Linux and NetBSD use the system OpenSSL 3 (`libssl`/`libcrypto`) and its
+trust store (NetBSD 11: OpenSSL 3.5 in the base system).
 Programs that call into this module must link those libraries and libc:
 
     [target.x86_64-linux.link]
@@ -16,7 +17,7 @@ store, or only the PEM certificates of the CA file (maintainer answer
 В32А).
 
 Certificate and host-name verification are always on; TLS 1.2 is the
-minimum protocol version. Other targets return `TlsError.Unsupported`.
+minimum protocol version.
 
 ## Contents
 

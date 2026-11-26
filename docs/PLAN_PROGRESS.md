@@ -149,7 +149,7 @@ Evidence: [src/net.qz](../src/net.qz), [src/tls.qz](../src/tls.qz),
   `TcpStream.connect` needs the system linker for `getaddrinfo`).
 - [x] Maintained TLS transport backend (`std.tls` over the system OpenSSL 3
   on Linux, 2026-11-19; Windows Schannel 2026-11-26, checked under Wine by
-  `check_tls.py --wine`; NetBSD returns `TlsError.Unsupported`).
+  `check_tls.py --wine`; NetBSD base OpenSSL 2026-11-26, `--netbsd-run`).
 - [x] Certificate-chain verification (always on; `check_tls.py` rejects a
   private CA under the system store).
 - [x] Hostname verification (always on, `SSL_set1_host`; `check_tls.py`
@@ -162,8 +162,8 @@ Evidence: [src/net.qz](../src/net.qz), [src/tls.qz](../src/tls.qz),
   `tests/net_receivers.qz`, 2026-11-19; split halves asked in В31).
 - [ ] Target-native TCP/UDP/HTTP/TLS integration matrix. NetBSD 11.1 runs (2026-11-25, QEMU VM, `--netbsd-run`):
   `scripts/check_net_receivers.py --netbsd-run` and the net tests of the std
-  suite; Windows TLS under Wine passes `check_tls.py --wine`; TLS on NetBSD
-  and native Windows pending.
+  suite; TLS passes `check_tls.py` on Linux, Windows under Wine and NetBSD
+  11.1; native Windows pending.
 
 ### Mathematics
 
