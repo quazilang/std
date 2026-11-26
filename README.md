@@ -41,7 +41,7 @@ The public API follows one convention per concern since 2026-11-26
 `message()` returns `str`, paths are `Path`, every scalar decoder has a
 `_with_limits` form. See the
 [migration note](https://github.com/quazilang/quazistrap/blob/main/docs/migrations/std-api-unification.md)
-(`stream.BufWriter` drop-flush is still pending).
+(`stream.BufWriter` flushes when dropped, D-028).
 
 ## Modules Overview
 

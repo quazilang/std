@@ -231,8 +231,9 @@ pub struct BufWriter[W: Writer] { /* internal fields */ }
 ```
 
 Collects small writes in memory and passes them to `inner` in large
-chunks. Buffered bytes reach `inner` only on `flush` or when the buffer
-fills: call `flush` before dropping the writer.
+chunks. Buffered bytes reach `inner` on `flush`, when the buffer fills, or
+when the writer is dropped (errors are then ignored: call `flush` to see
+them).
 
 ### `BufWriter.new`
 
@@ -265,6 +266,16 @@ pub fn into_inner(self: BufWriter[W]) Result[W, IoError]
 ```
 
 The wrapped writer, after passing it the buffered bytes (not flushed).
+On error the writer is dropped without passing the bytes again.
+
+### `BufWriter.free`
+
+```quazi
+pub fn free(self: BufWriter[W]) void
+```
+
+Dropping the writer passes the buffered bytes to `inner` and flushes
+it, ignoring errors; `inner` is dropped after that.
 
 ### `BufWriter.buffered`
 

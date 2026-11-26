@@ -84,3 +84,19 @@ fn copy_works_through_buffered_adapters() void {
     const sink = writer.into_inner().unwrap();
     if (copied != 20 || sink.contents().len() != 20) { panic("buffered copy"); }
 }
+
+
+fn write_and_drop(path: str, text: str) void {
+    var writer = stream.BufWriter.new(File.create(path).unwrap());
+    const data: Array[u8] = bytes_of(text);
+    writer.write_bytes(&data).unwrap();
+}
+
+@test
+fn dropping_a_buffered_writer_flushes_it() void {
+    const path = "/tmp/quazi_streams_drop_flush.txt";
+    write_and_drop(path, "dropped bytes");
+    const written: String = fs.read_to_string(path).unwrap();
+    fs.remove(path).unwrap();
+    if (written.as_str() != "dropped bytes") { panic("drop flush: {written}"); }
+}
