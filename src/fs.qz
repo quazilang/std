@@ -80,8 +80,9 @@ fn last_fs_error() FsError {
     ret fs_error(code as i32);
 }
 
-// The process's current working directory as an owned path.
-pub fn current_dir() Result[String, FsError] {
+// The process's current working directory (В35А: a `Path`, like
+// `canonicalize`; `.as_str()` gives the text).
+pub fn current_dir() Result[Path, FsError] {
     var capacity: usize = 4096;
     for (capacity <= 1048576) {
         var buffer: *u8 = 0;
@@ -120,7 +121,7 @@ pub fn current_dir() Result[String, FsError] {
             if (length < 0) { unsafe { core.free(buffer); } ret Err(FsError.Native(-1)); }
             var path: String = String.new();
             unsafe { path = String.from(core.str_from_ptr(buffer)); core.free(buffer); }
-            ret Ok(path);
+            ret Ok(Path.from_string(path));
         }
         unsafe { core.free(buffer); }
         capacity = capacity * 2;
@@ -153,10 +154,10 @@ pub fn set_current_dir(path: str) Result[bool, FsError] {
 
 @test
 fn current_dir_round_trips_through_set_current_dir() void {
-    const original: String = current_dir().unwrap();
-    if (original.is_empty()) { panic("current directory is empty"); }
+    const original: Path = current_dir().unwrap();
+    if (original.as_str().is_empty()) { panic("current directory is empty"); }
     if (set_current_dir("/").is_err()) { panic("cannot change to the root directory"); }
-    const root: String = current_dir().unwrap();
+    const root: Path = current_dir().unwrap();
     if (root.as_str() != "/") { panic("current_dir did not report the new directory"); }
     if (set_current_dir("/definitely/not/a/real/directory/quazi").is_ok()) { panic("missing directory accepted"); }
     if (set_current_dir(original.as_str()).is_err()) { panic("cannot restore the original directory"); }
@@ -779,9 +780,9 @@ fn joined(base: str, name: str) String {
 // components on every platform (Windows accepts it too). An empty root is the
 // current directory. The root must be readable; a subdirectory that cannot be
 // listed (for example without permission) is reported but not entered.
-pub fn walk(root_path: str) Result[Array[String], FsError] {
+pub fn walk(root_path: str) Result[Array[Path], FsError] {
     const root: str = if (root_path.is_empty()) { "." } else { root_path };
-    var found: Array[String] = Array.new();
+    var found: Array[Path] = Array.new();
     var pending: Array[String] = Array.new();
     pending.push(String.new());
     for (pending.len() > 0) {
@@ -798,7 +799,7 @@ pub fn walk(root_path: str) Result[Array[String], FsError] {
             const full: String = joined(root, child.as_str());
             const info: Metadata = symlink_metadata(full.as_str())?;
             if (info.is_dir()) { pending.push(String.from(child.as_str())); }
-            found.push(child);
+            found.push(Path.from_string(child));
         }
     }
     Ok(found)
@@ -1607,12 +1608,12 @@ fn walk_lists_nested_entries_without_following_links() {
     file.close();
     // A link back to the root must not be descended into.
     symlink(root, "/tmp/quazi_fs_walk_test/a/loop").unwrap();
-    var entries: Array[String] = walk(root).unwrap();
+    var entries: Array[Path] = walk(root).unwrap();
     const total: usize = entries.len();
     var expected: usize = 0;
     for (entries.len() > 0) {
         const last: usize = entries.len() - 1;
-        const entry: String = entries.remove(last);
+        const entry: Path = entries.remove(last);
         const text = entry.as_str();
         if (text == "a" || text == "a/b" || text == "a/b/deep.txt" || text == "a/loop") {
             expected = expected + 1;

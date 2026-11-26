@@ -96,10 +96,21 @@ Why a streaming read or write failed.
 ### `IoError.message`
 
 ```quazi
-pub fn message(self: IoError) String
+pub fn message(self: IoError) str
 ```
 
-A short English description of the error, for display.
+A short English description of the error, for display (a static
+text, like every std error's `message()`; `detail()` adds the native
+code or the `Other` text).
+
+### `IoError.detail`
+
+```quazi
+pub fn detail(self: IoError) String
+```
+
+The full description: `message()` plus the native code, or the text
+of `Other`.
 
 ## `Reader`
 

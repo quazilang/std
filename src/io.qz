@@ -479,7 +479,7 @@ pub fn readln() Result[String, ReadError] {
     ret read("\n");
 }
 
-// Read one complete UTF-8 scalar value. EOF returns an empty String.
+// Read one complete UTF-8 scalar value; Err(EndOfInput) at end of input.
 pub fn readkey() Result[String, ReadError] {
     var buf: *u8 = 0;
     unsafe { buf = malloc(5); }
@@ -491,13 +491,12 @@ pub fn readkey() Result[String, ReadError] {
     var n: isize = 0;
     unsafe { n = sys_read(0, buf, 1); }
     if (n == 0) {
-        var empty: String;
+        // End of input, like `read`/`readln` (В35А).
         unsafe {
             __io_end_immediate_input(input_state);
-            *buf = 0;
-            empty = String.from_raw(buf, 0, 5);
+            free(buf);
         }
-        ret Ok(empty);
+        ret Err(ReadError.EndOfInput);
     }
     if (n < 0) {
         unsafe {

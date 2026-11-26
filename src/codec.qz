@@ -448,7 +448,12 @@ impl Serialize for SystemTime {
 // to UTC). Non-strings are TypeMismatch; malformed or out-of-range text is
 // InvalidValue.
 pub fn decode_system_time(source: str) Result[SystemTime, DecodeError] {
-    const text: String = decode_string(source)?;
+    ret decode_system_time_with_limits(source, 1048576, 64);
+}
+
+// Decodes an RFC 3339 timestamp string, with input size and nesting limits.
+pub fn decode_system_time_with_limits(source: str, max_input: usize, max_depth: usize) Result[SystemTime, DecodeError] {
+    const text: String = decode_string_with_limits(source, max_input, max_depth)?;
     const parsed = SystemTime.parse_rfc3339(text.as_str());
     if (parsed.is_err()) { ret Err(DecodeError.InvalidValue); }
     Ok(parsed.unwrap())
@@ -552,15 +557,18 @@ pub fn field_raw(source: str, spans: &Array[usize], index: usize) Result[String,
 }
 
 // A JSON integer within [minimum, maximum]; another integer is InvalidValue.
-fn decode_ranged(source: str, minimum: i64, maximum: i64) Result[i64, DecodeError] {
-    const value: i64 = decode_i64(source)?;
+fn decode_ranged(source: str, minimum: i64, maximum: i64, max_input: usize, max_depth: usize) Result[i64, DecodeError] {
+    const value: i64 = decode_i64_with_limits(source, max_input, max_depth)?;
     if (value < minimum || value > maximum) { ret Err(DecodeError.InvalidValue); }
     ret Ok(value);
 }
 
 // Decodes a JSON non-negative integer as `u64`.
-pub fn decode_u64(source: str) Result[u64, DecodeError] {
-    const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
+pub fn decode_u64(source: str) Result[u64, DecodeError] { ret decode_u64_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_u64`, with input size and nesting limits.
+pub fn decode_u64_with_limits(source: str, max_input: usize, max_depth: usize) Result[u64, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0; var end: usize = source.bytes_len();
     for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
@@ -576,8 +584,11 @@ pub fn decode_u64(source: str) Result[u64, DecodeError] {
 }
 
 // Decodes a JSON number as `f64`.
-pub fn decode_f64(source: str) Result[f64, DecodeError] {
-    const validation: Result[bool, JsonError] = json.validate_with_limits(source, 1048576, 64);
+pub fn decode_f64(source: str) Result[f64, DecodeError] { ret decode_f64_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_f64`, with input size and nesting limits.
+pub fn decode_f64_with_limits(source: str, max_input: usize, max_depth: usize) Result[f64, DecodeError] {
+    const validation: Result[bool, JsonError] = json.validate_with_limits(source, max_input, max_depth);
     if (validation.is_err()) { ret Err(decode_validation_error(validation.unwrap_err())); }
     var start: usize = 0; var end: usize = source.bytes_len();
     for (start < end && whitespace(__unchecked_byte(source, start))) { start = start + 1; }
@@ -593,56 +604,83 @@ pub fn decode_f64(source: str) Result[f64, DecodeError] {
 }
 
 // Decodes a JSON integer as `i8`; one outside its range is InvalidValue.
-pub fn decode_i8(source: str) Result[i8, DecodeError] {
-    const value: i8 = (decode_ranged(source, -128, 127)?) as i8;
+pub fn decode_i8(source: str) Result[i8, DecodeError] { ret decode_i8_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_i8`, with input size and nesting limits.
+pub fn decode_i8_with_limits(source: str, max_input: usize, max_depth: usize) Result[i8, DecodeError] {
+    const value: i8 = (decode_ranged(source, -128, 127, max_input, max_depth)?) as i8;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `i16`; one outside its range is InvalidValue.
-pub fn decode_i16(source: str) Result[i16, DecodeError] {
-    const value: i16 = (decode_ranged(source, -32768, 32767)?) as i16;
+pub fn decode_i16(source: str) Result[i16, DecodeError] { ret decode_i16_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_i16`, with input size and nesting limits.
+pub fn decode_i16_with_limits(source: str, max_input: usize, max_depth: usize) Result[i16, DecodeError] {
+    const value: i16 = (decode_ranged(source, -32768, 32767, max_input, max_depth)?) as i16;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `i32`; one outside its range is InvalidValue.
-pub fn decode_i32(source: str) Result[i32, DecodeError] {
-    const value: i32 = (decode_ranged(source, -2147483648, 2147483647)?) as i32;
+pub fn decode_i32(source: str) Result[i32, DecodeError] { ret decode_i32_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_i32`, with input size and nesting limits.
+pub fn decode_i32_with_limits(source: str, max_input: usize, max_depth: usize) Result[i32, DecodeError] {
+    const value: i32 = (decode_ranged(source, -2147483648, 2147483647, max_input, max_depth)?) as i32;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `u8`; one outside its range is InvalidValue.
-pub fn decode_u8(source: str) Result[u8, DecodeError] {
-    const value: u8 = (decode_ranged(source, 0, 255)?) as u8;
+pub fn decode_u8(source: str) Result[u8, DecodeError] { ret decode_u8_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_u8`, with input size and nesting limits.
+pub fn decode_u8_with_limits(source: str, max_input: usize, max_depth: usize) Result[u8, DecodeError] {
+    const value: u8 = (decode_ranged(source, 0, 255, max_input, max_depth)?) as u8;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `u16`; one outside its range is InvalidValue.
-pub fn decode_u16(source: str) Result[u16, DecodeError] {
-    const value: u16 = (decode_ranged(source, 0, 65535)?) as u16;
+pub fn decode_u16(source: str) Result[u16, DecodeError] { ret decode_u16_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_u16`, with input size and nesting limits.
+pub fn decode_u16_with_limits(source: str, max_input: usize, max_depth: usize) Result[u16, DecodeError] {
+    const value: u16 = (decode_ranged(source, 0, 65535, max_input, max_depth)?) as u16;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `u32`; one outside its range is InvalidValue.
-pub fn decode_u32(source: str) Result[u32, DecodeError] {
-    const value: u32 = (decode_ranged(source, 0, 4294967295)?) as u32;
+pub fn decode_u32(source: str) Result[u32, DecodeError] { ret decode_u32_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_u32`, with input size and nesting limits.
+pub fn decode_u32_with_limits(source: str, max_input: usize, max_depth: usize) Result[u32, DecodeError] {
+    const value: u32 = (decode_ranged(source, 0, 4294967295, max_input, max_depth)?) as u32;
     ret Ok(value);
 }
 
 // Decodes a JSON integer as `isize` (64-bit targets).
-pub fn decode_isize(source: str) Result[isize, DecodeError] {
-    const value: isize = decode_i64(source)? as isize;
+pub fn decode_isize(source: str) Result[isize, DecodeError] { ret decode_isize_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_isize`, with input size and nesting limits.
+pub fn decode_isize_with_limits(source: str, max_input: usize, max_depth: usize) Result[isize, DecodeError] {
+    const value: isize = decode_i64_with_limits(source, max_input, max_depth)? as isize;
     ret Ok(value);
 }
 
 // Decodes a JSON non-negative integer as `usize` (64-bit targets).
-pub fn decode_usize(source: str) Result[usize, DecodeError] {
-    const value: usize = decode_u64(source)? as usize;
+pub fn decode_usize(source: str) Result[usize, DecodeError] { ret decode_usize_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_usize`, with input size and nesting limits.
+pub fn decode_usize_with_limits(source: str, max_input: usize, max_depth: usize) Result[usize, DecodeError] {
+    const value: usize = decode_u64_with_limits(source, max_input, max_depth)? as usize;
     ret Ok(value);
 }
 
 // Decodes a JSON number as `f32`.
-pub fn decode_f32(source: str) Result[f32, DecodeError] {
-    const value: f32 = decode_f64(source)? as f32;
+pub fn decode_f32(source: str) Result[f32, DecodeError] { ret decode_f32_with_limits(source, 1048576, 64); }
+
+// Decodes like `decode_f32`, with input size and nesting limits.
+pub fn decode_f32_with_limits(source: str, max_input: usize, max_depth: usize) Result[f32, DecodeError] {
+    const value: f32 = decode_f64_with_limits(source, max_input, max_depth)? as f32;
     const wide: f64 = value as f64;
     if (wide - wide != 0.0) { ret Err(DecodeError.InvalidValue); }
     ret Ok(value);
@@ -919,4 +957,21 @@ impl Document {
 // `str_byte_at` is unsafe because a wrong index reads outside the string).
 fn __unchecked_byte(text: str, index: usize) u8 {
     unsafe { ret core.str_byte_at(text, index); }
+}
+
+@test
+fn every_scalar_decoder_has_input_and_depth_limits() void {
+    const long_input: bool = match decode_u8_with_limits("  200  ", 3, 64) { Err(DecodeError.InputLimit) => true, _ => false };
+    if (!long_input) { panic("decode_u8_with_limits must enforce the input limit"); }
+    const deep: bool = match decode_f64_with_limits("[[1]]", 100, 1) { Err(DecodeError.DepthLimit) => true, Err(DecodeError.TypeMismatch) => false, _ => false };
+    if (!deep) { panic("decode_f64_with_limits must enforce the depth limit"); }
+    if (decode_i8_with_limits("-5", 8, 1).unwrap() != -5 || decode_u16_with_limits("7", 8, 1).unwrap() != 7) { panic("small limits that fit"); }
+    if (decode_i16_with_limits("9", 8, 1).unwrap() != 9 || decode_i32_with_limits("9", 8, 1).unwrap() != 9) { panic("i16/i32"); }
+    if (decode_u32_with_limits("9", 8, 1).unwrap() != 9 || decode_u64_with_limits("9", 8, 1).unwrap() != 9) { panic("u32/u64"); }
+    if (decode_isize_with_limits("9", 8, 1).unwrap() != 9 || decode_usize_with_limits("9", 8, 1).unwrap() != 9) { panic("isize/usize"); }
+    if (decode_f32_with_limits("0.5", 8, 1).unwrap() != 0.5) { panic("f32"); }
+    const time_limit: bool = match decode_system_time_with_limits("\"2000-02-29T12:34:56Z\"", 10, 64) { Err(DecodeError.InputLimit) => true, _ => false };
+    if (!time_limit) { panic("decode_system_time_with_limits must enforce the input limit"); }
+    const ranged: bool = match decode_u8_with_limits("300", 8, 1) { Err(DecodeError.InvalidValue) => true, _ => false };
+    if (!ranged) { panic("range checks still apply"); }
 }

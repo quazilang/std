@@ -29,7 +29,9 @@ unsafe fn __netbsd_close(library: usize) i32;
 pub enum DynamicLibraryError {
     InvalidName(usize),
     AllocationFailed,
-    OpenFailed,
+    // The library could not be loaded: the system error code on Windows
+    // (GetLastError), 0 where the loader reports none (dlopen).
+    OpenFailed(i32),
     SymbolNotFound,
     Native(i32),
 }
@@ -40,7 +42,7 @@ impl DynamicLibraryError {
         ret match self {
             DynamicLibraryError.InvalidName(_) => "dynamic library path or symbol contains NUL",
             DynamicLibraryError.AllocationFailed => "dynamic library name allocation failed",
-            DynamicLibraryError.OpenFailed => "dynamic library could not be opened",
+            DynamicLibraryError.OpenFailed(_) => "dynamic library could not be opened",
             DynamicLibraryError.SymbolNotFound => "dynamic library symbol was not found",
             DynamicLibraryError.Native(_) => "native dynamic library operation failed",
         };
@@ -86,9 +88,9 @@ impl DynamicLibrary {
             @cfg(target_os = "windows") {
                 var code: i32 = 0;
                 unsafe { code = win32_core.last_error() as i32; }
-                ret Err(DynamicLibraryError.Native(code));
+                ret Err(DynamicLibraryError.OpenFailed(code));
             }
-            ret Err(DynamicLibraryError.OpenFailed);
+            ret Err(DynamicLibraryError.OpenFailed(0));
         }
         ret Ok(DynamicLibrary { handle: handle });
     }

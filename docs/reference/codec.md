@@ -115,6 +115,14 @@ Decode a JSON string holding an RFC 3339 timestamp (offsets are normalized
 to UTC). Non-strings are TypeMismatch; malformed or out-of-range text is
 InvalidValue.
 
+### `decode_system_time_with_limits`
+
+```quazi
+pub fn decode_system_time_with_limits(source: str, max_input: usize, max_depth: usize) Result[SystemTime, DecodeError]
+```
+
+Decodes an RFC 3339 timestamp string, with input size and nesting limits.
+
 ### `object_fields`
 
 ```quazi
@@ -188,6 +196,14 @@ pub fn decode_u64(source: str) Result[u64, DecodeError]
 
 Decodes a JSON non-negative integer as `u64`.
 
+### `decode_u64_with_limits`
+
+```quazi
+pub fn decode_u64_with_limits(source: str, max_input: usize, max_depth: usize) Result[u64, DecodeError]
+```
+
+Decodes like `decode_u64`, with input size and nesting limits.
+
 ### `decode_f64`
 
 ```quazi
@@ -195,6 +211,14 @@ pub fn decode_f64(source: str) Result[f64, DecodeError]
 ```
 
 Decodes a JSON number as `f64`.
+
+### `decode_f64_with_limits`
+
+```quazi
+pub fn decode_f64_with_limits(source: str, max_input: usize, max_depth: usize) Result[f64, DecodeError]
+```
+
+Decodes like `decode_f64`, with input size and nesting limits.
 
 ### `decode_i8`
 
@@ -204,6 +228,14 @@ pub fn decode_i8(source: str) Result[i8, DecodeError]
 
 Decodes a JSON integer as `i8`; one outside its range is InvalidValue.
 
+### `decode_i8_with_limits`
+
+```quazi
+pub fn decode_i8_with_limits(source: str, max_input: usize, max_depth: usize) Result[i8, DecodeError]
+```
+
+Decodes like `decode_i8`, with input size and nesting limits.
+
 ### `decode_i16`
 
 ```quazi
@@ -211,6 +243,14 @@ pub fn decode_i16(source: str) Result[i16, DecodeError]
 ```
 
 Decodes a JSON integer as `i16`; one outside its range is InvalidValue.
+
+### `decode_i16_with_limits`
+
+```quazi
+pub fn decode_i16_with_limits(source: str, max_input: usize, max_depth: usize) Result[i16, DecodeError]
+```
+
+Decodes like `decode_i16`, with input size and nesting limits.
 
 ### `decode_i32`
 
@@ -220,6 +260,14 @@ pub fn decode_i32(source: str) Result[i32, DecodeError]
 
 Decodes a JSON integer as `i32`; one outside its range is InvalidValue.
 
+### `decode_i32_with_limits`
+
+```quazi
+pub fn decode_i32_with_limits(source: str, max_input: usize, max_depth: usize) Result[i32, DecodeError]
+```
+
+Decodes like `decode_i32`, with input size and nesting limits.
+
 ### `decode_u8`
 
 ```quazi
@@ -227,6 +275,14 @@ pub fn decode_u8(source: str) Result[u8, DecodeError]
 ```
 
 Decodes a JSON integer as `u8`; one outside its range is InvalidValue.
+
+### `decode_u8_with_limits`
+
+```quazi
+pub fn decode_u8_with_limits(source: str, max_input: usize, max_depth: usize) Result[u8, DecodeError]
+```
+
+Decodes like `decode_u8`, with input size and nesting limits.
 
 ### `decode_u16`
 
@@ -236,6 +292,14 @@ pub fn decode_u16(source: str) Result[u16, DecodeError]
 
 Decodes a JSON integer as `u16`; one outside its range is InvalidValue.
 
+### `decode_u16_with_limits`
+
+```quazi
+pub fn decode_u16_with_limits(source: str, max_input: usize, max_depth: usize) Result[u16, DecodeError]
+```
+
+Decodes like `decode_u16`, with input size and nesting limits.
+
 ### `decode_u32`
 
 ```quazi
@@ -243,6 +307,14 @@ pub fn decode_u32(source: str) Result[u32, DecodeError]
 ```
 
 Decodes a JSON integer as `u32`; one outside its range is InvalidValue.
+
+### `decode_u32_with_limits`
+
+```quazi
+pub fn decode_u32_with_limits(source: str, max_input: usize, max_depth: usize) Result[u32, DecodeError]
+```
+
+Decodes like `decode_u32`, with input size and nesting limits.
 
 ### `decode_isize`
 
@@ -252,6 +324,14 @@ pub fn decode_isize(source: str) Result[isize, DecodeError]
 
 Decodes a JSON integer as `isize` (64-bit targets).
 
+### `decode_isize_with_limits`
+
+```quazi
+pub fn decode_isize_with_limits(source: str, max_input: usize, max_depth: usize) Result[isize, DecodeError]
+```
+
+Decodes like `decode_isize`, with input size and nesting limits.
+
 ### `decode_usize`
 
 ```quazi
@@ -260,6 +340,14 @@ pub fn decode_usize(source: str) Result[usize, DecodeError]
 
 Decodes a JSON non-negative integer as `usize` (64-bit targets).
 
+### `decode_usize_with_limits`
+
+```quazi
+pub fn decode_usize_with_limits(source: str, max_input: usize, max_depth: usize) Result[usize, DecodeError]
+```
+
+Decodes like `decode_usize`, with input size and nesting limits.
+
 ### `decode_f32`
 
 ```quazi
@@ -267,6 +355,14 @@ pub fn decode_f32(source: str) Result[f32, DecodeError]
 ```
 
 Decodes a JSON number as `f32`.
+
+### `decode_f32_with_limits`
+
+```quazi
+pub fn decode_f32_with_limits(source: str, max_input: usize, max_depth: usize) Result[f32, DecodeError]
+```
+
+Decodes like `decode_f32`, with input size and nesting limits.
 
 ### `optional_raw`
 

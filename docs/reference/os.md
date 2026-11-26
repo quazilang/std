@@ -183,7 +183,7 @@ Memory in bytes that can be allocated without swapping (Linux
 ### `current_dir`
 
 ```quazi
-pub fn current_dir() Result[String, fs.FsError]
+pub fn current_dir() Result[fs.Path, fs.FsError]
 ```
 
 The current working directory as an owned path; see fs.current_dir.

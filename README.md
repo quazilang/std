@@ -30,10 +30,17 @@ fractions before rounding. Pending or failing requirements receive no
 credit. These figures measure checklist coverage, not remaining effort
 or production readiness.
 
-On Linux, `qz test` passes all 101 standard-library tests, including the
+On Linux, `qz test` passes all 110 standard-library tests, including the
 TCP and UDP cases that need local sockets. `scripts/check_tls.py` runs the
 TLS client against a local TLS server (trusted and untrusted certificates,
 wrong host name, truncation).
+
+The public API follows one convention per concern since 2026-11-26
+(maintainer answer В35А): end of input is `Err(EndOfInput)`, error
+`message()` returns `str`, paths are `Path`, every scalar decoder has a
+`_with_limits` form. See the
+[migration note](https://github.com/quazilang/quazistrap/blob/main/docs/migrations/std-api-unification.md)
+(`stream.BufWriter` drop-flush is still pending).
 
 ## Modules Overview
 

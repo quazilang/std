@@ -68,6 +68,8 @@ pub enum TlsError {
     Closed,
     LimitExceeded,
     InvalidUtf8,
+    // The configuration is unusable (an empty CA file path).
+    InvalidConfig,
 }
 ```
 
@@ -100,11 +102,12 @@ Trust the operating system's certificate store.
 ### `TlsConfig.with_ca_file`
 
 ```quazi
-pub fn with_ca_file(path: str) TlsConfig
+pub fn with_ca_file(path: str) Result[TlsConfig, TlsError]
 ```
 
 Trust only the PEM certificates in `path` instead of the system store
-(for private certificate authorities).
+(for private certificate authorities). An empty path is InvalidConfig;
+use `system()` for the system store.
 
 ### `TlsConfig.ca_file`
 

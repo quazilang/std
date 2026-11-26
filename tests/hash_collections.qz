@@ -137,3 +137,12 @@ fn array_reserve_preserves_elements_and_reports_capacity_overflow() void {
     const second = values.get_ref(1);
     if (first[1] != 2 || second[0] != 3) { panic("elements after reservation"); }
 }
+
+@test
+fn hash_map_get_copies_a_copy_value() void {
+    var ages: HashMap[String, i32] = HashMap.new();
+    ages.insert(String.from("ann"), 31).unwrap();
+    const ann = String.from("ann");
+    const eve = String.from("eve");
+    if (ages.get(&ann).unwrap() != 31 || ages.get(&eve).is_some()) { panic("HashMap.get"); }
+}

@@ -95,7 +95,7 @@ Read a full line. The trailing newline is not included.
 pub fn readkey() Result[String, ReadError]
 ```
 
-Read one complete UTF-8 scalar value. EOF returns an empty String.
+Read one complete UTF-8 scalar value; Err(EndOfInput) at end of input.
 
 ### `copy`
 

@@ -96,6 +96,14 @@ impl HashMap[K, V] {
         ret None;
     }
 
+    // A copy of `key`'s value, or `None` (like `Map.get`). For values that
+    // own resources use `find` and `value_at`, which borrow instead.
+    pub fn get(self: &HashMap[K, V], key: &K) Option[V] {
+        const found: Option[usize] = self.find(key);
+        if (found.is_none()) { ret None; }
+        ret Some(self.values.get(found.unwrap()));
+    }
+
     // Whether the map has an entry for `key`.
     pub fn contains(self: &HashMap[K, V], key: &K) bool { ret self.find(key).is_some(); }
 

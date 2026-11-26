@@ -29,6 +29,14 @@ pub fn new(text: str) Path
 
 A path holding a copy of `text`.
 
+### `Path.from_string`
+
+```quazi
+pub fn from_string(text: String) Path
+```
+
+A path that takes ownership of `text` (no copy).
+
 ### `Path.as_str`
 
 ```quazi

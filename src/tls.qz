@@ -144,6 +144,8 @@ pub enum TlsError {
     Closed,
     LimitExceeded,
     InvalidUtf8,
+    // The configuration is unusable (an empty CA file path).
+    InvalidConfig,
 }
 
 impl TlsError {
@@ -163,6 +165,7 @@ impl TlsError {
             TlsError.Closed => "the TLS stream is closed",
             TlsError.LimitExceeded => "TLS response exceeded configured limit",
             TlsError.InvalidUtf8 => "TLS text was not valid UTF-8",
+            TlsError.InvalidConfig => "the TLS configuration is invalid (empty CA file path)",
         };
     }
 }
@@ -184,8 +187,12 @@ impl TlsConfig {
     pub fn system() TlsConfig { ret TlsConfig { ca_file: String.new() }; }
 
     // Trust only the PEM certificates in `path` instead of the system store
-    // (for private certificate authorities).
-    pub fn with_ca_file(path: str) TlsConfig { ret TlsConfig { ca_file: String.from(path) }; }
+    // (for private certificate authorities). An empty path is InvalidConfig;
+    // use `system()` for the system store.
+    pub fn with_ca_file(path: str) Result[TlsConfig, TlsError] {
+        if (path.is_empty()) { ret Err(TlsError.InvalidConfig); }
+        ret Ok(TlsConfig { ca_file: String.from(path) });
+    }
 
     // The CA file, or "" for the system store.
     pub fn ca_file(self: &TlsConfig) str { ret self.ca_file.as_str(); }
@@ -534,8 +541,10 @@ pub fn send_url(request: HttpRequest, url: Url) Result[HttpResponse, TlsError] {
 fn system_config_has_no_ca_file() void {
     const system: TlsConfig = TlsConfig.system();
     if (!system.ca_file().is_empty()) { panic("system trust store names a CA file"); }
-    const private: TlsConfig = TlsConfig.with_ca_file("/etc/ca.pem");
+    const private: TlsConfig = TlsConfig.with_ca_file("/etc/ca.pem").unwrap();
     if (private.ca_file() != "/etc/ca.pem") { panic("CA file was not kept"); }
+    const empty: bool = match TlsConfig.with_ca_file("") { Err(TlsError.InvalidConfig) => true, _ => false };
+    if (!empty) { panic("an empty CA path must be InvalidConfig"); }
 }
 
 @test

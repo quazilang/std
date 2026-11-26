@@ -50,10 +50,11 @@ pub const SEEK_END: i32 = 2;
 ### `current_dir`
 
 ```quazi
-pub fn current_dir() Result[String, FsError]
+pub fn current_dir() Result[Path, FsError]
 ```
 
-The process's current working directory as an owned path.
+The process's current working directory (В35А: a `Path`, like
+`canonicalize`; `.as_str()` gives the text).
 
 ### `set_current_dir`
 
@@ -127,7 +128,7 @@ Metadata of `path` itself: a symbolic link reports FileType.Symlink.
 ### `walk`
 
 ```quazi
-pub fn walk(root_path: str) Result[Array[String], FsError]
+pub fn walk(root_path: str) Result[Array[Path], FsError]
 ```
 
 Every entry below `root` as a path relative to it (`a`, `a/b.txt`, ...),

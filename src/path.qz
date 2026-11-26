@@ -76,6 +76,9 @@ impl Path {
     // A path holding a copy of `text`.
     pub fn new(text: str) Path { Path { text: String.from(text) } }
 
+    // A path that takes ownership of `text` (no copy).
+    pub fn from_string(text: String) Path { Path { text: text } }
+
     // The path as text.
     pub fn as_str(self: &Path) str { ret self.text.as_str(); }
 

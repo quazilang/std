@@ -16,15 +16,27 @@ pub enum IoError {
 }
 
 impl IoError {
-    // A short English description of the error, for display.
-    pub fn message(self: IoError) String {
+    // A short English description of the error, for display (a static
+    // text, like every std error's `message()`; `detail()` adds the native
+    // code or the `Other` text).
+    pub fn message(self: IoError) str {
         ret match self {
-            Closed => String.from("the stream is closed"),
-            WouldBlock => String.from("the operation would block"),
-            TimedOut => String.from("the operation timed out"),
-            Interrupted => String.from("the operation was interrupted"),
+            Closed => "the stream is closed",
+            WouldBlock => "the operation would block",
+            TimedOut => "the operation timed out",
+            Interrupted => "the operation was interrupted",
+            Native(_) => "native I/O error",
+            Other(_) => "I/O error",
+        };
+    }
+
+    // The full description: `message()` plus the native code, or the text
+    // of `Other`.
+    pub fn detail(self: IoError) String {
+        ret match self {
             Native(code) => "native I/O error {code}",
             Other(text) => text,
+            other => String.from(other.message()),
         };
     }
 }
@@ -219,6 +231,7 @@ impl BufWriter[W] {
 
     // The number of bytes waiting for `flush`.
     pub fn buffered(self: &BufWriter[W]) usize { ret self.buffer.len(); }
+
 
     // Pass the buffered bytes to `inner` without flushing it.
     fn drain(self: &BufWriter[W]!) Result[bool, IoError] {

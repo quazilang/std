@@ -67,7 +67,7 @@ fn main(args: Array[str]) i32 {
     var config: TlsConfig = TlsConfig.system();
     if (args.len() > 2) {
         const ca_file: str = args[2];
-        config = TlsConfig.with_ca_file(ca_file);
+        config = TlsConfig.with_ca_file(ca_file).unwrap();
     }
     if (args.len() > 3) {
         const port_text: str = args[3];

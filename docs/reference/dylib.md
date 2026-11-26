@@ -15,7 +15,9 @@ unsafe code, while this DynamicLibrary remains open.
 pub enum DynamicLibraryError {
     InvalidName(usize),
     AllocationFailed,
-    OpenFailed,
+    // The library could not be loaded: the system error code on Windows
+    // (GetLastError), 0 where the loader reports none (dlopen).
+    OpenFailed(i32),
     SymbolNotFound,
     Native(i32),
 }

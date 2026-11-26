@@ -52,6 +52,15 @@ pub fn find(self: &HashMap[K, V], key: &K) Option[usize]
 
 The position of `key`'s entry (for `key_at`/`value_at`), or `None`.
 
+### `HashMap.get`
+
+```quazi
+pub fn get(self: &HashMap[K, V], key: &K) Option[V]
+```
+
+A copy of `key`'s value, or `None` (like `Map.get`). For values that
+own resources use `find` and `value_at`, which borrow instead.
+
 ### `HashMap.contains`
 
 ```quazi
