@@ -70,8 +70,9 @@ Evidence: [src/fs.qz](../src/fs.qz).
   traverses depth first without following links; 2026-11-10).
 - [x] Bounded large-file reads.
 - [ ] Complete target-native large-file/partial-I/O matrix (sparse >4 GiB seek/write,
-  metadata length and 3-byte partial reads pass on Linux and on Windows under Wine in
-  quazistrap `scripts/check_linker_matrix.py`; native Windows pending, asks В13).
+  metadata length and 3-byte partial reads pass on Linux, on Windows under Wine and on
+  NetBSD 11.1 (2026-11-26, `--netbsd-run`) in quazistrap
+  `scripts/check_linker_matrix.py`; native Windows pending, asks В13).
 
 ### Operating-system APIs
 
