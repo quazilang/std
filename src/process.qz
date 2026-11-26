@@ -292,9 +292,9 @@ impl CStrings {
         unsafe {
             const copy: *u8 = c_copy(text);
             if (copy == 0) { panic("process argument allocation failed"); }
-            *((self.items + self.count * 8) as **u8) = copy;
+            *((self.items + self.count * 8) as **u8!) = copy;
             self.count = self.count + 1;
-            *((self.items + self.count * 8) as **u8) = 0;
+            *((self.items + self.count * 8) as **u8!) = 0;
         }
     }
 
@@ -339,7 +339,7 @@ impl CStrings {
                     core.free(*((self.items + index * 8) as **u8));
                     var move: usize = index;
                     for (move + 1 <= self.count) {
-                        *((self.items + move * 8) as **u8) = *((self.items + (move + 1) * 8) as **u8);
+                        *((self.items + move * 8) as **u8!) = *((self.items + (move + 1) * 8) as **u8);
                         move = move + 1;
                     }
                 }
@@ -363,7 +363,7 @@ impl CStrings {
 // A NUL-terminated copy of `text` (owned by the caller).
 unsafe fn c_copy(text: str) *u8 {
     const length: usize = text.bytes_len();
-    const copy: *u8 = core.malloc(length + 1);
+    const copy: *u8! = core.malloc(length + 1);
     if (copy == 0) { ret 0; }
     core.memcpy(copy, core.str_as_ptr(text), length);
     *(copy + length) = 0;
@@ -619,7 +619,7 @@ unsafe fn command_spawn_posix_with(command: &Command, lookup: bool, streams: *u8
                 }
             }
             if (failure == 0) { failure = -posix.execve(path.as_str(), argv, envp); }
-            *(pipe as *i32) = failure;
+            *(pipe as *i32!) = failure;
             posix.write(write_end, pipe, 4);
             posix.exit_child(127);
         }
@@ -654,7 +654,7 @@ fn posix_wait(handle: usize, no_hang: bool) Result[Option[ExitStatus], ProcessEr
     unsafe {
         const status: *u8 = core.malloc(8);
         if (status == 0) { ret Err(ProcessError.WaitFailed(12)); }
-        *(status as *i32) = 0;
+        *(status as *i32!) = 0;
         reaped = posix.waitpid(handle as i32, status as *i32, no_hang);
         raw = *(status as *i32);
         core.free(status);
@@ -708,7 +708,7 @@ fn command_output_posix(command: &Command) Result[Output, ProcessError] {
     var stdout: Array[u8] = Array.new();
     var stderr: Array[u8] = Array.new();
     var buffer: *u8 = 0;
-    var fds: *u8 = 0;
+    var fds: *u8! = 0;
     unsafe {
         buffer = core.malloc(65536);
         fds = core.malloc(16);
@@ -720,10 +720,10 @@ fn command_output_posix(command: &Command) Result[Output, ProcessError] {
         // negative fd is ignored.
         unsafe {
             core.memset(fds, 0, 16);
-            *(fds as *i32) = if out_open { out_fd } else { -1 };
-            *((fds + 4) as *i16) = 1;
-            *((fds + 8) as *i32) = if err_open { err_fd } else { -1 };
-            *((fds + 12) as *i16) = 1;
+            *(fds as *i32!) = if out_open { out_fd } else { -1 };
+            *((fds + 4) as *i16!) = 1;
+            *((fds + 8) as *i32!) = if err_open { err_fd } else { -1 };
+            *((fds + 12) as *i16!) = 1;
             posix.poll(fds, 2, -1);
         }
         var revents: i16 = 0;
@@ -767,7 +767,7 @@ fn windows_error() i32 {
 }
 
 // A growing NUL-terminated UTF-8 byte buffer (builds the Windows command line).
-struct ByteBuffer { data: *u8, length: usize, capacity: usize, }
+struct ByteBuffer { data: *u8!, length: usize, capacity: usize, }
 
 impl ByteBuffer {
     fn new() ByteBuffer { ByteBuffer { data: 0, length: 0, capacity: 0 } }
@@ -776,7 +776,7 @@ impl ByteBuffer {
         if (self.length + 2 > self.capacity) {
             var grown: usize = self.capacity * 2;
             if (grown < 64) { grown = 64; }
-            var data: *u8 = 0;
+            var data: *u8! = 0;
             unsafe { data = core.realloc(self.data, grown); }
             if (data == 0) { ret false; }
             self.data = data;
@@ -917,13 +917,13 @@ unsafe fn windows_utf16(text: *u8, length: usize) *u16 {
         units = win32_core.utf8_to_utf16(65001, 0, text, length as i32, none, 0);
         if (units <= 0) { ret none; }
     }
-    const wide = core.malloc(((units as usize) + 1) * 2) as *u16;
+    const wide = core.malloc(((units as usize) + 1) * 2) as *u16!;
     if (wide == 0) { ret wide; }
     if (length > 0) {
         win32_core.utf8_to_utf16(65001, 0, text, length as i32, wide, units);
     }
     // The terminator follows `units` UTF-16 code units (two bytes each).
-    *(((wide as *u8) + (units as usize) * 2) as *u16) = 0;
+    *(((wide as *u8) + (units as usize) * 2) as *u16!) = 0;
     ret wide;
 }
 
@@ -954,13 +954,13 @@ unsafe fn windows_spawn(program: str, exact: bool, arguments: &Array[str], direc
         if (command_line != 0 && startup != 0 && information != 0) {
             core.memset(startup, 0, 104);
             core.memset(information, 0, 24);
-            *(startup as *u32) = 104;
+            *(startup as *u32!) = 104;
             if (stdio != 0) {
                 // STARTF_USESTDHANDLES and hStdInput/Output/Error.
-                *((startup + 60) as *u32) = 256;
-                *((startup + 80) as *usize) = *(stdio as *usize);
-                *((startup + 88) as *usize) = *((stdio + 8) as *usize);
-                *((startup + 96) as *usize) = *((stdio + 16) as *usize);
+                *((startup + 60) as *u32!) = 256;
+                *((startup + 80) as *usize!) = *(stdio as *usize);
+                *((startup + 88) as *usize!) = *((stdio + 8) as *usize);
+                *((startup + 96) as *usize!) = *((stdio + 16) as *usize);
             }
             // Inherit the standard handles, like the Linux runtime.
             // A non-null `environment` is an ANSI block (no CREATE_UNICODE_ENVIRONMENT).
@@ -1033,8 +1033,8 @@ fn command_output_windows(command: &Command) Result[Output, ProcessError] {
         const stdio = core.malloc(24);
         if (attributes == 0 || stdio == 0) { ret Err(ProcessError.SpawnFailed(8)); }
         core.memset(attributes, 0, 24);
-        *(attributes as *u32) = 24;
-        *((attributes + 16) as *i32) = 1;
+        *(attributes as *u32!) = 24;
+        *((attributes + 16) as *i32!) = 1;
         if (win32_core.create_pipe(&out_read, &out_write, attributes, 0) == 0
             || win32_core.create_pipe(&err_read, &err_write, attributes, 0) == 0) {
             core.free(attributes);
@@ -1043,9 +1043,9 @@ fn command_output_windows(command: &Command) Result[Output, ProcessError] {
         }
         win32_core.set_handle_information(out_read, 1, 0);
         win32_core.set_handle_information(err_read, 1, 0);
-        *(stdio as *usize) = win32_core.get_std_handle(4294967286);
-        *((stdio + 8) as *usize) = out_write;
-        *((stdio + 16) as *usize) = err_write;
+        *(stdio as *usize!) = win32_core.get_std_handle(4294967286);
+        *((stdio + 8) as *usize!) = out_write;
+        *((stdio + 16) as *usize!) = err_write;
         var arguments: Array[str] = Array.new();
         for index : 0..command.arguments.count { arguments.push(command.arguments.get(index)); }
         spawned = windows_spawn(command.program.as_str(), false, &arguments, command.directory.as_str(), stdio, block.data);

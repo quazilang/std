@@ -44,7 +44,7 @@ fn write_text(fd: i32, s: str) isize {
     unsafe {
         if (fd == 1) { handle = win32_core.get_std_handle(4294967285); }
         else { handle = win32_core.get_std_handle(4294967284); }
-        mode = malloc(4) as *u32;
+        mode = malloc(4) as *u32!;
     }
     if (mode == 0) {
         var raw_result: isize = 0;
@@ -75,8 +75,8 @@ fn write_text(fd: i32, s: str) isize {
     var wide: *u16 = 0;
     var written: *u32 = 0;
     unsafe {
-        wide = malloc((wide_len as usize) * 2) as *u16;
-        written = malloc(4) as *u32;
+        wide = malloc((wide_len as usize) * 2) as *u16!;
+        written = malloc(4) as *u32!;
     }
     if (wide == 0 || written == 0) {
         unsafe {
@@ -234,7 +234,7 @@ pub enum ReadError {
 unsafe fn __io_begin_immediate_input() *u8 {
     // Linux x86-64 kernel termios occupies 36 bytes. Keep a full 64-byte
     // original plus a mutable copy so restoration is exact.
-    var state: *u8 = malloc(128);
+    var state: *u8! = malloc(128);
     if (state == 0) { ret 0; }
     if (linux.ioctl_ptr(0, 21505, state) != 0) { // TCGETS
         free(state);
@@ -245,7 +245,7 @@ unsafe fn __io_begin_immediate_input() *u8 {
         *(state + 64 + index) = *(state + index);
         index++;
     }
-    var current: *u8 = state + 64;
+    var current: *u8! = state + 64;
     // c_lflag low byte: clear ICANON (0x02) and ECHO (0x08).
     *(current + 12) = *(current + 12) & 245;
     // c_cc[VTIME] = 0, c_cc[VMIN] = 1.
@@ -273,7 +273,7 @@ unsafe fn __io_end_immediate_input(state: *u8) void { ret; }
 @cfg(target_os = "windows")
 unsafe fn __io_begin_immediate_input() *u8 {
     const handle: usize = win32_core.get_std_handle(4294967286);
-    var state: *u32 = malloc(4) as *u32;
+    var state: *u32 = malloc(4) as *u32!;
     if (state == 0) { ret 0; }
     if (win32_core.get_console_mode(handle, state) == 0) {
         free(state as *u8);
@@ -369,15 +369,15 @@ pub fn read(delimiter: str) Result[String, ReadError] {
 
     var cap: usize = 64;
     var len: usize = 0;
-    var buf: *u8 = 0;
+    var buf: *u8! = 0;
     unsafe { buf = malloc(cap); }
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 
     var input_state: *u8 = 0;
     // A CR that ended the previous read leaves a pending LF to skip; the
     // flag lives in the runtime state (+120) so it spans calls.
-    var pending_lf: *i64 = 0;
-    unsafe { pending_lf = (core.runtime_state() + 120) as *i64; }
+    var pending_lf: *i64! = 0;
+    unsafe { pending_lf = (core.runtime_state() + 120) as *i64!; }
     var skip_lf_after_cr: bool = false;
     unsafe { skip_lf_after_cr = *pending_lf != 0; *pending_lf = 0; }
     if (delimiter != "\n") {
@@ -394,7 +394,7 @@ pub fn read(delimiter: str) Result[String, ReadError] {
                 ret Err(ReadError.CapacityOverflow);
             }
             var new_cap: usize = cap * 2;
-            var new_buf: *u8 = 0;
+            var new_buf: *u8! = 0;
             unsafe { new_buf = realloc(buf, new_cap); }
             if (new_buf == 0) {
                 unsafe {
@@ -481,7 +481,7 @@ pub fn readln() Result[String, ReadError] {
 
 // Read one complete UTF-8 scalar value; Err(EndOfInput) at end of input.
 pub fn readkey() Result[String, ReadError] {
-    var buf: *u8 = 0;
+    var buf: *u8! = 0;
     unsafe { buf = malloc(5); }
     if (buf == 0) { ret Err(ReadError.AllocationFailed); }
 

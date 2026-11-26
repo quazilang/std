@@ -104,7 +104,7 @@ fn has_header(data: &Array[u8], at: usize) bool {
 // The bytes `data[start..end]` as text (empty unless valid UTF-8).
 fn bytes_text(data: &Array[u8], start: usize, end: usize) String {
     const length: usize = end - start;
-    var buffer: *u8 = 0;
+    var buffer: *u8! = 0;
     unsafe { buffer = core.malloc(length + 1); }
     if (buffer == 0) { ret String.new(); }
     var index: usize = 0;

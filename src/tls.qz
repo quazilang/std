@@ -356,7 +356,7 @@ pub struct TlsStream {
     // A fatal TLS error forbids sending close_notify.
     failed: bool,
     // The Schannel state block (Windows).
-    native: *u8,
+    native: *u8!,
 }
 
 impl TlsStream {
@@ -431,7 +431,7 @@ impl TlsStream {
             if (connected.is_err()) { ret Err(TlsError.Net(connected.unwrap_err())); }
             var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false, native: 0 };
             unsafe {
-                const state: *u8 = __schannel_state_new();
+                const state: *u8! = __schannel_state_new();
                 if (state == 0) { ret Err(TlsError.AllocationFailed); }
                 tls.native = state;
                 if (!__schannel_acquire(state)) { ret Err(TlsError.LibraryFailure); }
@@ -517,7 +517,7 @@ impl TlsStream {
 
     // Reads at most `length` bytes into `data`: the byte count, 0 after the
     // peer's close_notify, or an error.
-    unsafe fn __read(self: &TlsStream!, data: *u8, length: usize) Result[usize, TlsError] {
+    unsafe fn __read(self: &TlsStream!, data: *u8!, length: usize) Result[usize, TlsError] {
         if (self.session == 0) { ret Err(TlsError.Closed); }
         @cfg(target_os = "linux") {
             var chunk: usize = length;
@@ -530,7 +530,7 @@ impl TlsStream {
             ret Err(self.__protocol_error(code));
         }
         @cfg(target_os = "windows") {
-            const state: *u8 = self.native;
+            const state: *u8! = self.native;
             for (true) {
                 const available: usize = *((state + W_PLAIN_LENGTH) as *usize);
                 if (available > 0) {
@@ -538,8 +538,8 @@ impl TlsStream {
                     if (count > length) { count = length; }
                     const start: usize = *((state + W_PLAIN_START) as *usize);
                     core.memcpy(data, *((state + W_PLAIN) as **u8) + start, count);
-                    *((state + W_PLAIN_START) as *usize) = start + count;
-                    *((state + W_PLAIN_LENGTH) as *usize) = available - count;
+                    *((state + W_PLAIN_START) as *usize!) = start + count;
+                    *((state + W_PLAIN_LENGTH) as *usize!) = available - count;
                     ret Ok(count);
                 }
                 if (*(state + W_PEER_CLOSED) != 0) { ret Ok(0); }
@@ -558,7 +558,7 @@ impl TlsStream {
     // Returns "" after the peer closed the stream.
     pub fn receive(self: &TlsStream!, limit: usize) Result[String, TlsError] {
         if (limit == 0) { ret Ok(String.new()); }
-        var data: *u8 = 0;
+        var data: *u8! = 0;
         unsafe { data = core.malloc(limit + 1); }
         if (data == 0) { ret Err(TlsError.AllocationFailed); }
         var first: Result[usize, TlsError] = Ok(0);
@@ -599,7 +599,7 @@ impl TlsStream {
     // truncated response is never mistaken for a complete one.
     pub fn receive_all(self: &TlsStream!, limit: usize) Result[String, TlsError] {
         if (limit == 0) { ret Ok(String.new()); }
-        var data: *u8 = 0;
+        var data: *u8! = 0;
         unsafe { data = core.malloc(limit + 1); }
         if (data == 0) { ret Err(TlsError.AllocationFailed); }
         var length: usize = 0;
@@ -676,7 +676,7 @@ impl TlsStream {
 // `__restore_sigpipe`, or 0 when it cannot be allocated.
 @cfg(target_os = "linux")
 unsafe fn __block_sigpipe() *u8 {
-    const guard: *u8 = core.malloc(GUARD_BYTES);
+    const guard: *u8! = core.malloc(GUARD_BYTES);
     if (guard == 0) { ret guard; }
     core.memset(guard, 0, GUARD_BYTES);
     __sigemptyset(guard);
@@ -703,8 +703,8 @@ unsafe fn __restore_sigpipe(guard: *u8) void {
 
 // A zeroed Schannel state block with its input and plaintext buffers, or 0.
 @cfg(target_os = "windows")
-unsafe fn __schannel_state_new() *u8 {
-    const state: *u8 = core.malloc(W_STATE_BYTES);
+unsafe fn __schannel_state_new() *u8! {
+    const state: *u8! = core.malloc(W_STATE_BYTES);
     if (state == 0) { ret state; }
     core.memset(state, 0, W_STATE_BYTES);
     const input: *u8 = core.malloc(W_INPUT_CAPACITY);
@@ -715,8 +715,8 @@ unsafe fn __schannel_state_new() *u8 {
         core.free(state);
         ret 0;
     }
-    *((state + W_INPUT) as **u8) = input;
-    *((state + W_PLAIN) as **u8) = plain;
+    *((state + W_INPUT) as **u8!) = input;
+    *((state + W_PLAIN) as **u8!) = plain;
     ret state;
 }
 
@@ -733,28 +733,28 @@ unsafe fn __schannel_state_free(state: *u8) void {
 // Writes one SecBuffer (16 bytes) at `buffer`.
 @cfg(target_os = "windows")
 unsafe fn __sec_buffer(buffer: *u8, length: u32, kind: u32, data: *u8) void {
-    *(buffer as *u32) = length;
-    *((buffer + 4) as *u32) = kind;
-    *((buffer + 8) as **u8) = data;
+    *(buffer as *u32!) = length;
+    *((buffer + 4) as *u32!) = kind;
+    *((buffer + 8) as **u8!) = data;
 }
 
 // Writes a SecBufferDesc (16 bytes) at `descriptor` for `count` buffers.
 @cfg(target_os = "windows")
 unsafe fn __sec_buffer_desc(descriptor: *u8, count: u32, buffers: *u8) void {
-    *(descriptor as *u32) = 0;
-    *((descriptor + 4) as *u32) = count;
-    *((descriptor + 8) as **u8) = buffers;
+    *(descriptor as *u32!) = 0;
+    *((descriptor + 4) as *u32!) = count;
+    *((descriptor + 8) as **u8!) = buffers;
 }
 
 // Client credentials: TLS 1.2, verification done by `__schannel_verify`.
 @cfg(target_os = "windows")
-unsafe fn __schannel_acquire(state: *u8) bool {
-    const credential: *u8 = core.malloc(80);
+unsafe fn __schannel_acquire(state: *u8!) bool {
+    const credential: *u8! = core.malloc(80);
     if (credential == 0) { ret false; }
     core.memset(credential, 0, 80);
-    *(credential as *u32) = SCHANNEL_CRED_VERSION;
-    *((credential + 56) as *u32) = SP_PROT_TLS1_2_CLIENT;
-    *((credential + 72) as *u32) = SCHANNEL_CRED_FLAGS;
+    *(credential as *u32!) = SCHANNEL_CRED_VERSION;
+    *((credential + 56) as *u32!) = SP_PROT_TLS1_2_CLIENT;
+    *((credential + 72) as *u32!) = SCHANNEL_CRED_FLAGS;
     const expiry: *u8 = core.malloc(8);
     var package: CString = CString.try_from_str("Microsoft Unified Security Protocol Provider").unwrap();
     var status: i32 = -1;
@@ -793,7 +793,7 @@ unsafe fn __schannel_receive(state: *u8, socket: usize) bool {
     const input: *u8 = *((state + W_INPUT) as **u8);
     const count: i32 = win32_core.receive_socket(socket, input + length, (W_INPUT_CAPACITY - length) as i32, 0);
     if (count <= 0) { ret false; }
-    *((state + W_INPUT_LENGTH) as *usize) = length + count as usize;
+    *((state + W_INPUT_LENGTH) as *usize!) = length + count as usize;
     ret true;
 }
 
@@ -801,21 +801,21 @@ unsafe fn __schannel_receive(state: *u8, socket: usize) bool {
 // of the input buffer.
 @cfg(target_os = "windows")
 unsafe fn __schannel_keep_extra(state: *u8, extra: usize) void {
-    const input: *u8 = *((state + W_INPUT) as **u8);
+    const input: *u8! = (*((state + W_INPUT) as **u8)) as *u8!;
     const length: usize = *((state + W_INPUT_LENGTH) as *usize);
     if (extra > 0 && extra <= length) { core.memmove(input, input + (length - extra), extra); }
-    if (extra > length) { *((state + W_INPUT_LENGTH) as *usize) = 0; ret; }
-    *((state + W_INPUT_LENGTH) as *usize) = extra;
+    if (extra > length) { *((state + W_INPUT_LENGTH) as *usize!) = 0; ret; }
+    *((state + W_INPUT_LENGTH) as *usize!) = extra;
 }
 
 // Runs (or, with `first` false, continues) the client handshake on
 // `socket`: SEC_E_OK, a Schannel status, or SCHANNEL_TRANSPORT_FAILED.
 // Bytes that follow the handshake stay in the input buffer.
 @cfg(target_os = "windows")
-unsafe fn __schannel_handshake(state: *u8, socket: usize, host: *c_char, first: bool) i32 {
+unsafe fn __schannel_handshake(state: *u8!, socket: usize, host: *c_char, first: bool) i32 {
     // Two input buffers, one output buffer, two descriptors, attributes and
     // the expiry time.
-    const scratch: *u8 = core.malloc(112);
+    const scratch: *u8! = core.malloc(112);
     if (scratch == 0) { ret SCHANNEL_TRANSPORT_FAILED; }
     var initial: bool = first;
     var result: i32 = SCHANNEL_TRANSPORT_FAILED;
@@ -877,9 +877,9 @@ unsafe fn __schannel_sizes(state: *u8) bool {
     const sizes: *u8 = core.malloc(20);
     if (sizes == 0) { ret false; }
     const status: i32 = __query_context(state + W_CONTEXT, SECPKG_ATTR_STREAM_SIZES, sizes);
-    *((state + W_HEADER) as *u32) = *(sizes as *u32);
-    *((state + W_TRAILER) as *u32) = *((sizes + 4) as *u32);
-    *((state + W_MAXIMUM) as *u32) = *((sizes + 8) as *u32);
+    *((state + W_HEADER) as *u32!) = *(sizes as *u32);
+    *((state + W_TRAILER) as *u32!) = *((sizes + 4) as *u32);
+    *((state + W_MAXIMUM) as *u32!) = *((sizes + 8) as *u32);
     core.free(sizes);
     ret status == SEC_E_OK && *((state + W_MAXIMUM) as *u32) > 0;
 }
@@ -891,7 +891,7 @@ unsafe fn __schannel_send(state: *u8, socket: usize, data: *u8, length: usize) i
     const header: usize = (*((state + W_HEADER) as *u32)) as usize;
     const trailer: usize = (*((state + W_TRAILER) as *u32)) as usize;
     const maximum: usize = (*((state + W_MAXIMUM) as *u32)) as usize;
-    const record: *u8 = core.malloc(header + maximum + trailer);
+    const record: *u8! = core.malloc(header + maximum + trailer);
     const scratch: *u8 = core.malloc(80);
     var result: i32 = SEC_E_OK;
     if (record == 0 || scratch == 0) { result = SCHANNEL_TRANSPORT_FAILED; }
@@ -923,7 +923,7 @@ unsafe fn __schannel_send(state: *u8, socket: usize, data: *u8, length: usize) i
 // SCHANNEL_TRANSPORT_FAILED (including a connection cut without
 // close_notify).
 @cfg(target_os = "windows")
-unsafe fn __schannel_decrypt(state: *u8, socket: usize) i32 {
+unsafe fn __schannel_decrypt(state: *u8!, socket: usize) i32 {
     const scratch: *u8 = core.malloc(80);
     if (scratch == 0) { ret SCHANNEL_TRANSPORT_FAILED; }
     var result: i32 = SCHANNEL_TRANSPORT_FAILED;
@@ -961,9 +961,9 @@ unsafe fn __schannel_decrypt(state: *u8, socket: usize) i32 {
                 var count: usize = (*(buffer as *u32)) as usize;
                 // A TLS 1.2 record holds at most 16 KiB; never overflow.
                 if (count > W_PLAIN_CAPACITY) { count = 0; oversized = true; }
-                core.memcpy(*((state + W_PLAIN) as **u8), *((buffer + 8) as **u8), count);
-                *((state + W_PLAIN_START) as *usize) = 0;
-                *((state + W_PLAIN_LENGTH) as *usize) = count;
+                core.memcpy((*((state + W_PLAIN) as **u8)) as *u8!, *((buffer + 8) as **u8), count);
+                *((state + W_PLAIN_START) as *usize!) = 0;
+                *((state + W_PLAIN_LENGTH) as *usize!) = count;
                 decrypted = count;
             }
             if (kind == SECBUFFER_EXTRA) { extra = (*(buffer as *u32)) as usize; }
@@ -989,10 +989,10 @@ unsafe fn __schannel_decrypt(state: *u8, socket: usize) i32 {
 // Sends the close_notify alert (best effort).
 @cfg(target_os = "windows")
 unsafe fn __schannel_close_notify(state: *u8, socket: usize) void {
-    const scratch: *u8 = core.malloc(96);
+    const scratch: *u8! = core.malloc(96);
     if (scratch == 0) { ret; }
     core.memset(scratch, 0, 96);
-    *((scratch + 80) as *u32) = SCHANNEL_SHUTDOWN;
+    *((scratch + 80) as *u32!) = SCHANNEL_SHUTDOWN;
     __sec_buffer(scratch, 4, SECBUFFER_TOKEN, scratch + 80);
     __sec_buffer_desc(scratch + 16, 1, scratch);
     if (__apply_control_token(state + W_CONTEXT, scratch + 16) == SEC_E_OK) {
@@ -1039,7 +1039,7 @@ unsafe fn __add_pem_certificates(store: *u8, pem: str) usize {
         const finish: usize = __find_bytes(text, length, position, end);
         if (finish == length) { break; }
         const block: usize = finish + end.bytes_len() - position;
-        const size: *u32 = core.malloc(4) as *u32;
+        const size: *u32! = core.malloc(4) as *u32!;
         if (size == 0) { break; }
         *size = 0;
         // CRYPT_STRING_BASE64HEADER: the block with its BEGIN/END lines.
@@ -1072,15 +1072,15 @@ unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, Tl
     }
     // Certificate slot, chain slot, chain parameters (32), policy extra (24),
     // policy parameters (16), policy status (24).
-    const scratch: *u8 = core.malloc(112);
-    const wide: *u16 = core.malloc(host.bytes_len() * 2 + 2) as *u16;
+    const scratch: *u8! = core.malloc(112);
+    const wide: *u16! = core.malloc(host.bytes_len() * 2 + 2) as *u16!;
     if (scratch == 0 || wide == 0) {
         if (scratch != 0) { core.free(scratch); }
         if (wide != 0) { core.free(wide as *u8); }
         ret Err(TlsError.AllocationFailed);
     }
     core.memset(scratch, 0, 112);
-    core.memset(wide as *u8, 0, host.bytes_len() * 2 + 2);
+    core.memset(wide as *u8!, 0, host.bytes_len() * 2 + 2);
     win32_core.utf8_to_utf16(65001, 0, core.str_as_ptr(host), host.bytes_len() as i32, wide, host.bytes_len() as i32);
     var result: Result[bool, TlsError] = Ok(true);
     var authorities: *u8 = 0;
@@ -1111,7 +1111,7 @@ unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, Tl
     }
     var checks: u32 = 0;
     if (result.is_ok()) {
-        *((scratch + 16) as *u32) = 32;
+        *((scratch + 16) as *u32!) = 32;
         if (__cert_get_chain(0, certificate, 0, additional, scratch + 16, 0, 0, scratch + 8) == 0) {
             result = Err(TlsError.UntrustedCertificate(-1));
         } else {
@@ -1141,15 +1141,15 @@ unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, Tl
     }
     if (result.is_ok()) {
         const extra: *u8 = scratch + 48;
-        *(extra as *u32) = 24;
-        *((extra + 4) as *u32) = AUTHTYPE_SERVER;
-        *((extra + 8) as *u32) = checks;
-        *((extra + 16) as **u16) = wide;
+        *(extra as *u32!) = 24;
+        *((extra + 4) as *u32!) = AUTHTYPE_SERVER;
+        *((extra + 8) as *u32!) = checks;
+        *((extra + 16) as **u16!) = wide;
         const parameters: *u8 = scratch + 72;
-        *(parameters as *u32) = 16;
-        *((parameters + 8) as **u8) = extra;
+        *(parameters as *u32!) = 16;
+        *((parameters + 8) as **u8!) = extra;
         const status: *u8 = scratch + 88;
-        *(status as *u32) = 24;
+        *(status as *u32!) = 24;
         if (__cert_verify_policy(CERT_CHAIN_POLICY_SSL, chain, parameters, status) == 0) {
             result = Err(TlsError.UntrustedCertificate(-1));
         } else {
@@ -1172,7 +1172,7 @@ unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, Tl
 
 // Validates `length` received bytes at `data` (capacity `limit + 1`) and
 // takes ownership of the buffer as a String.
-unsafe fn __finish_text(data: *u8, length: usize, limit: usize) Result[String, TlsError] {
+unsafe fn __finish_text(data: *u8!, length: usize, limit: usize) Result[String, TlsError] {
     if (!core.is_valid_utf8(data, length)) {
         core.free(data);
         ret Err(TlsError.InvalidUtf8);

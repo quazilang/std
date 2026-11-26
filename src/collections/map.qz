@@ -30,7 +30,7 @@ impl Map {
     pub fn new() Result[Map, MapError] {
         var keys:  *u8 = 0;
         var vals:  *u8 = 0;
-        var flags: *u8 = 0;
+        var flags: *u8! = 0;
         unsafe {
             keys  = core.malloc(128);
             if (keys == 0) { ret Err(MapError.AllocationFailed); }
@@ -197,7 +197,7 @@ impl Map {
         var new_cap: usize = self.cap * 2;
         var new_keys:  *u8 = 0;
         var new_vals:  *u8 = 0;
-        var new_flags: *u8 = 0;
+        var new_flags: *u8! = 0;
         unsafe {
             new_keys  = core.malloc(new_cap * 8);
             if (new_keys == 0) { ret Err(MapError.AllocationFailed); }

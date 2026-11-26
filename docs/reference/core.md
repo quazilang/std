@@ -169,7 +169,7 @@ The Windows product type code (0 elsewhere).
 ### `malloc`
 
 ```quazi
-pub fn malloc(size: usize) *u8
+pub fn malloc(size: usize) *u8!
 ```
 
 Returns pointer to allocated heap block, or null on failure.
@@ -185,7 +185,7 @@ Frees memory from `malloc`.
 ### `realloc`
 
 ```quazi
-pub fn realloc(ptr: *u8, size: usize) *u8
+pub fn realloc(ptr: *u8, size: usize) *u8!
 ```
 
 Returns pointer to resized block (may differ from ptr), or null on failure.
@@ -193,7 +193,7 @@ Returns pointer to resized block (may differ from ptr), or null on failure.
 ### `runtime_state`
 
 ```quazi
-pub fn runtime_state() *u8
+pub fn runtime_state() *u8!
 ```
 
 The process runtime state block (128 bytes, zero-initialized); the
@@ -202,7 +202,7 @@ environment owns +104 and +112 (quazistrap docs/internals/runtime-state.md).
 ### `memcpy`
 
 ```quazi
-pub fn memcpy(dst: *u8, src: *u8, n: usize) *u8
+pub fn memcpy(dst: *u8!, src: *u8, n: usize) *u8!
 ```
 
 Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
@@ -210,7 +210,7 @@ Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
 ### `memset`
 
 ```quazi
-pub fn memset(ptr: *u8, val: i32, n: usize) *u8
+pub fn memset(ptr: *u8!, val: i32, n: usize) *u8!
 ```
 
 Fills `n` bytes at `ptr` with `val`; returns `ptr`.
@@ -218,7 +218,7 @@ Fills `n` bytes at `ptr` with `val`; returns `ptr`.
 ### `memmove`
 
 ```quazi
-pub fn memmove(dst: *u8, src: *u8, n: usize) *u8
+pub fn memmove(dst: *u8!, src: *u8, n: usize) *u8!
 ```
 
 Copies `n` bytes from `src` to `dst`, allowing overlap; returns `dst`.

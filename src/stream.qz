@@ -57,7 +57,7 @@ pub fn would_block_error() IoError { ret IoError.WouldBlock; }
 // `core.free`.
 pub unsafe fn packed_bytes(data: &Array[u8]) *u8 {
     const length: usize = data.len();
-    var buffer: *u8 = core.malloc(length + 1);
+    var buffer: *u8! = core.malloc(length + 1);
     if (buffer == 0) { ret buffer; }
     var index: usize = 0;
     for (index < length) {

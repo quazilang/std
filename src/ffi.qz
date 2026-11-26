@@ -122,7 +122,7 @@ impl CString {
             }
         }
 
-        var raw: *u8 = 0;
+        var raw: *u8! = 0;
         unsafe {
             raw = core.malloc(length + 1);
             if (raw == 0) {
@@ -144,7 +144,7 @@ impl CString {
             }
         }
 
-        var raw: *u8 = 0;
+        var raw: *u8! = 0;
         unsafe {
             raw = core.malloc(length + 1);
             if (raw == 0) {
@@ -162,7 +162,7 @@ impl CString {
     // Keep this constructor explicit and unsafe rather than claiming it is checked.
     pub unsafe fn from_unchecked(text: str) CString {
         var length: usize = core.strlen(text);
-        var raw: *u8 = 0;
+        var raw: *u8! = 0;
         raw = core.malloc(length + 1);
         if (raw == 0) { panic("CString.from_unchecked: out of memory"); }
         for i : 0..length {

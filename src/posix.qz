@@ -10,7 +10,7 @@ import std.netbsd;
 // The current Linux environment: a null-terminated array of `NAME=VALUE`
 // C string pointers. Arrays are never freed, so it stays readable.
 pub unsafe fn linux_environment() *u8 {
-    ret *((core.runtime_state() + 112) as **u8);
+    ret *((core.runtime_state() + 112) as **u8!);
 }
 
 // Fill buf with the current working directory path (null-terminated).

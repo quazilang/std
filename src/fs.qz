@@ -166,7 +166,7 @@ fn current_dir_round_trips_through_set_current_dir() void {
 // Private ownership adapters keep raw buffers and directory handles inside the
 // same automatic-destruction model exposed by File and String.
 struct FsRawBuffer {
-    data: *u8,
+    data: *u8!,
 }
 
 impl FsRawBuffer {
@@ -531,7 +531,7 @@ pub fn read_to_string_with_limit(path: str, max_bytes: usize) Result[String, FsE
     for (true) {
         if (length == capacity) {
             capacity = capacity * 2;
-            var grown: *u8 = 0;
+            var grown: *u8! = 0;
             unsafe { grown = core.realloc(buffer.data, capacity + 1); }
             if (grown == 0) { ret Err(FsError.AllocationFailed); }
             buffer.data = grown;
@@ -815,7 +815,7 @@ fn buffer_size() usize { 65536 }
 // Every line must be valid UTF-8.
 pub struct LineReader {
     file: File,
-    buffer: *u8,
+    buffer: *u8!,
     start: usize,
     end: usize,
     done: bool,
@@ -825,7 +825,7 @@ impl LineReader {
     // Opens `path` for reading line by line with `read_line`.
     pub fn open(path: str) Result[LineReader, FsError] {
         const file: File = File.open(path)?;
-        var buffer: *u8 = 0;
+        var buffer: *u8! = 0;
         unsafe { buffer = core.malloc(buffer_size()); }
         if (buffer == 0) { ret Err(FsError.AllocationFailed); }
         Ok(LineReader { file: file, buffer: buffer, start: 0, end: 0, done: false })
@@ -833,7 +833,7 @@ impl LineReader {
 
     // The next line without its terminator, or None at the end of the file.
     pub fn read_line(self: &LineReader!) Result[Option[String], FsError] {
-        var line: *u8 = 0;
+        var line: *u8! = 0;
         var length: usize = 0;
         var capacity: usize = 0;
         var found: bool = false;
@@ -923,7 +923,7 @@ impl LineReader {
 // left (ignoring errors, like closing a file) and closes the file.
 pub struct BufferedWriter {
     file: File,
-    buffer: *u8,
+    buffer: *u8!,
     used: usize,
 }
 
@@ -931,7 +931,7 @@ impl BufferedWriter {
     // Creates or truncates `path` for buffered writing.
     pub fn create(path: str) Result[BufferedWriter, FsError] {
         const file: File = File.create(path)?;
-        var buffer: *u8 = 0;
+        var buffer: *u8! = 0;
         unsafe { buffer = core.malloc(buffer_size()); }
         if (buffer == 0) { ret Err(FsError.AllocationFailed); }
         Ok(BufferedWriter { file: file, buffer: buffer, used: 0 })
@@ -973,7 +973,7 @@ impl BufferedWriter {
     // bytes not yet written stay buffered for a later flush.
     pub fn flush(self: &BufferedWriter!) Result[bool, FsError] {
         const pending: usize = self.used;
-        const data: *u8 = self.buffer;
+        const data: *u8! = self.buffer;
         var offset: usize = 0;
         for (offset < pending) {
             var written: isize = 0;
@@ -1254,7 +1254,7 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
         unsafe { fd = linux.open(path, 2621440, 0); }
         if (fd < 0) { ret Err(fs_error(fd)); }
         const link: String = "/proc/self/fd/{fd}";
-        var buffer: *u8 = 0;
+        var buffer: *u8! = 0;
         unsafe { buffer = core.malloc(4097); }
         if (buffer == 0) {
             unsafe { linux.close(fd); }
@@ -1278,7 +1278,7 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
         ret Ok(Path.new(text.as_str()));
     }
     @cfg(target_os = "netbsd") {
-        var buffer: *u8 = 0;
+        var buffer: *u8! = 0;
         unsafe { buffer = core.malloc(1025); }
         if (buffer == 0) { ret Err(FsError.AllocationFailed); }
         var status: i32 = 0;
@@ -1299,7 +1299,7 @@ pub fn canonicalize(path: str) Result[Path, FsError] {
     }
     @cfg(target_os = "windows") {
         if (!exists(path)) { ret Err(FsError.NotFound); }
-        var buffer: *u8 = 0;
+        var buffer: *u8! = 0;
         unsafe { buffer = core.malloc(32768); }
         if (buffer == 0) { ret Err(FsError.AllocationFailed); }
         const text: String = String.from(path);

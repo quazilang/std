@@ -94,7 +94,7 @@ pub fn windows_product() u32;
 
 // Returns pointer to allocated heap block, or null on failure.
 @intrinsic("quazi.malloc")
-pub unsafe fn malloc(size: usize) *u8;
+pub unsafe fn malloc(size: usize) *u8!;
 
 // Frees memory from `malloc`.
 @intrinsic("quazi.free")
@@ -102,24 +102,24 @@ pub unsafe fn free(ptr: *u8) void;
 
 // Returns pointer to resized block (may differ from ptr), or null on failure.
 @intrinsic("quazi.realloc")
-pub unsafe fn realloc(ptr: *u8, size: usize) *u8;
+pub unsafe fn realloc(ptr: *u8, size: usize) *u8!;
 
 // The process runtime state block (128 bytes, zero-initialized); the
 // environment owns +104 and +112 (quazistrap docs/internals/runtime-state.md).
 @intrinsic("quazi.runtime.state")
-pub unsafe fn runtime_state() *u8;
+pub unsafe fn runtime_state() *u8!;
 
 // Copies `n` bytes from `src` to `dst` (non-overlapping); returns `dst`.
 @intrinsic("quazi.memcpy")
-pub unsafe fn memcpy(dst: *u8, src: *u8, n: usize) *u8;
+pub unsafe fn memcpy(dst: *u8!, src: *u8, n: usize) *u8!;
 
 // Fills `n` bytes at `ptr` with `val`; returns `ptr`.
 @intrinsic("quazi.memset")
-pub unsafe fn memset(ptr: *u8, val: i32, n: usize) *u8;
+pub unsafe fn memset(ptr: *u8!, val: i32, n: usize) *u8!;
 
 // Copies `n` bytes from `src` to `dst`, allowing overlap; returns `dst`.
 @intrinsic("quazi.memmove")
-pub unsafe fn memmove(dst: *u8, src: *u8, n: usize) *u8;
+pub unsafe fn memmove(dst: *u8!, src: *u8, n: usize) *u8!;
 
 // Compares `n` bytes: negative, zero or positive like C `memcmp`.
 @intrinsic("quazi.memcmp")
@@ -267,7 +267,7 @@ fn atomic_add_and_cas_update_shared_memory() void {
     unsafe {
         const cell: *u8 = malloc(8);
         if (cell == 0) { panic("allocation failed"); }
-        *(cell as *i64) = 40;
+        *(cell as *i64!) = 40;
         if (atomic_add(cell as *i64, 2) != 40) { panic("atomic_add must return the previous value"); }
         if (atomic_cas(cell as *i64, 42, 100) != 42) { panic("successful cas must return the expected value"); }
         if (atomic_cas(cell as *i64, 42, 7) != 100) { panic("failed cas must return the current value"); }

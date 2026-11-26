@@ -96,7 +96,7 @@ pub struct JoinHandle[T] {
 unsafe fn __run_closure[T](block: *u8) void {
     const f: fn() T = *(block as *fn() T);
     const value: T = f();
-    *((block + 16) as *T) = value;
+    *((block + 16) as *T!) = value;
 }
 
 @export("__quazi_std_thread_body")
@@ -109,7 +109,7 @@ pub unsafe fn __thread_body(block: *u8) void {
 pub unsafe fn __thread_entry(block: *u8) *u8 {
     // A panic inside returns here instead of ending the process.
     if (__qo_isolate(__thread_body, block, __thread_tag())) {
-        *((block + 24) as *i64) = 1;
+        *((block + 24) as *i64!) = 1;
         // The panic abandoned the frames that own the runner closure
         // (`__thread_body`) and the user closure (`__run_closure`) before
         // they released them.
@@ -121,15 +121,15 @@ pub unsafe fn __thread_entry(block: *u8) *u8 {
 
 // Run `f` on a new OS thread.
 pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError] {
-    var block: *u8 = 0;
+    var block: *u8! = 0;
     var handle: usize = 0;
     unsafe {
         block = core.malloc(40);
         if (block == 0) { ret Err(ThreadError.CreationFailed); }
         core.memset(block, 0, 40);
-        *(block as *fn() T) = f;
+        *(block as *fn() T!) = f;
         const runner: fn(*u8) void = |b| __run_closure[T](b);
-        *((block + 8) as *fn(*u8) void) = runner;
+        *((block + 8) as *fn(*u8) void!) = runner;
         handle = thread_spawn_arg(__thread_entry, block);
         if (handle == 0) {
             core.free(*((block + 8) as **u8));
@@ -213,7 +213,7 @@ unsafe fn __alloc_cell(value: i64) *u8 {
     unsafe {
         cell = core.malloc(8);
         if (cell == 0) { panic("atomic cell allocation failed"); }
-        *(cell as *i64) = value;
+        *(cell as *i64!) = value;
     }
     cell
 }

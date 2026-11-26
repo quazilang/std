@@ -12,7 +12,7 @@ import std.fs.FsError;
 import ./os_memory;
 
 struct OsRawBuffer {
-    data: *u8,
+    data: *u8!,
 }
 
 impl OsRawBuffer {
@@ -174,7 +174,7 @@ pub fn args() Result[Array[String], fs.FsError] {
             var end: usize = start;
             unsafe { for (end < length && *(buffer + end) != 0) { end = end + 1; } }
             const size: usize = end - start;
-            var copy: *u8 = 0;
+            var copy: *u8! = 0;
             unsafe {
                 copy = core.malloc(size + 1);
                 if (copy == 0) { core.free(buffer); ret Err(FsError.AllocationFailed); }
@@ -196,7 +196,7 @@ pub fn args() Result[Array[String], fs.FsError] {
         // The startup keeps `ps_strings` at runtime state +96: argv at +0,
         // argc at +8 (docs/internals/runtime-state.md).
         unsafe {
-            const strings: *u8 = *((core.runtime_state() + 96) as **u8);
+            const strings: *u8 = *((core.runtime_state() + 96) as **u8!);
             if (strings == 0) { ret Ok(values); }
             const argv: *u8 = *(strings as **u8);
             const argc: i32 = *((strings + 8) as *i32);
@@ -343,7 +343,7 @@ unsafe fn env_c_text(prefix: str, separator: bool, suffix: str) *u8 {
     const head: usize = prefix.bytes_len();
     var total: usize = head;
     if (separator) { total = total + 1 + suffix.bytes_len(); }
-    const text: *u8 = core.malloc(total + 1);
+    const text: *u8! = core.malloc(total + 1);
     if (text == 0) { ret 0; }
     core.memcpy(text, core.str_as_ptr(prefix), head);
     if (separator) {
@@ -369,7 +369,7 @@ unsafe fn env_entry_named(entry: *u8, name: str) bool {
 // Writers serialize on a spin lock; readers
 // see the old or the new complete array (docs/internals/runtime-state.md).
 unsafe fn linux_change_env(name: str, value: str, remove: bool) Result[bool, EnvError] {
-    const lock: *i64 = (core.runtime_state() + 104) as *i64;
+    const lock: *i64 = (core.runtime_state() + 104) as *i64!;
     for (core.atomic_cas(lock, 0, 1) != 0) { yield_cpu(); }
     const current: *u8 = posix.linux_environment();
     var count: usize = 0;
@@ -389,7 +389,7 @@ unsafe fn linux_change_env(name: str, value: str, remove: bool) Result[bool, Env
         if (env_entry_named(entry, name)) {
             found = true;
         } else {
-            *((replacement + kept * 8) as **u8) = entry;
+            *((replacement + kept * 8) as **u8!) = entry;
             kept = kept + 1;
         }
         index = index + 1;
@@ -401,12 +401,12 @@ unsafe fn linux_change_env(name: str, value: str, remove: bool) Result[bool, Env
             core.atomic_cas(lock, 1, 0);
             ret Err(EnvError.AllocationFailed);
         }
-        *((replacement + kept * 8) as **u8) = entry;
+        *((replacement + kept * 8) as **u8!) = entry;
         kept = kept + 1;
     }
-    *((replacement + kept * 8) as **u8) = 0;
+    *((replacement + kept * 8) as **u8!) = 0;
     // One aligned 8-byte store publishes the array; only lock holders write it.
-    *((core.runtime_state() + 112) as **u8) = replacement;
+    *((core.runtime_state() + 112) as **u8!) = replacement;
     core.atomic_cas(lock, 1, 0);
     if (remove) { ret Ok(found); }
     ret Ok(true);
