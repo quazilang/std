@@ -10,6 +10,11 @@ Programs that call into this module must link those libraries and libc:
     libc = true
     libraries = ["ssl", "crypto"]
 
+Windows uses Schannel (SSPI, secur32) for TLS 1.2 and verifies the
+server itself through the certificate chain API (crypt32): the system
+store, or only the PEM certificates of the CA file (maintainer answer
+В32А).
+
 Certificate and host-name verification are always on; TLS 1.2 is the
 minimum protocol version. Other targets return `TlsError.Unsupported`.
 

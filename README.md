@@ -33,7 +33,8 @@ or production readiness.
 On Linux, `qz test` passes all 110 standard-library tests, including the
 TCP and UDP cases that need local sockets. `scripts/check_tls.py` runs the
 TLS client against a local TLS server (trusted and untrusted certificates,
-wrong host name, truncation).
+wrong host name, truncation); with `--wine` it runs the Windows (Schannel) client
+under Wine too.
 
 The public API follows one convention per concern since 2026-11-26
 (maintainer answer В35А): end of input is `Err(EndOfInput)`, error
@@ -58,7 +59,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `math`: Lightweight dependency-free `f64` roots, trigonometry, logarithms, and powers.
 - `random`: Secure values, integer ranges, collection choice/shuffling, and random bytes.
 - `net`: Networking and sockets.
-- `tls`: TLS client streams and HTTPS over the system TLS library (Linux).
+- `tls`: TLS client streams and HTTPS over the system TLS library (OpenSSL on Linux, Schannel on Windows).
 - `os`: Cross-platform host, memory, process, and environment information and changes.
 - `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
 - `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).

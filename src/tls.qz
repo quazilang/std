@@ -8,11 +8,18 @@
 //     libc = true
 //     libraries = ["ssl", "crypto"]
 //
+// Windows uses Schannel (SSPI, secur32) for TLS 1.2 and verifies the
+// server itself through the certificate chain API (crypt32): the system
+// store, or only the PEM certificates of the CA file (maintainer answer
+// В32А).
+//
 // Certificate and host-name verification are always on; TLS 1.2 is the
 // minimum protocol version. Other targets return `TlsError.Unsupported`.
 import std.core;
+import std.fs;
 import std.ffi.{c_char, CString, CStringError, nullptr};
 import std.net.{NetError, TcpStream, HttpRequest, HttpResponse, Url};
+import std.win32_core;
 
 @cfg(target_os = "linux")
 @api("TLS_client_method")
@@ -92,6 +99,126 @@ unsafe fn __sigtimedwait(set: *u8, info: *u8, timeout: *u8) i32;
 @cfg(target_os = "linux")
 @api("pthread_sigmask")
 unsafe fn __pthread_sigmask(how: i32, set: *u8, previous: *u8) i32;
+
+// Schannel (sspi.h, schannel.h) and certificate chain (wincrypt.h) calls.
+@cfg(target_os = "windows")
+@api("AcquireCredentialsHandleA")
+unsafe fn __acquire_credentials(principal: *u8, package: *c_char, usage: u32, logon: *u8,
+    auth: *u8, get_key: usize, key_argument: *u8, credential: *u8, expiry: *u8) i32;
+@cfg(target_os = "windows")
+@api("InitializeSecurityContextA")
+unsafe fn __initialize_context(credential: *u8, context: *u8, target: *c_char, flags: u32,
+    reserved: u32, representation: u32, input: *u8, reserved2: u32, new_context: *u8,
+    output: *u8, attributes: *u32, expiry: *u8) i32;
+@cfg(target_os = "windows")
+@api("DeleteSecurityContext")
+unsafe fn __delete_context(context: *u8) i32;
+@cfg(target_os = "windows")
+@api("FreeCredentialsHandle")
+unsafe fn __free_credentials(credential: *u8) i32;
+@cfg(target_os = "windows")
+@api("FreeContextBuffer")
+unsafe fn __free_context_buffer(buffer: *u8) i32;
+@cfg(target_os = "windows")
+@api("QueryContextAttributesA")
+unsafe fn __query_context(context: *u8, attribute: u32, buffer: *u8) i32;
+@cfg(target_os = "windows")
+@api("EncryptMessage")
+unsafe fn __encrypt_message(context: *u8, quality: u32, message: *u8, sequence: u32) i32;
+@cfg(target_os = "windows")
+@api("DecryptMessage")
+unsafe fn __decrypt_message(context: *u8, message: *u8, sequence: u32, quality: *u32) i32;
+@cfg(target_os = "windows")
+@api("ApplyControlToken")
+unsafe fn __apply_control_token(context: *u8, input: *u8) i32;
+@cfg(target_os = "windows")
+@api("CertOpenStore")
+unsafe fn __cert_open_store(provider: usize, encoding: u32, crypt_provider: usize, flags: u32, parameter: *u8) *u8;
+@cfg(target_os = "windows")
+@api("CertCloseStore")
+unsafe fn __cert_close_store(store: *u8, flags: u32) i32;
+@cfg(target_os = "windows")
+@api("CertAddEncodedCertificateToStore")
+unsafe fn __cert_add_encoded(store: *u8, encoding: u32, data: *u8, length: u32, disposition: u32, added: *u8) i32;
+@cfg(target_os = "windows")
+@api("CertAddStoreToCollection")
+unsafe fn __cert_add_to_collection(collection: *u8, sibling: *u8, flags: u32, priority: u32) i32;
+@cfg(target_os = "windows")
+@api("CertGetCertificateChain")
+unsafe fn __cert_get_chain(engine: *u8, certificate: *u8, time: *u8, additional: *u8,
+    parameters: *u8, flags: u32, reserved: *u8, chain: *u8) i32;
+@cfg(target_os = "windows")
+@api("CertFreeCertificateChain")
+unsafe fn __cert_free_chain(chain: *u8) void;
+@cfg(target_os = "windows")
+@api("CertVerifyCertificateChainPolicy")
+unsafe fn __cert_verify_policy(policy: usize, chain: *u8, parameters: *u8, status: *u8) i32;
+@cfg(target_os = "windows")
+@api("CertFreeCertificateContext")
+unsafe fn __cert_free_context(certificate: *u8) i32;
+@cfg(target_os = "windows")
+@api("CertFindCertificateInStore")
+unsafe fn __cert_find_in_store(store: *u8, encoding: u32, flags: u32, find_type: u32, parameter: *u8, previous: *u8) *u8;
+@cfg(target_os = "windows")
+@api("CryptStringToBinaryA")
+unsafe fn __crypt_string_to_binary(text: *u8, length: u32, flags: u32, output: *u8, output_length: *u32, skip: *u32, used: *u32) i32;
+
+// Schannel constants and the layout of the native connection state.
+const SECBUFFER_EMPTY: u32 = 0;
+const SECBUFFER_DATA: u32 = 1;
+const SECBUFFER_TOKEN: u32 = 2;
+const SECBUFFER_EXTRA: u32 = 5;
+const SECBUFFER_STREAM_TRAILER: u32 = 6;
+const SECBUFFER_STREAM_HEADER: u32 = 7;
+const SEC_E_OK: i32 = 0;
+const SEC_I_CONTINUE_NEEDED: i32 = 590610;
+const SEC_I_CONTEXT_EXPIRED: i32 = 590615;
+const SEC_I_RENEGOTIATE: i32 = 590625;
+const SEC_I_INCOMPLETE_CREDENTIALS: i32 = 590624;
+const SEC_E_INCOMPLETE_MESSAGE: i32 = -2146893032;
+// Returned by the handshake helpers when the TCP connection fails.
+const SCHANNEL_TRANSPORT_FAILED: i32 = -1;
+// ISC_REQ_SEQUENCE_DETECT | REPLAY_DETECT | CONFIDENTIALITY |
+// ALLOCATE_MEMORY | STREAM | MANUAL_CRED_VALIDATION.
+const SCHANNEL_CONTEXT_FLAGS: u32 = 557340;
+// SCHANNEL_CRED: version 4, TLS 1.2 client only, manual validation, no
+// default client certificate, strong cryptography.
+const SCHANNEL_CRED_VERSION: u32 = 4;
+const SP_PROT_TLS1_2_CLIENT: u32 = 2048;
+const SCHANNEL_CRED_FLAGS: u32 = 4194328;
+const SECPKG_CRED_OUTBOUND: u32 = 2;
+const SECPKG_ATTR_STREAM_SIZES: u32 = 4;
+const SECPKG_ATTR_REMOTE_CERT_CONTEXT: u32 = 83;
+const SCHANNEL_SHUTDOWN: u32 = 1;
+const CERT_STORE_PROV_MEMORY: usize = 2;
+const CERT_STORE_PROV_COLLECTION: usize = 11;
+const X509_ASN_ENCODING: u32 = 1;
+const CERT_STORE_ADD_ALWAYS: u32 = 4;
+const CERT_FIND_EXISTING: u32 = 851968;
+const CERT_CHAIN_POLICY_SSL: usize = 4;
+const AUTHTYPE_SERVER: u32 = 2;
+const SECURITY_FLAG_IGNORE_UNKNOWN_CA: u32 = 256;
+const CERT_TRUST_IS_UNTRUSTED_ROOT: u32 = 32;
+const CERT_E_UNTRUSTEDROOT: i64 = 2148204809;
+const CERT_E_CN_NO_MATCH: u32 = 2148204815;
+// State block: credential and context handles, stream sizes, the
+// encrypted input buffer and the decrypted bytes not yet returned.
+const W_CREDENTIAL: usize = 0;
+const W_CONTEXT: usize = 16;
+const W_HEADER: usize = 32;
+const W_TRAILER: usize = 36;
+const W_MAXIMUM: usize = 40;
+const W_INPUT: usize = 48;
+const W_INPUT_LENGTH: usize = 56;
+const W_PLAIN: usize = 64;
+const W_PLAIN_START: usize = 72;
+const W_PLAIN_LENGTH: usize = 80;
+const W_PEER_CLOSED: usize = 88;
+const W_HAS_CONTEXT: usize = 89;
+const W_HAS_CREDENTIAL: usize = 90;
+const W_STATE_BYTES: usize = 96;
+const W_INPUT_CAPACITY: usize = 65536;
+const W_PLAIN_CAPACITY: usize = 32768;
 
 // OpenSSL constants (ssl.h, tls1.h, x509_vfy.h).
 const SSL_VERIFY_PEER: i32 = 1;
@@ -228,6 +355,8 @@ pub struct TlsStream {
     session: usize,
     // A fatal TLS error forbids sending close_notify.
     failed: bool,
+    // The Schannel state block (Windows).
+    native: *u8,
 }
 
 impl TlsStream {
@@ -252,7 +381,7 @@ impl TlsStream {
             }
             const connected: Result[TcpStream, NetError] = TcpStream.connect(host, port);
             if (connected.is_err()) { ret Err(TlsError.Net(connected.unwrap_err())); }
-            var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false };
+            var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false, native: 0 };
             unsafe {
                 __err_clear_error();
                 tls.context = __ssl_ctx_new(__tls_client_method());
@@ -294,6 +423,39 @@ impl TlsStream {
             }
             ret Ok(tls);
         }
+        @cfg(target_os = "windows") {
+            const encoded: Result[CString, CStringError] = CString.try_from_str(host);
+            if (encoded.is_err()) { ret Err(__name_error(encoded.unwrap_err())); }
+            const name: CString = encoded.unwrap();
+            const connected: Result[TcpStream, NetError] = TcpStream.connect(host, port);
+            if (connected.is_err()) { ret Err(TlsError.Net(connected.unwrap_err())); }
+            var tls: TlsStream = TlsStream { stream: connected.unwrap(), context: 0, session: 0, failed: false, native: 0 };
+            unsafe {
+                const state: *u8 = __schannel_state_new();
+                if (state == 0) { ret Err(TlsError.AllocationFailed); }
+                tls.native = state;
+                if (!__schannel_acquire(state)) { ret Err(TlsError.LibraryFailure); }
+                const socket: usize = tls.stream.handle() as usize;
+                const status: i32 = __schannel_handshake(state, socket, name.as_ptr(), true);
+                if (status != SEC_E_OK) {
+                    // A failed handshake must not send close_notify.
+                    tls.failed = true;
+                    if (status == SCHANNEL_TRANSPORT_FAILED) { ret Err(TlsError.HandshakeFailed(0)); }
+                    ret Err(TlsError.HandshakeFailed(status));
+                }
+                if (!__schannel_sizes(state)) {
+                    tls.failed = true;
+                    ret Err(TlsError.LibraryFailure);
+                }
+                const verified: Result[bool, TlsError] = __schannel_verify(state, host, config.ca_file());
+                if (verified.is_err()) {
+                    tls.failed = true;
+                    ret Err(verified.unwrap_err());
+                }
+                tls.session = 1;
+            }
+            ret Ok(tls);
+        }
         ret Err(TlsError.Unsupported);
     }
 
@@ -332,7 +494,19 @@ impl TlsStream {
             __restore_sigpipe(guard);
             ret Ok(sent);
         }
+        @cfg(target_os = "windows") {
+            const sent: i32 = __schannel_send(self.native, self.stream.handle() as usize, data, length);
+            if (sent != SEC_E_OK) { ret Err(self.__schannel_failure(sent)); }
+            ret Ok(length);
+        }
         ret Err(TlsError.Unsupported);
+    }
+
+    // A failed Schannel record operation: the connection is unusable, so no
+    // close_notify follows.
+    fn __schannel_failure(self: &TlsStream!, status: i32) TlsError {
+        self.failed = true;
+        ret TlsError.ProtocolError(status);
     }
 
     // Records a failed record operation; fatal errors forbid close_notify.
@@ -354,6 +528,28 @@ impl TlsStream {
             const code: i32 = __ssl_get_error(self.session, count);
             if (code == SSL_ERROR_ZERO_RETURN) { ret Ok(0); }
             ret Err(self.__protocol_error(code));
+        }
+        @cfg(target_os = "windows") {
+            const state: *u8 = self.native;
+            for (true) {
+                const available: usize = *((state + W_PLAIN_LENGTH) as *usize);
+                if (available > 0) {
+                    var count: usize = available;
+                    if (count > length) { count = length; }
+                    const start: usize = *((state + W_PLAIN_START) as *usize);
+                    core.memcpy(data, *((state + W_PLAIN) as **u8) + start, count);
+                    *((state + W_PLAIN_START) as *usize) = start + count;
+                    *((state + W_PLAIN_LENGTH) as *usize) = available - count;
+                    ret Ok(count);
+                }
+                if (*(state + W_PEER_CLOSED) != 0) { ret Ok(0); }
+                const status: i32 = __schannel_decrypt(state, self.stream.handle() as usize);
+                if (status == SEC_I_CONTEXT_EXPIRED) {
+                    *(state + W_PEER_CLOSED) = 1;
+                    ret Ok(0);
+                }
+                if (status != SEC_E_OK) { ret Err(self.__schannel_failure(status)); }
+            }
         }
         ret Err(TlsError.Unsupported);
     }
@@ -447,8 +643,20 @@ impl TlsStream {
                 if (self.context != 0) { __ssl_ctx_free(self.context); }
             }
         }
+        @cfg(target_os = "windows") {
+            if (self.native != 0) {
+                unsafe {
+                    const state: *u8 = self.native;
+                    if (self.session != 0 && !self.failed) {
+                        __schannel_close_notify(state, self.stream.handle() as usize);
+                    }
+                    __schannel_state_free(state);
+                }
+            }
+        }
         self.session = 0;
         self.context = 0;
+        self.native = 0;
         self.failed = false;
         self.stream.close();
     }
@@ -491,6 +699,475 @@ unsafe fn __restore_sigpipe(guard: *u8) void {
     }
     __pthread_sigmask(SIG_SETMASK, guard + SIGNAL_SET_BYTES, nullptr[u8]());
     core.free(guard);
+}
+
+// A zeroed Schannel state block with its input and plaintext buffers, or 0.
+@cfg(target_os = "windows")
+unsafe fn __schannel_state_new() *u8 {
+    const state: *u8 = core.malloc(W_STATE_BYTES);
+    if (state == 0) { ret state; }
+    core.memset(state, 0, W_STATE_BYTES);
+    const input: *u8 = core.malloc(W_INPUT_CAPACITY);
+    const plain: *u8 = core.malloc(W_PLAIN_CAPACITY);
+    if (input == 0 || plain == 0) {
+        if (input != 0) { core.free(input); }
+        if (plain != 0) { core.free(plain); }
+        core.free(state);
+        ret 0;
+    }
+    *((state + W_INPUT) as **u8) = input;
+    *((state + W_PLAIN) as **u8) = plain;
+    ret state;
+}
+
+// Releases the context, the credentials and the buffers of `state`.
+@cfg(target_os = "windows")
+unsafe fn __schannel_state_free(state: *u8) void {
+    if (*(state + W_HAS_CONTEXT) != 0) { __delete_context(state + W_CONTEXT); }
+    if (*(state + W_HAS_CREDENTIAL) != 0) { __free_credentials(state + W_CREDENTIAL); }
+    core.free(*((state + W_INPUT) as **u8));
+    core.free(*((state + W_PLAIN) as **u8));
+    core.free(state);
+}
+
+// Writes one SecBuffer (16 bytes) at `buffer`.
+@cfg(target_os = "windows")
+unsafe fn __sec_buffer(buffer: *u8, length: u32, kind: u32, data: *u8) void {
+    *(buffer as *u32) = length;
+    *((buffer + 4) as *u32) = kind;
+    *((buffer + 8) as **u8) = data;
+}
+
+// Writes a SecBufferDesc (16 bytes) at `descriptor` for `count` buffers.
+@cfg(target_os = "windows")
+unsafe fn __sec_buffer_desc(descriptor: *u8, count: u32, buffers: *u8) void {
+    *(descriptor as *u32) = 0;
+    *((descriptor + 4) as *u32) = count;
+    *((descriptor + 8) as **u8) = buffers;
+}
+
+// Client credentials: TLS 1.2, verification done by `__schannel_verify`.
+@cfg(target_os = "windows")
+unsafe fn __schannel_acquire(state: *u8) bool {
+    const credential: *u8 = core.malloc(80);
+    if (credential == 0) { ret false; }
+    core.memset(credential, 0, 80);
+    *(credential as *u32) = SCHANNEL_CRED_VERSION;
+    *((credential + 56) as *u32) = SP_PROT_TLS1_2_CLIENT;
+    *((credential + 72) as *u32) = SCHANNEL_CRED_FLAGS;
+    const expiry: *u8 = core.malloc(8);
+    var package: CString = CString.try_from_str("Microsoft Unified Security Protocol Provider").unwrap();
+    var status: i32 = -1;
+    if (expiry != 0) {
+        status = __acquire_credentials(0, package.as_ptr(), SECPKG_CRED_OUTBOUND, 0,
+            credential, 0, 0, state + W_CREDENTIAL, expiry);
+        core.free(expiry);
+    }
+    package.free();
+    core.free(credential);
+    if (status != SEC_E_OK) { ret false; }
+    *(state + W_HAS_CREDENTIAL) = 1;
+    ret true;
+}
+
+// Sends all `length` bytes at `data` on `socket`.
+@cfg(target_os = "windows")
+unsafe fn __socket_send_all(socket: usize, data: *u8, length: usize) bool {
+    var sent: usize = 0;
+    for (sent < length) {
+        var chunk: usize = length - sent;
+        if (chunk > 1048576) { chunk = 1048576; }
+        const count: i32 = win32_core.send_socket(socket, data + sent, chunk as i32, 0);
+        if (count <= 0) { ret false; }
+        sent = sent + count as usize;
+    }
+    ret true;
+}
+
+// Appends what `socket` has to the input buffer: false when the
+// connection ended or failed, or the buffer is full.
+@cfg(target_os = "windows")
+unsafe fn __schannel_receive(state: *u8, socket: usize) bool {
+    const length: usize = *((state + W_INPUT_LENGTH) as *usize);
+    if (length >= W_INPUT_CAPACITY) { ret false; }
+    const input: *u8 = *((state + W_INPUT) as **u8);
+    const count: i32 = win32_core.receive_socket(socket, input + length, (W_INPUT_CAPACITY - length) as i32, 0);
+    if (count <= 0) { ret false; }
+    *((state + W_INPUT_LENGTH) as *usize) = length + count as usize;
+    ret true;
+}
+
+// Keeps the last `extra` input bytes (not consumed by Schannel) at the start
+// of the input buffer.
+@cfg(target_os = "windows")
+unsafe fn __schannel_keep_extra(state: *u8, extra: usize) void {
+    const input: *u8 = *((state + W_INPUT) as **u8);
+    const length: usize = *((state + W_INPUT_LENGTH) as *usize);
+    if (extra > 0 && extra <= length) { core.memmove(input, input + (length - extra), extra); }
+    if (extra > length) { *((state + W_INPUT_LENGTH) as *usize) = 0; ret; }
+    *((state + W_INPUT_LENGTH) as *usize) = extra;
+}
+
+// Runs (or, with `first` false, continues) the client handshake on
+// `socket`: SEC_E_OK, a Schannel status, or SCHANNEL_TRANSPORT_FAILED.
+// Bytes that follow the handshake stay in the input buffer.
+@cfg(target_os = "windows")
+unsafe fn __schannel_handshake(state: *u8, socket: usize, host: *c_char, first: bool) i32 {
+    // Two input buffers, one output buffer, two descriptors, attributes and
+    // the expiry time.
+    const scratch: *u8 = core.malloc(112);
+    if (scratch == 0) { ret SCHANNEL_TRANSPORT_FAILED; }
+    var initial: bool = first;
+    var result: i32 = SCHANNEL_TRANSPORT_FAILED;
+    var credential_retries: usize = 0;
+    for (true) {
+        core.memset(scratch, 0, 112);
+        const input: *u8 = *((state + W_INPUT) as **u8);
+        const length: usize = *((state + W_INPUT_LENGTH) as *usize);
+        __sec_buffer(scratch, length as u32, SECBUFFER_TOKEN, input);
+        __sec_buffer(scratch + 16, 0, SECBUFFER_EMPTY, 0);
+        __sec_buffer(scratch + 32, 0, SECBUFFER_TOKEN, 0);
+        __sec_buffer_desc(scratch + 48, 2, scratch);
+        __sec_buffer_desc(scratch + 64, 1, scratch + 32);
+        var status: i32 = 0;
+        if (initial) {
+            status = __initialize_context(state + W_CREDENTIAL, 0, host, SCHANNEL_CONTEXT_FLAGS,
+                0, 0, 0, 0, state + W_CONTEXT, scratch + 64, (scratch + 80) as *u32, scratch + 88);
+            if (status == SEC_E_OK || status == SEC_I_CONTINUE_NEEDED) { *(state + W_HAS_CONTEXT) = 1; }
+        } else {
+            status = __initialize_context(state + W_CREDENTIAL, state + W_CONTEXT, host, SCHANNEL_CONTEXT_FLAGS,
+                0, 0, scratch + 48, 0, 0, scratch + 64, (scratch + 80) as *u32, scratch + 88);
+        }
+        initial = false;
+        const token: *u8 = *((scratch + 40) as **u8);
+        const token_length: u32 = *((scratch + 32) as *u32);
+        if (token != 0) {
+            const sent: bool = token_length == 0 || __socket_send_all(socket, token, token_length as usize);
+            __free_context_buffer(token);
+            if (!sent) { break; }
+        }
+        if (status == SEC_E_INCOMPLETE_MESSAGE) {
+            if (!__schannel_receive(state, socket)) { break; }
+            continue;
+        }
+        // The server asked for a client certificate: calling again with the
+        // same input answers without one.
+        if (status == SEC_I_INCOMPLETE_CREDENTIALS && credential_retries < 2) {
+            credential_retries = credential_retries + 1;
+            continue;
+        }
+        if (status == SEC_E_OK || status == SEC_I_CONTINUE_NEEDED) {
+            var extra: usize = 0;
+            if (*((scratch + 20) as *u32) == SECBUFFER_EXTRA) { extra = (*((scratch + 16) as *u32)) as usize; }
+            __schannel_keep_extra(state, extra);
+            if (status == SEC_E_OK) { result = SEC_E_OK; break; }
+            if (extra == 0 && !__schannel_receive(state, socket)) { break; }
+            continue;
+        }
+        result = status;
+        break;
+    }
+    core.free(scratch);
+    ret result;
+}
+
+// Reads the record sizes Schannel negotiated.
+@cfg(target_os = "windows")
+unsafe fn __schannel_sizes(state: *u8) bool {
+    const sizes: *u8 = core.malloc(20);
+    if (sizes == 0) { ret false; }
+    const status: i32 = __query_context(state + W_CONTEXT, SECPKG_ATTR_STREAM_SIZES, sizes);
+    *((state + W_HEADER) as *u32) = *(sizes as *u32);
+    *((state + W_TRAILER) as *u32) = *((sizes + 4) as *u32);
+    *((state + W_MAXIMUM) as *u32) = *((sizes + 8) as *u32);
+    core.free(sizes);
+    ret status == SEC_E_OK && *((state + W_MAXIMUM) as *u32) > 0;
+}
+
+// Encrypts and sends `length` bytes in records of at most the negotiated
+// size: SEC_E_OK, an EncryptMessage status, or SCHANNEL_TRANSPORT_FAILED.
+@cfg(target_os = "windows")
+unsafe fn __schannel_send(state: *u8, socket: usize, data: *u8, length: usize) i32 {
+    const header: usize = (*((state + W_HEADER) as *u32)) as usize;
+    const trailer: usize = (*((state + W_TRAILER) as *u32)) as usize;
+    const maximum: usize = (*((state + W_MAXIMUM) as *u32)) as usize;
+    const record: *u8 = core.malloc(header + maximum + trailer);
+    const scratch: *u8 = core.malloc(80);
+    var result: i32 = SEC_E_OK;
+    if (record == 0 || scratch == 0) { result = SCHANNEL_TRANSPORT_FAILED; }
+    var sent: usize = 0;
+    for (result == SEC_E_OK && sent < length) {
+        var chunk: usize = length - sent;
+        if (chunk > maximum) { chunk = maximum; }
+        core.memcpy(record + header, data + sent, chunk);
+        __sec_buffer(scratch, header as u32, SECBUFFER_STREAM_HEADER, record);
+        __sec_buffer(scratch + 16, chunk as u32, SECBUFFER_DATA, record + header);
+        __sec_buffer(scratch + 32, trailer as u32, SECBUFFER_STREAM_TRAILER, record + header + chunk);
+        __sec_buffer(scratch + 48, 0, SECBUFFER_EMPTY, 0);
+        __sec_buffer_desc(scratch + 64, 4, scratch);
+        const status: i32 = __encrypt_message(state + W_CONTEXT, 0, scratch + 64, 0);
+        if (status != SEC_E_OK) { result = status; break; }
+        const total: usize = (*(scratch as *u32)) as usize + (*((scratch + 16) as *u32)) as usize
+            + (*((scratch + 32) as *u32)) as usize;
+        if (!__socket_send_all(socket, record, total)) { result = SCHANNEL_TRANSPORT_FAILED; break; }
+        sent = sent + chunk;
+    }
+    if (record != 0) { core.free(record); }
+    if (scratch != 0) { core.free(scratch); }
+    ret result;
+}
+
+// Decrypts the next record into the plaintext buffer, receiving more input
+// as needed: SEC_E_OK (possibly with no plaintext), SEC_I_CONTEXT_EXPIRED
+// after the peer's close_notify, a Schannel status, or
+// SCHANNEL_TRANSPORT_FAILED (including a connection cut without
+// close_notify).
+@cfg(target_os = "windows")
+unsafe fn __schannel_decrypt(state: *u8, socket: usize) i32 {
+    const scratch: *u8 = core.malloc(80);
+    if (scratch == 0) { ret SCHANNEL_TRANSPORT_FAILED; }
+    var result: i32 = SCHANNEL_TRANSPORT_FAILED;
+    for (true) {
+        const length: usize = *((state + W_INPUT_LENGTH) as *usize);
+        if (length == 0) {
+            if (!__schannel_receive(state, socket)) { break; }
+            continue;
+        }
+        const input: *u8 = *((state + W_INPUT) as **u8);
+        // The TLS 1.2 record type: 21 is an alert.
+        const record_type: u8 = *input;
+        __sec_buffer(scratch, length as u32, SECBUFFER_DATA, input);
+        __sec_buffer(scratch + 16, 0, SECBUFFER_EMPTY, 0);
+        __sec_buffer(scratch + 32, 0, SECBUFFER_EMPTY, 0);
+        __sec_buffer(scratch + 48, 0, SECBUFFER_EMPTY, 0);
+        __sec_buffer_desc(scratch + 64, 4, scratch);
+        const status: i32 = __decrypt_message(state + W_CONTEXT, scratch + 64, 0, 0);
+        if (status == SEC_E_INCOMPLETE_MESSAGE) {
+            if (!__schannel_receive(state, socket)) { break; }
+            continue;
+        }
+        if (status != SEC_E_OK && status != SEC_I_RENEGOTIATE && status != SEC_I_CONTEXT_EXPIRED) {
+            result = status;
+            break;
+        }
+        var extra: usize = 0;
+        var decrypted: usize = 0;
+        var oversized: bool = false;
+        var index: usize = 1;
+        for (index < 4) {
+            const buffer: *u8 = scratch + index * 16;
+            const kind: u32 = *((buffer + 4) as *u32);
+            if (kind == SECBUFFER_DATA) {
+                var count: usize = (*(buffer as *u32)) as usize;
+                // A TLS 1.2 record holds at most 16 KiB; never overflow.
+                if (count > W_PLAIN_CAPACITY) { count = 0; oversized = true; }
+                core.memcpy(*((state + W_PLAIN) as **u8), *((buffer + 8) as **u8), count);
+                *((state + W_PLAIN_START) as *usize) = 0;
+                *((state + W_PLAIN_LENGTH) as *usize) = count;
+                decrypted = count;
+            }
+            if (kind == SECBUFFER_EXTRA) { extra = (*(buffer as *u32)) as usize; }
+            index = index + 1;
+        }
+        __schannel_keep_extra(state, extra);
+        result = status;
+        // A server renegotiation would bring a certificate this client
+        // never verifies (verification is manual): refuse it.
+        if (status == SEC_I_RENEGOTIATE || oversized) { result = SCHANNEL_TRANSPORT_FAILED; }
+        // Windows reports the peer's close_notify as SEC_I_CONTEXT_EXPIRED;
+        // Wine decrypts the alert record to no data. Only an alert that is
+        // the last input received counts as the peer closing.
+        if (status == SEC_E_OK && record_type == 21 && decrypted == 0 && extra == 0) {
+            result = SEC_I_CONTEXT_EXPIRED;
+        }
+        break;
+    }
+    core.free(scratch);
+    ret result;
+}
+
+// Sends the close_notify alert (best effort).
+@cfg(target_os = "windows")
+unsafe fn __schannel_close_notify(state: *u8, socket: usize) void {
+    const scratch: *u8 = core.malloc(96);
+    if (scratch == 0) { ret; }
+    core.memset(scratch, 0, 96);
+    *((scratch + 80) as *u32) = SCHANNEL_SHUTDOWN;
+    __sec_buffer(scratch, 4, SECBUFFER_TOKEN, scratch + 80);
+    __sec_buffer_desc(scratch + 16, 1, scratch);
+    if (__apply_control_token(state + W_CONTEXT, scratch + 16) == SEC_E_OK) {
+        __sec_buffer(scratch + 32, 0, SECBUFFER_TOKEN, 0);
+        __sec_buffer_desc(scratch + 48, 1, scratch + 32);
+        __initialize_context(state + W_CREDENTIAL, state + W_CONTEXT, 0, SCHANNEL_CONTEXT_FLAGS,
+            0, 0, 0, 0, 0, scratch + 48, (scratch + 64) as *u32, scratch + 72);
+        const token: *u8 = *((scratch + 40) as **u8);
+        if (token != 0) {
+            __socket_send_all(socket, token, (*((scratch + 32) as *u32)) as usize);
+            __free_context_buffer(token);
+        }
+    }
+    core.free(scratch);
+}
+
+// The index of `needle` in the `length` bytes at `text` from `start`, or
+// `length` when it does not occur.
+@cfg(target_os = "windows")
+unsafe fn __find_bytes(text: *u8, length: usize, start: usize, needle: str) usize {
+    const size: usize = needle.bytes_len();
+    var index: usize = start;
+    for (index + size <= length) {
+        var matched: usize = 0;
+        for (matched < size && *(text + index + matched) == core.str_byte_at(needle, matched)) {
+            matched = matched + 1;
+        }
+        if (matched == size) { ret index; }
+        index = index + 1;
+    }
+    ret length;
+}
+
+// Adds every PEM certificate of `pem` to `store`; the number added.
+@cfg(target_os = "windows")
+unsafe fn __add_pem_certificates(store: *u8, pem: str) usize {
+    const text: *u8 = core.str_as_ptr(pem);
+    const length: usize = pem.bytes_len();
+    const begin: str = "-----BEGIN CERTIFICATE-----";
+    const end: str = "-----END CERTIFICATE-----";
+    var added: usize = 0;
+    var position: usize = __find_bytes(text, length, 0, begin);
+    for (position < length) {
+        const finish: usize = __find_bytes(text, length, position, end);
+        if (finish == length) { break; }
+        const block: usize = finish + end.bytes_len() - position;
+        const size: *u32 = core.malloc(4) as *u32;
+        if (size == 0) { break; }
+        *size = 0;
+        // CRYPT_STRING_BASE64HEADER: the block with its BEGIN/END lines.
+        if (__crypt_string_to_binary(text + position, block as u32, 0, 0, size, 0, 0) != 0 && *size > 0) {
+            const der: *u8 = core.malloc((*size) as usize);
+            if (der != 0) {
+                if (__crypt_string_to_binary(text + position, block as u32, 0, der, size, 0, 0) != 0
+                    && __cert_add_encoded(store, X509_ASN_ENCODING, der, *size, CERT_STORE_ADD_ALWAYS, 0) != 0) {
+                    added = added + 1;
+                }
+                core.free(der);
+            }
+        }
+        core.free(size as *u8);
+        position = __find_bytes(text, length, finish, begin);
+    }
+    ret added;
+}
+
+// Verifies the server certificate of the finished handshake: its chain must
+// end at a root the system trusts or, with a CA file, at one of that file's
+// certificates, and it must name `host`.
+@cfg(target_os = "windows")
+unsafe fn __schannel_verify(state: *u8, host: str, ca_file: str) Result[bool, TlsError] {
+    var pem: String = String.new();
+    if (!ca_file.is_empty()) {
+        const loaded = fs.read_to_string(ca_file);
+        if (loaded.is_err()) { ret Err(TlsError.TrustStoreUnavailable); }
+        pem = loaded.unwrap();
+    }
+    // Certificate slot, chain slot, chain parameters (32), policy extra (24),
+    // policy parameters (16), policy status (24).
+    const scratch: *u8 = core.malloc(112);
+    const wide: *u16 = core.malloc(host.bytes_len() * 2 + 2) as *u16;
+    if (scratch == 0 || wide == 0) {
+        if (scratch != 0) { core.free(scratch); }
+        if (wide != 0) { core.free(wide as *u8); }
+        ret Err(TlsError.AllocationFailed);
+    }
+    core.memset(scratch, 0, 112);
+    core.memset(wide as *u8, 0, host.bytes_len() * 2 + 2);
+    win32_core.utf8_to_utf16(65001, 0, core.str_as_ptr(host), host.bytes_len() as i32, wide, host.bytes_len() as i32);
+    var result: Result[bool, TlsError] = Ok(true);
+    var authorities: *u8 = 0;
+    var collection: *u8 = 0;
+    var chain: *u8 = 0;
+    var certificate: *u8 = 0;
+    if (__query_context(state + W_CONTEXT, SECPKG_ATTR_REMOTE_CERT_CONTEXT, scratch) != SEC_E_OK) {
+        result = Err(TlsError.UntrustedCertificate(-1));
+    } else {
+        certificate = *(scratch as **u8);
+    }
+    var additional: *u8 = 0;
+    if (result.is_ok()) {
+        additional = *((certificate + 32) as **u8);
+        if (!ca_file.is_empty()) {
+            authorities = __cert_open_store(CERT_STORE_PROV_MEMORY, 0, 0, 0, 0);
+            collection = __cert_open_store(CERT_STORE_PROV_COLLECTION, 0, 0, 0, 0);
+            if (authorities == 0 || collection == 0) {
+                result = Err(TlsError.LibraryFailure);
+            } else if (__add_pem_certificates(authorities, pem.as_str()) == 0) {
+                result = Err(TlsError.TrustStoreUnavailable);
+            } else {
+                __cert_add_to_collection(collection, authorities, 0, 0);
+                __cert_add_to_collection(collection, additional, 0, 0);
+                additional = collection;
+            }
+        }
+    }
+    var checks: u32 = 0;
+    if (result.is_ok()) {
+        *((scratch + 16) as *u32) = 32;
+        if (__cert_get_chain(0, certificate, 0, additional, scratch + 16, 0, 0, scratch + 8) == 0) {
+            result = Err(TlsError.UntrustedCertificate(-1));
+        } else {
+            chain = *((scratch + 8) as **u8);
+            const errors: u32 = *((chain + 4) as *u32);
+            if (ca_file.is_empty()) {
+                if (errors != 0) { result = Err(TlsError.UntrustedCertificate(errors as i64)); }
+            } else {
+                // The root must be one of the file's certificates; it is
+                // unknown to the system, which the policy then ignores.
+                const array: *u8 = *((chain + 16) as **u8);
+                const simple: *u8 = *(array as **u8);
+                const count: u32 = *((simple + 12) as *u32);
+                const elements: *u8 = *((simple + 16) as **u8);
+                const root_element: *u8 = *((elements + (count as usize - 1) * 8) as **u8);
+                const root: *u8 = *((root_element + 8) as **u8);
+                const found: *u8 = __cert_find_in_store(authorities, X509_ASN_ENCODING, 0, CERT_FIND_EXISTING, root, 0);
+                if (found != 0) { __cert_free_context(found); }
+                if ((errors | CERT_TRUST_IS_UNTRUSTED_ROOT) != CERT_TRUST_IS_UNTRUSTED_ROOT) {
+                    result = Err(TlsError.UntrustedCertificate(errors as i64));
+                } else if (found == 0) {
+                    result = Err(TlsError.UntrustedCertificate(CERT_E_UNTRUSTEDROOT));
+                }
+                checks = SECURITY_FLAG_IGNORE_UNKNOWN_CA;
+            }
+        }
+    }
+    if (result.is_ok()) {
+        const extra: *u8 = scratch + 48;
+        *(extra as *u32) = 24;
+        *((extra + 4) as *u32) = AUTHTYPE_SERVER;
+        *((extra + 8) as *u32) = checks;
+        *((extra + 16) as **u16) = wide;
+        const parameters: *u8 = scratch + 72;
+        *(parameters as *u32) = 16;
+        *((parameters + 8) as **u8) = extra;
+        const status: *u8 = scratch + 88;
+        *(status as *u32) = 24;
+        if (__cert_verify_policy(CERT_CHAIN_POLICY_SSL, chain, parameters, status) == 0) {
+            result = Err(TlsError.UntrustedCertificate(-1));
+        } else {
+            const error: u32 = *((status + 4) as *u32);
+            if (error == CERT_E_CN_NO_MATCH) {
+                result = Err(TlsError.HostnameMismatch);
+            } else if (error != 0) {
+                result = Err(TlsError.UntrustedCertificate(error as i64));
+            }
+        }
+    }
+    if (chain != 0) { __cert_free_chain(chain); }
+    if (certificate != 0) { __cert_free_context(certificate); }
+    if (collection != 0) { __cert_close_store(collection, 0); }
+    if (authorities != 0) { __cert_close_store(authorities, 0); }
+    core.free(scratch);
+    core.free(wide as *u8);
+    ret result;
 }
 
 // Validates `length` received bytes at `data` (capacity `limit + 1`) and

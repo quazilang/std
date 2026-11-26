@@ -10,12 +10,15 @@ Python `ssl` server whose certificate is issued by a throwaway CA:
 - connection cut without close_notify: reported, never a short response;
 - peer closed while the client keeps writing: an error, not a SIGPIPE death.
 
+With `--wine WINE` the same client is also built for x86_64-windows
+(Schannel) and the same matrix runs under Wine against the same servers.
+
 Usage (from the workspace root):
 
     python3 std/scripts/check_tls.py --qz quazistrap/target/release/qz \
         [--openssl /path/to/openssl] [--ssl-lib /dir/with/libssl.so]
 
-Linux only. The client links the system `libssl`/`libcrypto`.
+The Linux client links the system `libssl`/`libcrypto`.
 """
 
 import argparse
@@ -196,6 +199,7 @@ def main():
     parser.add_argument("--qz", type=Path, default=Path("quazistrap/target/debug/qz"))
     parser.add_argument("--openssl")
     parser.add_argument("--ssl-lib")
+    parser.add_argument("--wine", help="also run the Windows (Schannel) client under this Wine")
     args = parser.parse_args()
     qz = args.qz.resolve()
     openssl = find_openssl(args.openssl)
@@ -225,52 +229,79 @@ def main():
         run_environment.pop("SSL_CERT_DIR", None)
         ca = str(root / "ca.pem")
 
-        def run(url, *extra):
+        def linux_run(url, *extra):
             result = subprocess.run([client, url, *extra], env=run_environment,
                                     capture_output=True, text=True, timeout=30)
             return result.returncode, result.stdout.strip()
 
+        runners = [("linux", linux_run, ca, str(root / "absent.pem"))]
+        if args.wine:
+            windows_client = project / "build" / "tls-client.exe"
+            built = subprocess.run([qz, "build", "--target", "x86_64-windows", "-o", windows_client],
+                                   cwd=project, env=environment, capture_output=True, text=True)
+            if built.returncode != 0:
+                sys.exit(f"FAIL tls: Windows client build failed\n{built.stdout}\n{built.stderr}")
+            wine_environment = dict(os.environ, WINEPREFIX=str(root / "wineprefix"), WINEDEBUG="-all")
+
+            def wine_run(url, *extra):
+                result = subprocess.run([args.wine, windows_client, url, *extra], env=wine_environment,
+                                        capture_output=True, text=True, timeout=120)
+                return result.returncode, result.stdout.replace("\r", "").strip()
+
+            def windows_path(path):
+                return "Z:" + str(path).replace("/", "\\")
+
+            runners.append(("windows", wine_run, windows_path(root / "ca.pem"),
+                            windows_path(root / "absent.pem")))
+
         failures = []
-
-        def expect(name, outcome, code, text):
-            if outcome != (code, text):
-                failures.append(f"{name}: expected {(code, text)!r}, got {outcome!r}")
-
-        port, stop = serve(root, close_notify=True)
-        try:
-            expect("trusted CA", run(f"https://localhost:{port}/", ca),
-                   0, f"status 200 body {BODY}")
-            expect("system store", run(f"https://localhost:{port}/"),
-                   1, "error: the server certificate is not trusted")
-            expect("wrong host", run(f"https://127.0.0.1:{port}/", ca),
-                   1, "error: the server certificate does not match the host name")
-            expect("missing CA file", run(f"https://localhost:{port}/", str(root / "absent.pem")),
-                   1, "error: the TLS trust store could not be loaded")
-        finally:
-            stop()
-        port, stop = serve(root, close_notify=False)
-        try:
-            expect("truncated", run(f"https://localhost:{port}/", ca),
-                   1, "error: TLS record error or truncated connection")
-        finally:
-            stop()
-        port, stop = serve(root, close_notify=True, reset=True)
-        try:
-            # Exit status -13 would mean SIGPIPE killed the client.
-            expect("peer closed while writing", run(f"https://localhost:{port}/", ca, str(port)),
-                   1, "error: TLS record error or truncated connection")
-        finally:
-            stop()
-        closed = socket.create_server(("127.0.0.1", 0))
-        refused_port = closed.getsockname()[1]
-        closed.close()
-        expect("refused", run(f"https://localhost:{refused_port}/", ca),
-               1, "error: connection refused")
+        for platform, run, ca, absent in runners:
+            matrix(platform, run, ca, absent, root, failures)
 
         if failures:
             sys.exit("FAIL tls:\n  " + "\n  ".join(failures))
     print("PASS tls: trusted CA, untrusted system store, host-name mismatch, "
-          "missing trust store, truncation, peer closed while writing and refused connection")
+          "missing trust store, truncation, peer closed while writing and refused connection"
+          + (" (Linux and Windows under Wine)" if args.wine else ""))
+
+
+def matrix(platform, run, ca, absent, root, failures):
+    """The D-008 cases for one client."""
+
+    def expect(name, outcome, code, text):
+        if outcome != (code, text):
+            failures.append(f"{platform} {name}: expected {(code, text)!r}, got {outcome!r}")
+
+    port, stop = serve(root, close_notify=True)
+    try:
+        expect("trusted CA", run(f"https://localhost:{port}/", ca),
+               0, f"status 200 body {BODY}")
+        expect("system store", run(f"https://localhost:{port}/"),
+               1, "error: the server certificate is not trusted")
+        expect("wrong host", run(f"https://127.0.0.1:{port}/", ca),
+               1, "error: the server certificate does not match the host name")
+        expect("missing CA file", run(f"https://localhost:{port}/", absent),
+               1, "error: the TLS trust store could not be loaded")
+    finally:
+        stop()
+    port, stop = serve(root, close_notify=False)
+    try:
+        expect("truncated", run(f"https://localhost:{port}/", ca),
+               1, "error: TLS record error or truncated connection")
+    finally:
+        stop()
+    port, stop = serve(root, close_notify=True, reset=True)
+    try:
+        # Exit status -13 would mean SIGPIPE killed the client.
+        expect("peer closed while writing", run(f"https://localhost:{port}/", ca, str(port)),
+               1, "error: TLS record error or truncated connection")
+    finally:
+        stop()
+    closed = socket.create_server(("127.0.0.1", 0))
+    refused_port = closed.getsockname()[1]
+    closed.close()
+    expect("refused", run(f"https://localhost:{refused_port}/", ca),
+           1, "error: connection refused")
 
 
 if __name__ == "__main__":

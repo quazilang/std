@@ -106,9 +106,11 @@ The root `src/mod.qz` gateway exposes modules with `pub import`. Quazi paths use
   trust comes from the system store or an explicit CA file. `receive_all`
   requires the peer's close_notify, so truncation is an error. Keep OpenSSL
   calls out of code reachable without a connection: a `free` hook only runs
-  where reachable code can hold its type. Other targets return
-  `TlsError.Unsupported` until a system backend (Schannel) is implemented.
-  `python3 scripts/check_tls.py --qz <qz>` is the end-to-end check.
+  where reachable code can hold its type. Windows uses Schannel (secur32)
+  with manual verification through crypt32 (Wine's Schannel does not verify;
+  it also decrypts close_notify to an empty alert record, which counts as the
+  peer closing). NetBSD returns `TlsError.Unsupported`.
+  `python3 scripts/check_tls.py --qz <qz> [--wine <wine>]` is the end-to-end check.
 - `std.dylib` wraps `LoadLibrary`/`GetProcAddress` and `dlopen`/`dlsym` with
   typed errors and owned handles. Symbols require an explicit unsafe cast to an
   exact `@repr(C)` callback.
