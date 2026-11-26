@@ -670,8 +670,7 @@ impl TlsStream {
     // Closes the stream; called automatically at the end of scope.
     pub fn free(self: TlsStream) void {
         self.close();
-        // The TCP stream (already closed) is destroyed whole, storage included.
-        const stream: TcpStream = self.stream;
+        // The TCP stream (already closed) is destroyed after the hook (D-028).
     }
 
     // The native socket handle of the underlying TCP connection.

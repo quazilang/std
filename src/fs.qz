@@ -912,9 +912,7 @@ impl LineReader {
     pub fn free(self: LineReader) void {
         if (self.buffer != 0) { unsafe { core.free(self.buffer); } }
         self.buffer = 0;
-        // Moving the file out destroys it whole (closing it and releasing
-        // its storage); closing it in place kept the File's storage alive.
-        const file: File = self.file;
+        // The file is destroyed after the hook (D-028), which closes it.
     }
 }
 
@@ -1006,8 +1004,7 @@ impl BufferedWriter {
             unsafe { core.free(self.buffer); }
         }
         self.buffer = 0;
-        // Moving the file out destroys it whole (close and storage).
-        const file: File = self.file;
+        // The file is destroyed after the hook (D-028), which closes it.
     }
 }
 

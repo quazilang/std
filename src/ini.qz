@@ -159,8 +159,7 @@ impl IniDocument {
 
     // Frees the document; called automatically at the end of scope.
     pub fn free(self: IniDocument) void {
-        self.content.free();
-        self.path.free();
+        // The fields are released after the hook (D-028).
     }
 
     // Replaces the contents with the parsed `content`; on error the previous

@@ -1511,8 +1511,7 @@ impl HttpServer {
     pub fn close(self: &HttpServer!) void { self.listener.close(); }
     // Stops listening; called automatically at the end of scope.
     pub fn free(self: HttpServer) void {
-        // Moving the listener out destroys it whole (close and storage).
-        const listener: TcpListener = self.listener;
+        // The listener is destroyed after the hook (D-028), which closes it.
     }
     // Accepts one client, reads its request (at most `limit` bytes), answers
     // with `response` and returns the raw request.
