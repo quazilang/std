@@ -30,7 +30,7 @@ fractions before rounding. Pending or failing requirements receive no
 credit. These figures measure checklist coverage, not remaining effort
 or production readiness.
 
-On Linux, `qz test` passes all 110 standard-library tests, including the
+On Linux, `qz test` passes all 111 standard-library tests, including the
 TCP and UDP cases that need local sockets. `scripts/check_tls.py` runs the
 TLS client against a local TLS server (trusted and untrusted certificates,
 wrong host name, truncation); with `--wine` it runs the Windows (Schannel) client
@@ -62,7 +62,7 @@ description in the generated [API reference](docs/reference/README.md)
 - `tls`: TLS client streams and HTTPS over the system TLS library (OpenSSL on Linux and NetBSD, Schannel on Windows).
 - `os`: Cross-platform host, memory, process, and environment information and changes.
 - `posix`: Unix-specific identities, signals, umask, and raw cwd (Linux, NetBSD).
-- `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, Windows).
+- `process`: Child processes; `Command` builder with PATH lookup, working directory, environment, and captured output (Linux, NetBSD, Windows).
 - `thread`: Threading and concurrency primitives.
 - `time` / `timezone`: Durations, clocks, civil time, RFC 3339, and named IANA time zones (TZif, POSIX TZ rules).
 - `linux` / `netbsd` / `windows`: OS-specific platform bindings (`posix` is the shared Unix layer).
@@ -93,7 +93,7 @@ The standard library is written entirely in Quazi and is closely tied to the com
 
 ## C interoperability
 
-`std.ffi` provides Linux x86-64 C ABI aliases (`c_int`, `c_long`, `c_size`,
+`std.ffi` provides per-target x86-64 C ABI aliases (`c_int`, `c_long`, `c_size`,
 `c_void`, and related types), typed `nullptr[T]()`, borrowed `CStr`, and owned
 `CString`. Foreign calls remain explicit and unsafe:
 
