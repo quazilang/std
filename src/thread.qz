@@ -96,7 +96,7 @@ pub struct JoinHandle[T] {
 unsafe fn __run_closure[T](block: *u8) void {
     const f: fn() T = *(block as *fn() T);
     const value: T = f();
-    *((block + 16) as *T!) = value;
+    *((block + 40) as *T!) = value;
 }
 
 @export("__quazi_std_thread_body")
@@ -124,9 +124,11 @@ pub fn spawn[T](f: fn() T) Result[JoinHandle[T], ThreadError] {
     var block: *u8! = 0;
     var handle: usize = 0;
     unsafe {
-        block = core.malloc(40);
+        // f, runner, (unused), panicked, cancel; then the result value,
+        // which may span several words.
+        block = core.malloc(40 + layout.size_of[T]());
         if (block == 0) { ret Err(ThreadError.CreationFailed); }
-        core.memset(block, 0, 40);
+        core.memset(block, 0, 40 + layout.size_of[T]());
         *(block as *fn() T!) = f;
         const runner: fn(*u8) void = |b| __run_closure[T](b);
         *((block + 8) as *fn(*u8) void!) = runner;
@@ -171,7 +173,7 @@ impl JoinHandle[T] {
         // Only a thread that finished without panicking wrote its result.
         var value: T;
         unsafe {
-            value = *((block + 16) as *T);
+            value = *((block + 40) as *T);
             core.free(block);
         }
         Ok(value)
@@ -194,7 +196,7 @@ impl JoinHandle[T] {
         unsafe {
             thread_join(self.handle);
             if (*((block + 24) as *i64) == 0) {
-                const dropped: T = *((block + 16) as *T);
+                const dropped: T = *((block + 40) as *T);
             }
             core.free(block);
         }
