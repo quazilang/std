@@ -2,7 +2,7 @@
 
 Audited base commit: `cb1cf48` plus the existing local working tree.
 
-**Complete: 92.7%. Remaining: 7.3%.**
+**Complete: 93.8%. Remaining: 6.2%.**
 
 Scope: the filesystem, os, process, net, math, panic, concurrency, time,
 and rest-of-library requirements from the workspace production-readiness
@@ -38,7 +38,7 @@ release-readiness probability. New requirements change the denominator.
 | Concurrency | 10/12 | 83.3% | 16.7% |
 | Time | 19/19 | 100.0% | 0.0% |
 | Serialization | 14/15 | 93.3% | 6.7% |
-| Library-wide safety / other modules | 8/9 | 88.9% | 11.1% |
+| Library-wide safety / other modules | 9/9 | 100.0% | 0.0% |
 
 ## Requirements
 
@@ -311,10 +311,12 @@ Evidence: [AGENTS.md](../AGENTS.md).
   [Regression tests](../tests/hash_collections.qz) cover owned keys and values,
   replacement, capacity growth, collisions, removal, and reuse.
 - [x] Passing full standard-library suite including HTTP/JSON.
-- [ ] Final public API/documentation/target consistency audit. The audit ran
+- [x] Final public API/documentation/target consistency audit. The audit ran
   on 2026-11-20 (b2cc3e9, 77806eb: code and documentation contradictions
-  fixed); it closes once the API-design inconsistencies in asks В35 are
-  decided.
+  fixed); the API-design inconsistencies it found were decided in asks В35
+  (В35А) and implemented: 83726e3 (unified conventions, migration note) and
+  3573e3f (`stream.BufWriter` flushes on drop, after compiler D-028);
+  `scripts/check_reference.py` keeps docs/reference in sync (2026-11-27).
 
 ## Verification boundary
 
