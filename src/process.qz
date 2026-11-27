@@ -71,23 +71,15 @@ impl Child {
         @cfg(target_os = "windows") {
             unsafe { ret windows_spawn(program, true, &args, "", 0, 0); }
         }
-        @cfg(target_os = "netbsd") {
-            // An exact path: no PATH lookup, inherited environment.
-            var command = Command.new(program);
-            for index : 0..args.len() {
-                const value: str = args[index];
-                command = command.arg(value);
-            }
-            unsafe { ret command_spawn_posix_with(&command, false, 0); }
+        // Linux and NetBSD: an exact path (no PATH lookup), inherited
+        // environment. The argument vector is built from the `str` values,
+        // so it does not depend on how `Array[str]` stores them (D-030).
+        var command = Command.new(program);
+        for index : 0..args.len() {
+            const value: str = args[index];
+            command = command.arg(value);
         }
-        var handle: usize = 0;
-        var error: i32 = 0;
-        var result: i32 = -1;
-        unsafe {
-            result = core.process_spawn(program, args.as_ptr(), args.len(), &handle, &error);
-        }
-        if (result != 0) { ret Err(ProcessError.SpawnFailed(error)); }
-        ret Ok(Child { handle: handle });
+        unsafe { ret command_spawn_posix_with(&command, false, 0); }
     }
 
     // Wait for completion and consume this child. A previously consumed child
